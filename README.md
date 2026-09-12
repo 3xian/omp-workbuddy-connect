@@ -7,13 +7,13 @@ WorkBuddy AI 国际版 provider for [pi](https://pi.dev)。在 pi 里直接使�
 ## 安装
 
 ```bash
-pi install git:github.com/icekale/dsh-workbuddy-connect
+pi install git:github.com/icekale/pi-workbuddy-connect
 ```
 
 或本地加载：
 
 ```bash
-pi -e /path/to/dsh-workbuddy-connect
+pi -e /path/to/pi-workbuddy-connect
 ```
 
 ## 登录
@@ -77,7 +77,16 @@ node --experimental-strip-types extensions/workbuddy.ts --self-check
 - 内置模型清单与上游 `BUILTIN_FREE_MODELS` 一致。
 - 推理档由 pi-ai 的 `thinkingLevelMap` 驱动，选择器直接读 `getSupportedThinkingLevels`。
 - 选 Default（auto）时**不发送** `reasoning_effort`，与上游一致；选具体档位时原样透传，不做任何改写。
+- Deepseek-V4.1-Flash 的 `max_tokens` 封顶 16k（`FLASH_MAX_TOKENS`）：该模型会陷入 `OK. / Let me write. / Go.` 式推理循环，把 128k 预算烧完才停。长答案被截断时调大此常量。
+- 发送前剔除 assistant 消息里回放的 `reasoning` / `thinking` / `reasoning_content` 字段，上游端点会拒绝这些字段。
 - 未移植上游的 reasoning-effort 探测（probe）功能：需要联网发真实请求，且当前免费模型都已声明 `supportedEfforts`，探测无增益。
+
+## 测试
+
+```bash
+node --experimental-strip-types test/scope.test.mts   # 断言 hook 不污染其他 provider 的请求
+npx tsc -p tsconfig.json                              # 类型检查
+```
 
 ## License
 
