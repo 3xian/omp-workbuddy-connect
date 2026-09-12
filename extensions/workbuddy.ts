@@ -467,6 +467,13 @@ export function prepareChatPayload(payload: Record<string, unknown>): Record<str
   return payload;
 }
 
+/** `before_provider_request` carries no provider, so payloads are scoped by model id.
+ *  Without this the hook rewrites every other provider's request (developer role,
+ *  tool_choice, stream). */
+export function isWorkBuddyModel(modelId: unknown, ids: ReadonlySet<string>): boolean {
+  return typeof modelId === "string" && ids.has(modelId);
+}
+
 function asObject(payload: unknown): Record<string, unknown> | undefined {
   const value = typeof payload === "string"
     ? (() => {
@@ -753,6 +760,7 @@ async function refreshWorkBuddyOAuth(credentials: OAuthCredentials): Promise<OAu
 export default async function (pi: ExtensionAPI) {
   let scope = loadSettings().scope;
   let models = buildPiModels(loadProductConfig(), scope);
+  let ids = new Set(models.map((model) => model.id));
   const extra = () => ({ scope, models });
   const oauth = {
     name: "WorkBuddy AI",
@@ -764,6 +772,7 @@ export default async function (pi: ExtensionAPI) {
   function apply(next?: Scope) {
     if (next) scope = next;
     models = buildPiModels(loadProductConfig(), scope);
+    ids = new Set(models.map((model) => model.id));
     pi.registerProvider(PROVIDER, {
       name: "WorkBuddy AI",
       baseUrl: `${GLOBAL_BASE}/v2`,
@@ -774,6 +783,7 @@ export default async function (pi: ExtensionAPI) {
       async refreshModels() {
         scope = loadSettings().scope;
         models = buildPiModels(loadProductConfig(), scope);
+        ids = new Set(models.map((model) => model.id));
         return models;
       },
     });
@@ -791,7 +801,7 @@ export default async function (pi: ExtensionAPI) {
 
   pi.on("before_provider_request", (event) => {
     const payload = asObject(event.payload);
-    if (!payload || typeof payload.model !== "string") return;
+    if (!payload || !isWorkBuddyModel(payload.model, ids)) return;
     return prepareChatPayload(payload);
   });
 
@@ -852,6 +862,10 @@ if (process.argv.includes("--self-check")) {
   const kept = prepareChatPayload({ messages: [], reasoning_effort: "max" });
   if (kept.reasoning_effort !== "max") throw new Error("explicit effort preserved");
   if (LOW_HIGH.low !== "low" || HIGH_ONLY.low !== null || HIGH_ONLY.high !== "high") throw new Error("effort map");
+  const ours = new Set(["hy3", "deepseek-v4.1-flash"]);
+  if (!isWorkBuddyModel("hy3", ours)) throw new Error("scope: own model accepted");
+  if (isWorkBuddyModel("grok-4.6", ours)) throw new Error("scope: foreign model must be rejected");
+  if (isWorkBuddyModel(undefined, ours) || isWorkBuddyModel(42, ours)) throw new Error("scope: non-string rejected");
   if (thinkingLevelMap(["high"], true).off !== "off") throw new Error("off");
   const prepended = prepareChatPayload({ messages: [{ role: "user", content: "hi" }] });
   if ((prepended.messages as { role: string }[])[0].role !== "system") throw new Error("prepend");
