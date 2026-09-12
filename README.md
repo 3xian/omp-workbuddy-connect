@@ -76,6 +76,7 @@ node --experimental-strip-types extensions/workbuddy.ts --self-check
 - 直接 `pi.registerProvider`，去掉 DSH 的 shim 与 loopback 端口转发。
 - 内置模型清单与上游 `BUILTIN_FREE_MODELS` 一致。
 - 推理档由 pi-ai 的 `thinkingLevelMap` 驱动，选择器直接读 `getSupportedThinkingLevels`。
+- 选 Default（auto）时**不发送** `reasoning_effort`，与上游一致；选具体档位时原样透传，不做任何改写。
 - 未移植上游的 reasoning-effort 探测（probe）功能：需要联网发真实请求，且当前免费模型都已声明 `supportedEfforts`，探测无增益。
 
 ## License

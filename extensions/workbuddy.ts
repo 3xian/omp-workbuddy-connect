@@ -418,7 +418,7 @@ function chatHeaders(cred: Cred): Record<string, string> {
   };
 }
 
-export function prepareChatPayload(payload: Record<string, unknown>, reasoning = false): Record<string, unknown> {
+export function prepareChatPayload(payload: Record<string, unknown>): Record<string, unknown> {
   payload.stream = true;
   const messages = payload.messages;
   if (Array.isArray(messages)) {
@@ -462,7 +462,8 @@ export function prepareChatPayload(payload: Record<string, unknown>, reasoning =
       delete payload.tool_choice;
     }
   }
-  if (reasoning && payload.reasoning_effort == null) payload.reasoning_effort = "high";
+  // ponytail: never inject reasoning_effort — upstream sends a bare request when no
+  // level is chosen, so "Default" must stay Default instead of silently becoming high.
   return payload;
 }
 
@@ -752,7 +753,6 @@ async function refreshWorkBuddyOAuth(credentials: OAuthCredentials): Promise<OAu
 export default async function (pi: ExtensionAPI) {
   let scope = loadSettings().scope;
   let models = buildPiModels(loadProductConfig(), scope);
-  let live = new Map(models.map((model) => [model.id, model.reasoning === true]));
   const extra = () => ({ scope, models });
   const oauth = {
     name: "WorkBuddy AI",
@@ -764,7 +764,6 @@ export default async function (pi: ExtensionAPI) {
   function apply(next?: Scope) {
     if (next) scope = next;
     models = buildPiModels(loadProductConfig(), scope);
-    live = new Map(models.map((model) => [model.id, model.reasoning === true]));
     pi.registerProvider(PROVIDER, {
       name: "WorkBuddy AI",
       baseUrl: `${GLOBAL_BASE}/v2`,
@@ -775,7 +774,6 @@ export default async function (pi: ExtensionAPI) {
       async refreshModels() {
         scope = loadSettings().scope;
         models = buildPiModels(loadProductConfig(), scope);
-        live = new Map(models.map((model) => [model.id, model.reasoning === true]));
         return models;
       },
     });
@@ -794,9 +792,7 @@ export default async function (pi: ExtensionAPI) {
   pi.on("before_provider_request", (event) => {
     const payload = asObject(event.payload);
     if (!payload || typeof payload.model !== "string") return;
-    const reasoning = live.get(payload.model);
-    if (reasoning === undefined) return;
-    return prepareChatPayload(payload, reasoning);
+    return prepareChatPayload(payload);
   });
 
   pi.on("session_start", async (_event, ctx) => {
@@ -848,12 +844,13 @@ if (process.argv.includes("--self-check")) {
     model: "hy3",
     messages: [{ role: "developer", content: "sys" }, { role: "user", content: "hi" }],
     tool_choice: { type: "function", function: { name: "foo" } },
-  }, true);
+  });
   if (payload.stream !== true) throw new Error("stream");
   if ((payload.messages as { role: string }[])[0].role !== "system") throw new Error("system");
   if (payload.tool_choice !== "foo") throw new Error("tool_choice");
-  if (payload.reasoning_effort !== "high") throw new Error("default effort");
-  if (prepareChatPayload({ messages: [] }).reasoning_effort !== undefined) throw new Error("no effort for non-reasoning");
+  if (payload.reasoning_effort !== undefined) throw new Error("no injected effort");
+  const kept = prepareChatPayload({ messages: [], reasoning_effort: "max" });
+  if (kept.reasoning_effort !== "max") throw new Error("explicit effort preserved");
   if (LOW_HIGH.low !== "low" || HIGH_ONLY.low !== null || HIGH_ONLY.high !== "high") throw new Error("effort map");
   if (thinkingLevelMap(["high"], true).off !== "off") throw new Error("off");
   const prepended = prepareChatPayload({ messages: [{ role: "user", content: "hi" }] });
