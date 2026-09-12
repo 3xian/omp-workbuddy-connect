@@ -64,6 +64,8 @@ type ProductModel = {
 type ProductConfig = { source: "cache" | "builtin"; models: ProductModel[] };
 
 const FREE_IDS = ["hy3", "deepseek-v4.1-flash", "hy4-preview-f"] as const;
+// ponytail: flash reasoning loops (OK/Let me write/Go) eat 128k max_tokens; 16k stops the stall. Raise if long answers get cut.
+const FLASH_MAX_TOKENS = 16_384;
 
 const BUILTIN_MODELS: ProductModel[] = [
   {
@@ -225,7 +227,7 @@ export function buildPiModels(config: ProductConfig, scope: Scope) {
       input: (row.supportsImages ? ["text", "image"] : ["text"]) as ("text" | "image")[],
       cost: ZERO_COST,
       contextWindow: row.contextWindow,
-      maxTokens: row.maxTokens,
+      maxTokens: row.id === "deepseek-v4.1-flash" ? Math.min(row.maxTokens, FLASH_MAX_TOKENS) : row.maxTokens,
       compat: COMPAT,
     }];
   });
@@ -418,6 +420,24 @@ function chatHeaders(cred: Cred): Record<string, string> {
   };
 }
 
+function stripAssistantReasoning(messages: unknown[]): void {
+  for (const item of messages) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
+    const msg = item as Record<string, unknown>;
+    if (msg.role !== "assistant") continue;
+    delete msg.reasoning;
+    delete msg.thinking;
+    delete msg.reasoning_content;
+    if (!Array.isArray(msg.content)) continue;
+    msg.content = msg.content.filter((part) => {
+      if (typeof part !== "object" || part === null) return true;
+      const type = (part as { type?: string }).type;
+      return type !== "reasoning" && type !== "thinking";
+    });
+    if (Array.isArray(msg.content) && msg.content.length === 0) msg.content = "";
+  }
+}
+
 export function prepareChatPayload(payload: Record<string, unknown>): Record<string, unknown> {
   payload.stream = true;
   const messages = payload.messages;
@@ -431,6 +451,13 @@ export function prepareChatPayload(payload: Record<string, unknown>): Record<str
     if (messages.length > 0 && (messages[0] as { role?: string } | undefined)?.role !== "system") {
       messages.unshift({ role: "system", content: "You are a helpful assistant." });
     }
+    stripAssistantReasoning(messages);
+  }
+  if (payload.model === "deepseek-v4.1-flash") {
+    const current = Number(payload.max_tokens);
+    payload.max_tokens = Number.isFinite(current) && current > 0
+      ? Math.min(current, FLASH_MAX_TOKENS)
+      : FLASH_MAX_TOKENS;
   }
   if ("tool_choice" in payload) {
     const choice = payload.tool_choice;
@@ -876,6 +903,15 @@ if (process.argv.includes("--self-check")) {
   if (flash?.thinkingLevelMap.low !== "low" || flash.thinkingLevelMap.xhigh !== "xhigh" || flash.thinkingLevelMap.max !== "max") {
     throw new Error("flash efforts");
   }
+  if (flash.maxTokens !== FLASH_MAX_TOKENS) throw new Error("flash cap");
+  const looped = prepareChatPayload({
+    model: "deepseek-v4.1-flash",
+    max_tokens: 128_000,
+    messages: [{ role: "assistant", content: "done", reasoning: "OK.\nLet me write.", thinking: "Go." }],
+  });
+  const assistant = (looped.messages as Record<string, unknown>[])[1];
+  if (assistant.reasoning !== undefined || assistant.thinking !== undefined) throw new Error("reasoning replay");
+  if (looped.max_tokens !== FLASH_MAX_TOKENS) throw new Error("flash payload cap");
   const fromCache = parseProductConfig(JSON.stringify({
     models: [{
       id: "deepseek-v4.1-flash",
