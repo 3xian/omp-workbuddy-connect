@@ -851,8 +851,11 @@ export default async function (pi: ExtensionAPI) {
     return prepareChatPayload(payload);
   });
 
-  pi.on("session_start", async (_event, ctx) => {
-    card = await paint(ctx, false, extra());
+  pi.on("session_start", (_event, ctx) => {
+    // Never block session startup on the optional account/credits card.
+    void paint(ctx, false, extra())
+      .then((lines) => { card = lines; })
+      .catch(() => undefined);
   });
 
   // setModel awaits this handler, so it must never block on network I/O:
