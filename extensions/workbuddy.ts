@@ -642,11 +642,26 @@ type Ui = {
   notify(message: string, type?: "info" | "warning" | "error"): void;
 };
 
+/** The card belongs to sessions actually running a WorkBuddy model. */
+export function showsWorkBuddyCard(provider: unknown, force = false): boolean {
+  return force || provider === PROVIDER;
+}
+
+type PaintCtx = { ui: Ui; model?: { provider?: string } };
+
+/** Paints the card and returns the lines drawn, or undefined when hidden. */
 async function paint(
-  ui: Ui,
+  ctx: PaintCtx,
   notify = false,
   extra: { scope: Scope; models: { name: string }[] } = { scope: "free", models: [] },
-): Promise<void> {
+  force = false,
+): Promise<string[] | undefined> {
+  const { ui } = ctx;
+  if (!showsWorkBuddyCard(ctx.model?.provider, force)) {
+    ui.setWidget("workbuddy", undefined);
+    ui.setStatus("workbuddy", undefined);
+    return undefined;
+  }
   let cred: Cred | undefined;
   let credits: { total: number; packs: Pack[] } | undefined;
   let error: string | undefined;
@@ -657,7 +672,8 @@ async function paint(
     cred = await current();
     error = caught instanceof Error ? caught.message : String(caught);
   }
-  ui.setWidget("workbuddy", widgetLines({ cred, credits, error, ...extra }));
+  const lines = widgetLines({ cred, credits, error, ...extra });
+  ui.setWidget("workbuddy", lines);
   ui.setStatus("workbuddy", credits ? `积分 ${credits.total}` : cred ? "WorkBuddy 已登录" : "WorkBuddy 未登录");
   if (notify) {
     ui.notify(
@@ -665,6 +681,7 @@ async function paint(
       error ? "warning" : "info",
     );
   }
+  return lines;
 }
 
 const PLUGIN_AUTH_HEADERS = {
@@ -788,6 +805,8 @@ export default async function (pi: ExtensionAPI) {
   let scope = loadSettings().scope;
   let models = buildPiModels(loadProductConfig(), scope);
   let ids = new Set(models.map((model) => model.id));
+  /** Last painted card lines for this session, reused on model switch. */
+  let card: string[] | undefined;
   const extra = () => ({ scope, models });
   const oauth = {
     name: "WorkBuddy AI",
@@ -833,7 +852,20 @@ export default async function (pi: ExtensionAPI) {
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    await paint(ctx.ui, false, extra());
+    card = await paint(ctx, false, extra());
+  });
+
+  // setModel awaits this handler, so it must never block on network I/O:
+  // redraw from the cached card and refresh in the background.
+  pi.on("model_select", (_event, ctx) => {
+    if (!showsWorkBuddyCard(ctx.model?.provider)) {
+      card = undefined;
+      ctx.ui.setWidget("workbuddy", undefined);
+      ctx.ui.setStatus("workbuddy", undefined);
+      return;
+    }
+    if (card) ctx.ui.setWidget("workbuddy", card);
+    void paint(ctx, false, extra()).then((lines) => { card = lines; }).catch(() => undefined);
   });
 
   pi.registerCommand("workbuddy", {
@@ -843,12 +875,12 @@ export default async function (pi: ExtensionAPI) {
       if (cmd === "free" || cmd === "all") {
         await saveSettings(cmd);
         apply(cmd);
-        await paint(ctx.ui, true, extra());
+        await paint(ctx, true, extra(), true);
         return;
       }
       if (cmd === "logout" || cmd === "disconnect") {
         await unlink(ownPath()).catch(() => undefined);
-        await paint(ctx.ui, true, extra());
+        await paint(ctx, true, extra(), true);
         return;
       }
       const pick = await ctx.ui.select("WorkBuddy 设置", [
@@ -866,7 +898,7 @@ export default async function (pi: ExtensionAPI) {
       } else if (pick === "断开登录") {
         await unlink(ownPath()).catch(() => undefined);
       }
-      await paint(ctx.ui, true, extra());
+      await paint(ctx, true, extra(), true);
     },
   });
 }
@@ -889,6 +921,10 @@ if (process.argv.includes("--self-check")) {
   const kept = prepareChatPayload({ messages: [], reasoning_effort: "max" });
   if (kept.reasoning_effort !== "max") throw new Error("explicit effort preserved");
   if (LOW_HIGH.low !== "low" || HIGH_ONLY.low !== null || HIGH_ONLY.high !== "high") throw new Error("effort map");
+  if (!showsWorkBuddyCard("workbuddy")) throw new Error("card: own provider shown");
+  if (showsWorkBuddyCard("GROKCPA")) throw new Error("card: foreign provider hidden");
+  if (showsWorkBuddyCard(undefined) || showsWorkBuddyCard(null) || showsWorkBuddyCard(42)) throw new Error("card: unknown provider hidden");
+  if (!showsWorkBuddyCard("GROKCPA", true)) throw new Error("card: explicit command overrides");
   const ours = new Set(["hy3", "deepseek-v4.1-flash"]);
   if (!isWorkBuddyModel("hy3", ours)) throw new Error("scope: own model accepted");
   if (isWorkBuddyModel("grok-4.6", ours)) throw new Error("scope: foreign model must be rejected");
