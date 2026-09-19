@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { readFile, writeFile, unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { OAuthCredentials, OAuthLoginCallbacks } from "@oh-my-pi/pi-ai"
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 
 const PROVIDER = "workbuddy";
 const MARKER = "X-Pi-WorkBuddy";
@@ -783,8 +783,14 @@ async function loginWorkBuddy(callbacks: OAuthLoginCallbacks): Promise<OAuthCred
   callbacks.onProgress?.("请在弹出的页面完成登录，完成后会自动继续");
   const cred = await pollPluginToken(state);
   await saveOwn(cred);
-  return { access: cred.accessToken, refresh: cred.refreshToken, expires: cred.expiresAtMs };
-}
+  return {
+    access: cred.accessToken,
+    refresh: cred.refreshToken,
+    expires: cred.expiresAtMs,
+
+    accountId: cred.uid,
+    orgId: cred.enterpriseId,
+  };
 
 async function refreshWorkBuddyOAuth(credentials: OAuthCredentials): Promise<OAuthCredentials> {
   const prev = await current();
@@ -820,7 +826,6 @@ export default async function (pi: ExtensionAPI) {
     models = buildPiModels(loadProductConfig(), scope);
     ids = new Set(models.map((model) => model.id));
     pi.registerProvider(PROVIDER, {
-      name: "WorkBuddy AI",
       baseUrl: `${GLOBAL_BASE}/v2`,
       api: "openai-completions",
       headers: { [MARKER]: "1" },
