@@ -1,0 +1,73 @@
+# Tasks
+
+## 1. M0 — 冻结基线与验证宿主契约
+
+- [ ] 1.1 保存 `docs/omp-port/baseline-manifest.md`：Fork 仓库/实际分支/exact SHA、upstream exact SHA、OMP 18.2.6 exact SHA、完整工作区差异和运行环境；核对 design 中观测值并明确未提交用户修改，不把 HEAD 当完整工作区。（HOST-01）
+- [ ] 1.2 修复 `loginWorkBuddy` 函数闭合等现有加载问题，校准 manifest/import/类型导出、固定 OMP 开发依赖与锁文件为 18.2.6，更新 tsconfig 覆盖实际模块；以模块导入和 `tsc --noEmit` 零错误验证，不用 any/抑制绕过契约。（HOST-01/02）
+- [ ] 1.3 按 design D1 完成 API Compatibility Matrix，移除 Provider 顶层 name（若存在）、refreshModels、before_provider_headers、model_select、Marker 等不支持契约，区分合法 OAuth name；以真实类型和官方加载无未知字段/事件/模块错误验证。（HOST-02/03）
+- [ ] 1.4 在隔离官方 OMP 配置中用最小协议探针验证 `/login workbuddy`、重复登录 replace/append/rotate、持久化、refresh、provider-scoped 删除及重启；保存 `credential-behavior.md`，明确公开方法路径与多 active credential 检测能力，不读取用户真实存储做破坏性实验。（HOST-03、AUTH-07）
+- [ ] 1.5 验证 modifier 的完整 catalog 输入、registry rebuild、credential 更新时机、异常后的行为、重注册后旧 model 引用以及 subagent 新模型；记录六项证据并确定公开的刷新/失效路径，无法证明身份一致时阻断 M0。（HOST-03、AUTH-04/06）
+- [ ] 1.6 验证 headless/task role 的扩展、OAuth、payload hook 加载与可用公开取消/shutdown 信号；记录真实 OMP 行为而非仅类型推断，证明认证不需要交互 TUI。（HOST-03、REL-01）
+- [ ] 1.7 调查现有 upstream/官方资料与授权可访问的稳定 authenticated product/model API，交付 `adr-dynamic-models.md`；记录 endpoint 证据、identity 可用性、原生缓存和空 scope 可行性，明确 D6 的 A/B 选择及未选理由。（HOST-04、MODEL-06）
+- [ ] 1.8 评估 UsageProvider 对 account/remaining credits/plan/identity 与宿主认证生命周期的表达，交付 `adr-credits-usage.md`；以真实类型/协议证据选择宿主 Usage 或独立 Billing，明确无第二刷新器。（HOST-04、UX-03）
+- [ ] 1.9 建立 `requirement-implementation-test-matrix.md`，将本 change 全部 requirement ID 关联目标模块、四层验证与阶段 gate；检查每项均有验证入口，未运行保留未通过状态。（HOST-05、REL-03/05）
+- [ ] 1.10 验收 M0 六项交付与 gate：exact commits、零类型错误、官方加载、OAuth/logout/modifier 及 headless/subagent 契约证据全部齐全；仅通过后进入 M1，并据发现重估 M1–M5，不承诺原 12–18 日总工期。（HOST-05）
+
+## 2. M1 — 完整认证与身份不变量
+
+- [ ] 2.1 从入口提取 `src/auth.ts`、`src/provider.ts`、`src/workbuddy-api.ts` 的实际职责，建立完整凭据映射/边界校验；验证 access/refresh/expiry/uid/enterpriseId 缺失逐项拒绝，真实 email 才入 email，nickname 不污染身份，domain 不控制路由。（AUTH-02；D2/D11）
+- [ ] 2.2 接通正式 `/login workbuddy` 与 OMP 持久化，删除正常请求的 saveOwn/current/resolveCred、Desktop/环境文件回退和旧刷新链；保留行为测试证明仅有旧凭据时仍未登录、重启仅恢复宿主凭据。（AUTH-01/02）
+- [ ] 2.3 实现宿主 refreshToken callback，仅从传入 credential 构造官方刷新请求并保留身份；保留刷新后 identity 回归，验证有效 Token/expiry、无效 refresh、缺身份和身份矛盾均无错误 fallback，缺省新 refresh 的处理有协议证据。（AUTH-03）
+- [ ] 2.4 配置固定国际版 Headers，用 modifyModels 合并 accountId/orgId，仅处理 workbuddy 行；保留 OpenAI/Anthropic 混合目录不变回归，并检查首个实际请求固定 Header 和两个身份 Header 正确。（AUTH-04/06）
+- [ ] 2.5 getApiKey 返回宿主 credential.access 前校验身份，不手动注入 Chat Authorization；对缺 accountId、缺 orgId、modifier 被宿主捕获的情况分别验证无可用认证且零 Chat 请求，形成三层 fail-closed 永久回归。（AUTH-05）
+- [ ] 2.6 按 M0 证据实现单账号限制：可检测多个 active credential 时明确拒绝调用而不自动删凭据；不可可靠检测时记录限制并执行同等换号验收；验证用户不能因检测缺失被误告知支持 rotation。（AUTH-07）
+- [ ] 2.7 实现 provider-scoped logout：先失效异步 generation，再删除宿主认证、清理状态并按 M0 路径更新模型；验证删除成功后不可认证，失败不虚报成功，Desktop credential/客户端数据不变。（AUTH-08、UX-02）
+- [ ] 2.8 打通旧模型引用、credential 刷新、logout/换号的失效边界，验证已有会话及新 subagent 均获取 B 身份；保留 A→B 无旧身份回归，覆盖在途 refresh/迟到结果不恢复旧认证。（AUTH-04/07）
+- [ ] 2.9 将用户取消、session abort、extension shutdown 接入 OAuth HTTP 请求和轮询等待；验证三类取消均停止后续轮询、不持久化迟到成功、不遗留定时器。（AUTH-09）
+- [ ] 2.10 分类授权拒绝、poll timeout、user cancelled、network failure、5xx、429，处理有效 Retry-After 与总截止时间；用隔离协议场景验证不同结果和可取消等待，不新增通用 retry。（AUTH-09）
+- [ ] 2.11 使用一个稳定真实 WorkBuddy 模型完成 fresh login→正确 Bearer/identity→Streaming→强制过期 refresh→restart→logout→B login→existing session/subagent B request；保存脱敏证据，全部通过才完成 M1。（HOST-05、AUTH-01–09）
+
+## 3. M2 — 模型目录与能力契约
+
+- [ ] 3.1 提取 `src/models.ts`，迁移 buildPiModels 为 buildOmpModels 并更新所有调用者，以真实 ProviderModelConfig/最终 Model 验证字段分层；对缺 ID、格式错误和非法预算给可诊断结果，不注册无效条目。（MODEL-01；D5）
+- [ ] 3.2 删除 thinkingLevelMap 和未知能力时全 effort 默认，生成 canonical thinking/required effort/off；验证 minimal/low/medium/high/xhigh/max 仅暴露 Gateway 支持集合、不可关闭模型不发 off、标准 effort 由宿主生成。（MODEL-02）
+- [ ] 3.3 按 Gateway 生成 text/image 能力，必要时覆盖 stripImageInput；以真实图片输入证明请求未被宿主家族默认规则剥离，而非只验证 UI 标签。（MODEL-03）
+- [ ] 3.4 将已有且有 Gateway 证据的模型 token clamp 同步到目录/请求，测试高于上限被限制和较小合法预算不被上调，contextWindow/maxTokens 不虚报。（MODEL-04、GATE-01）
+- [ ] 3.5 重写免费过滤：已知付费和未知价格排除，有效目录免费为空不补 FREE_IDS；保留 paid/unknown/empty 三类永久回归，并证明 cost 零占位不用于宣称免费。（MODEL-05）
+- [ ] 3.6 实现 M0 Dynamic Model ADR 选中的唯一目录路径：A 使用 fetchDynamicModels/宿主缓存并验证 identity/scope/空集合；B 使用 Desktop product cache→builtin fallback 并验证缺失/损坏缓存及免费证据约束；两种选择均显示准确 model source，未选分支在 ADR 记理由、不写空实现。（MODEL-06；D6）
+- [ ] 3.7 完成 Provider 重注册与 scope 提交：同步模型、ID Set、selector、持久化和 Widget 状态；验证空数组真正替换旧目录、注册/设置失败不虚报成功，并保留 credential unchanged 永久回归。（MODEL-07）
+- [ ] 3.8 当前模型被新 scope 移除时提示用户重选，不自动选择付费或任意 fallback；用真实 OMP 验证当前选择不被当成新范围合法模型。（MODEL-07）
+- [ ] 3.9 提取非敏感 `src/settings.ts`，采用宿主 agent 目录规则与 PI_CODING_AGENT_DIR；验证默认 .omp 路径、scope 及 empty free 重启恢复且文件无 Token/credential。（MODEL-07、UX-07）
+- [ ] 3.10 验收至少三个模型的 metadata、thinking、Vision、context/max tokens、free/all/empty、scope restart 和重注册不改 credential；保存目录来源与真实模型 ID 证据后通过 M2。（MODEL-01–07）
+
+## 4. M3 — 最小 Gateway 兼容与工具闭环
+
+- [ ] 4.1 为 reasoning replay、tool_choice、token clamp、unsupported fields 逐项建立 `gateway-compatibility-evidence.md`，记录删除后失败案例、脱敏响应、适用模型/版本及最小修正；删除没有可复现必要性证据的 transform。（GATE-01）
+- [ ] 4.2 提取 `src/payload.ts`，移除宿主已处理的 stream/role/standard effort/max_tokens 重复处理；默认删除自动 system prompt，仅在真实缺 system 失败证据成立时最小保留，验证用户 prompt semantics 不被任意改变。（GATE-02）
+- [ ] 4.3 保留 before_provider_request 并按当前模型 ID Set 识别；迁移 `test/scope.test.mts` 形成非匹配请求完全不变回归，单独记同名跨 Provider 限制，不声称绝对隔离。（GATE-03）
+- [ ] 4.4 对证据要求的 reasoning cleanup 保留永久回归，验证普通消息、assistant tool calls、tool_call_id 和 tool results 关联完整，真实下一轮能使用工具结果。（GATE-04）
+- [ ] 4.5 验证 auto/named tool_choice 的 WorkBuddy 规整、arguments streaming、单工具、连续工具、多工具及支持时 parallel tools，完成工具执行→结果回送→下一轮回答，而非只验证参数拼接。（GATE-05）
+- [ ] 4.6 用宿主原生 openai-completions 验证 text/reasoning/tool deltas、usage、DONE、HTTP error、Abort、Retry；证明无插件 SSE/tool parser、双重重试或自定义 Chat HTTP 路径。（GATE-06）
+- [ ] 4.7 汇总普通对话、reasoning history、named/sequential/multi 工具、参数流、abort/error/retry 和隔离证据，所有 patch 均关联服务端 case 后才通过 M3。（GATE-01–06）
+
+## 5. M4 — Commands、Credits 与可选 UI
+
+- [ ] 5.1 按 M0 Credits / Usage ADR 接通宿主 Usage 或独立 Billing 协议，提取 credits 状态/解析；验证始终使用宿主 credential/刷新且不读旧文件，成功响应可得账号/积分/套餐。（UX-03；D8）
+- [ ] 5.2 实现 available/unavailable/未查询状态，拒绝把无效响应解析为零积分；验证成功、5xx、超时、慢响应、解析失败都不破坏正常 Chat。（UX-01/03）
+- [ ] 5.3 完成 `/workbuddy` 状态展示和 free/all/logout 用户交互，包含 login/account/credits/plan/scope/model count/model source/provider state；验证各命令输出、当前模型移除提示及 credential 不变/真正删除。（UX-01/02）
+- [ ] 5.4 提取 `src/ui.ts`，以 session_start/turn_start 同步当前模型的 Widget/status，启动只触发非阻塞更新；迁移 session-start 测试到宿主凭据边界，永久验证 Billing 慢及 UI 失败不阻塞启动/Chat。（UX-03/05）
+- [ ] 5.5 实现 stateGeneration 与当前模型/活动会话检查，logout、account switch、scope change、session teardown 失效旧请求；保留退出迟到积分回归，并验证换号、换范围、离开 WorkBuddy、关闭会话均不恢复旧 Widget。（UX-04）
+- [ ] 5.6 所有 UI 操作以 hasUI 隔离，非 UI 认证/注册/hook 正常装配；保留 headless 无 UI 依赖回归，验证没有 select/notify/widget/status 调用也能运行请求与工具。（UX-06、REL-01）
+- [ ] 5.7 验收四个命令、Billing 正常/失败/慢、pending credits logout、scope restart、headless 与无 UI 访问；记录 Widget 下一 turn 才更新的限制后通过 M4。（UX-01–07）
+
+## 6. M5 — Agent、四层验收与发布证据
+
+- [ ] 6.1 完成真实 main model 的 chat/thinking/tool/streaming/refresh 场景，保存官方宿主与 Gateway 的请求身份和结果脱敏证据。（REL-01）
+- [ ] 6.2 配置 task role 为 WorkBuddy 并执行 subagent，验证加载、OAuth、identity、payload hook、Streaming、tool calling、结果返回和 B 登录后无 A 身份；实际 headless 验证加载/认证/模型/请求/工具不依赖 TUI。（REL-01、AUTH-07）
+- [ ] 6.3 执行 unit/真实类型 contract/真实 OMP integration/WorkBuddy Live E2E 四层验证，确认 V2 §13 十二类永久回归全部存在且行为通过，Mock/fixture/临时目录不读取真实凭据并正确释放资源。（REL-03）
+- [ ] 6.4 执行完整 Release Matrix：install/type/fresh login/first identity/restart/expired access/invalid refresh/missing accountId/missing orgId/A→B/logout/至少三模型/thinking/真实图片/read-grep-bash/sequential-multi/main/subagent/headless/free-all-empty/Billing success-5xx-timeout-slow/isolation/logging；逐例记录结果，必需项不许以 N/A 或 Mock 代替。（REL-02）
+- [ ] 6.5 审查源码与实际日志、错误、网络、文件和诊断附件，确认 Token/Authorization 不入日志、仓库、项目或第三方，identity 输出脱敏，网络只到功能所需官方国际端点，Desktop 数据未改变。（REL-04）
+- [ ] 6.6 保存 `release-evidence.md`：OMP version/commit、extension version/commit、Node/Bun runtime、日期、账号类型、模型 IDs、矩阵结果、known limitations、脱敏证据；补齐 Requirement→Implementation→Test 实际定位，未运行/失败不得标通过。（REL-05）
+- [ ] 6.7 真实冒烟及矩阵通过后完成入口 composition root/模块边界收尾，删除失去用途的旧认证与兼容代码、临时探针和脚本；验证没有生产占位实现、额外 CredentialStore/Transport 框架或被误加载的 helper。（HOST-02、AUTH-01；D11）
+- [ ] 6.8 更新 README/安装与迁移/目录/环境变量/命令/版本发布说明，明确单账号不容错配、Widget 延迟、同名 ID、缓存来源四项限制和 ADR 实际选择；检查旧 Pi 安装/旧凭据优先级宣传已移除，包版本不因功能名 v1 倒退。（REL-06）
+- [ ] 6.9 按 V2 §19 全部条件核签 v1：OMP 零修改、正式安装、AuthStorage 唯一来源、OAuth/refresh/identity/restart、目录/Streaming/thinking/声明 Vision/工具、main/subagent/headless、credits/free-all/logout/isolation/秘密保护均有证据；任一未通过保持发布阻断。（REL-01–06、HOST-05）
