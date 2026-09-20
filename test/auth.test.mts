@@ -1,3 +1,4 @@
+import { LoginCancelledError } from "@oh-my-pi/pi-ai/error";
 import type { OAuthCredentials } from "@oh-my-pi/pi-ai";
 import {
   credentialFromLoginResponse,
@@ -38,7 +39,7 @@ const jwtIdentity = credentialFromLoginResponse(complete({
   accessToken: jwtAccess,
   uid: undefined,
 }), 1_000);
-assert(jwtIdentity.uid === "jwt-account-a", "signed access-token sub was not accepted as durable uid");
+assert(jwtIdentity.uid === "jwt-account-a", "access-token JWT sub was not accepted as durable uid");
 const liveShape = oauthFromWorkBuddy(credentialFromLoginResponse(complete({
   accessToken: jwtAccess,
   uid: undefined,
@@ -46,6 +47,18 @@ const liveShape = oauthFromWorkBuddy(credentialFromLoginResponse(complete({
 }), 1_000));
 assert(liveShape.accountId === "jwt-account-a", "live Plugin Auth subject was not mapped");
 assert(liveShape.orgId === undefined, "missing optional enterprise identity was fabricated");
+const jwtEnterpriseAccess = `x.${Buffer.from(JSON.stringify({
+  sub: "jwt-account-a",
+  enterpriseId: "unproven-jwt-org",
+  enterprise_id: "unproven-jwt-org-snake",
+})).toString("base64url")}.y`;
+const jwtEnterpriseIdentity = credentialFromLoginResponse(complete({
+  accessToken: jwtEnterpriseAccess,
+  uid: undefined,
+  enterpriseId: undefined,
+  enterprise_id: undefined,
+}), 1_000);
+assert(jwtEnterpriseIdentity.enterpriseId === undefined, "unproven JWT enterprise claim was accepted");
 
 let emailClaimRejected = false;
 try {
@@ -163,5 +176,29 @@ assert(noEnterprise.orgId === undefined, "refresh fabricated an enterprise ident
 const noEnterpriseHeaders = new Headers(noEnterpriseRequest?.headers);
 assert(noEnterpriseHeaders.get("x-enterprise-id") === null, "refresh sent a fabricated enterprise header");
 assert(noEnterpriseHeaders.get("x-no-enterprise-id") === null, "refresh sent a Chat-only no-enterprise marker");
+
+const refreshAbort = new AbortController();
+const hangingRefresh: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {
+  const signal = init?.signal;
+  if (!signal) {
+    reject(new Error("refresh request did not receive an AbortSignal"));
+    return;
+  }
+  if (signal.aborted) {
+    reject(signal.reason);
+    return;
+  }
+  signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+});
+const pendingRefresh = refreshWorkBuddyOAuth(previous, hangingRefresh, 10_000, refreshAbort.signal);
+await Promise.resolve();
+refreshAbort.abort("host refresh cancelled");
+let refreshCancelled = false;
+try {
+  await pendingRefresh;
+} catch (error) {
+  refreshCancelled = error instanceof LoginCancelledError;
+}
+assert(refreshCancelled, "refresh cancellation did not surface as host LoginCancelledError");
 
 console.log("OK: login mapping and refresh boundaries reject incomplete or conflicting identity");

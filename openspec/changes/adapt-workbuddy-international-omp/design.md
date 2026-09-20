@@ -129,7 +129,7 @@ Scope 更新构建新目录与 ID Set，提交 Provider/selector 状态后持久
 
 ### D10 — 可取消的 OAuth 协议轮询
 
-将宿主支持的取消信号和扩展/session 关闭连接到 AbortController；HTTP 请求和间隔等待都可取消，取消后忽略迟到成功结果。维持总轮询截止时间，分类拒绝/超时/取消/网络/5xx/429；有效 Retry-After 在剩余时间内优先遵守。这是 Plugin Auth 协议调度，不是重写 Chat Retry。所有错误输出先去秘密，保留状态与可行动原因。
+将宿主支持的取消信号和扩展/session 关闭连接到 AbortController；HTTP 请求和间隔等待都可取消，取消后忽略迟到成功结果。维持总轮询截止时间，分类拒绝/超时/取消/网络/5xx/429。只有 authorization polling 对有效 Retry-After 在剩余轮询时间内等待后继续；一次性的 login-start 和 refresh 遇到 429 时返回 `rate_limited`，不在插件内建立独立 retry loop。这是 Plugin Auth 协议调度，不是重写 Chat Retry。所有错误输出先去秘密，保留状态与可行动原因。
 
 ### D11 — 按协议边界模块化
 

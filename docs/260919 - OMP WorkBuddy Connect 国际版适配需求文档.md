@@ -509,7 +509,8 @@ AuthStorage.getOAuthAccess(provider, sessionId, { signal })
 
 ```text
 access.accountId → X-User-Id
-access.orgId     → X-Enterprise-Id
+access.orgId 存在 → X-Enterprise-Id
+access.orgId 缺省 → X-No-Enterprise-Id: 1
 ```
 
 不得把账号身份长期快照到静态 `model.headers`。Provider 固定 Headers 可能已经由既有 `resolveHeaders` 表达，WorkBuddy resolver 必须组合而不是覆盖它。
@@ -1143,23 +1144,18 @@ Credential 由 OMP AuthStorage 管理后，插件应尽量减少自行在 agent 
 
 ## Account Metadata
 
-- uid 缺失；
-- enterpriseId 缺失；
-- credential 不完整。
+- durable uid/accountId 缺失：认证失败；
+- enterpriseId/orgId 缺失：合法的 no-enterprise 账号；
+- 已有 orgId 与刷新响应明确返回的 enterpriseId 冲突：认证失败；
+- credential 不完整：认证失败。
 
-遇到：
-
-```text
-uid / enterpriseId
-```
-
-缺失时不得静默发送错误身份 Header。
-
-应明确提示用户重新：
+accountId 缺失或企业身份明确矛盾时必须 fail closed，并提示用户重新执行：
 
 ```text
 /login workbuddy
 ```
+
+orgId 单纯缺失时不得伪造组织；Chat 必须发送 `X-No-Enterprise-Id: 1`。
 
 ## Model
 

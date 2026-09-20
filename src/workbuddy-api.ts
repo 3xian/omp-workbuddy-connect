@@ -68,12 +68,6 @@ export class WorkBuddyOAuthError extends Error {
   }
 }
 
-function record(value: unknown): JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as JsonRecord
-    : {};
-}
-
 function throwIfCancelled(signal?: AbortSignal): void {
   if (signal?.aborted) {
     throw new LoginCancelledError("WorkBuddy login cancelled");
@@ -116,17 +110,45 @@ async function oauthFetch(
 }
 
 async function readEnvelope(response: Response): Promise<JsonRecord> {
+  let parsed: unknown;
   try {
-    return record(await response.json());
+    parsed = await response.json();
   } catch (error) {
     throw new WorkBuddyOAuthError(
       "invalid_response",
-      "WorkBuddy OAuth returned an invalid response",
+      "WorkBuddy OAuth returned invalid JSON",
       response.status,
       { cause: error },
     );
   }
+  if (
+    typeof parsed !== "object"
+    || parsed === null
+    || Array.isArray(parsed)
+    || typeof (parsed as JsonRecord).code !== "number"
+    || !Number.isFinite((parsed as JsonRecord).code)
+  ) {
+    throw new WorkBuddyOAuthError(
+      "invalid_response",
+      "WorkBuddy OAuth returned an invalid envelope",
+      response.status,
+    );
+  }
+  return parsed as JsonRecord;
 }
+
+function envelopeData(envelope: JsonRecord, response: Response): JsonRecord {
+  const data = envelope.data;
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw new WorkBuddyOAuthError(
+      "invalid_response",
+      "WorkBuddy OAuth returned invalid data",
+      response.status,
+    );
+  }
+  return data as JsonRecord;
+}
+
 function responseError(response: Response, kind: "authorization_rejected" | "token_refresh"): WorkBuddyOAuthError {
   if (response.status === 429) {
     return new WorkBuddyOAuthError("rate_limited", "WorkBuddy OAuth rate limited", 429);
@@ -181,7 +203,7 @@ export async function startPluginLogin(
   if (!response.ok) throw responseError(response, "authorization_rejected");
   const envelope = await readEnvelope(response);
   if (envelope.code !== 0) throw responseError(response, "authorization_rejected");
-  const data = record(envelope.data);
+  const data = envelopeData(envelope, response);
   const state = typeof data.state === "string" ? data.state.trim() : "";
   const authUrl = typeof data.authUrl === "string" ? data.authUrl.trim() : "";
   if (state === "" || authUrl === "") {
@@ -234,7 +256,7 @@ export async function pollPluginToken(
     }
     if (envelope.code !== 0) throw responseError(response, "authorization_rejected");
     throwIfCancelled(options.signal);
-    return record(envelope.data);
+    return envelopeData(envelope, response);
   }
 }
 
@@ -257,5 +279,5 @@ export async function refreshPluginToken(
   const envelope = await readEnvelope(response);
   if (envelope.code !== 0) throw responseError(response, "token_refresh");
   throwIfCancelled(options.signal);
-  return record(envelope.data);
+  return envelopeData(envelope, response);
 }

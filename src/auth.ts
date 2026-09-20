@@ -65,10 +65,7 @@ function responseIdentity(data: JsonRecord): { uid?: string; enterpriseId?: stri
   const claims = jwtPayload(data.accessToken);
   return {
     uid: optionalString(data.uid) ?? optionalString(claims.uid) ?? optionalString(claims.sub),
-    enterpriseId: optionalString(data.enterpriseId)
-      ?? optionalString(data.enterprise_id)
-      ?? optionalString(claims.enterpriseId)
-      ?? optionalString(claims.enterprise_id),
+    enterpriseId: optionalString(data.enterpriseId) ?? optionalString(data.enterprise_id),
   };
 }
 

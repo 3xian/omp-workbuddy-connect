@@ -2,9 +2,8 @@
 
 > **Development status — not release-ready**
 >
-> M0 已通过；M1 任务 2.1–2.6（认证映射、宿主刷新、请求身份绑定和单账号
-> fail-closed）已完成。M1 2.7–2.11 及 M2–M5 仍未完成，因此本分支尚不可发布。
-> 权威进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
+> M0 和 M1 已通过各自里程碑 gate。M2–M5 仍未完成，因此本分支尚不可发布。
+> 权威实施进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
 > 下文仍含尚未完成 M2–M4 迁移的上游行为说明，不代表当前发布契约。
 
 ## Legacy upstream behavior

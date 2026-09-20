@@ -25,7 +25,7 @@
 - [x] 2.7 实现 provider-scoped logout：先失效异步 generation，再删除宿主认证、清理状态并使 request-boundary identity resolver 不可继续取得旧身份；验证失败不虚报成功，Desktop credential/客户端数据不变。（AUTH-08、UX-02）
 - [x] 2.8 按 M0 ADR 打通 normal/refresh/retry/logout/换号的 request-boundary durable identity binding，验证 refresh/retry 可换 Bearer 但保持同一 row 身份，已有会话及新 subagent 在换号后均获取 B；若采用 setModel fallback，覆盖 main/child/resume/task/headless，保留迟到 A 结果不恢复旧认证的回归。（AUTH-04/07）
 - [x] 2.9 将用户取消、session abort、extension shutdown 接入 OAuth HTTP 请求和轮询等待；验证三类取消均停止后续轮询、不持久化迟到成功、不遗留定时器。（AUTH-09）
-- [x] 2.10 分类授权拒绝、poll timeout、user cancelled、network failure、5xx、429，处理有效 Retry-After 与总截止时间；用隔离协议场景验证不同结果和可取消等待，不新增通用 retry。（AUTH-09）
+- [x] 2.10 分类授权拒绝、poll timeout、user cancelled、network failure、5xx、429；authorization polling 遵守有效 Retry-After 与总截止时间，login-start/refresh 的 429 单次返回 `rate_limited`，用隔离协议场景验证不同结果和可取消等待，不新增通用 retry。（AUTH-09）
 - [x] 2.11 使用一个稳定真实 WorkBuddy 模型完成 fresh login→正确 Bearer/identity→Streaming→强制过期 refresh→restart→logout→B login→existing session/subagent B request；保存脱敏证据，全部通过才完成 M1。（HOST-05、AUTH-01–09）
 
 ## 3. M2 — 模型目录与能力契约
@@ -66,7 +66,7 @@
 - [ ] 6.1 完成真实 main model 的 chat/thinking/tool/streaming/refresh 场景，保存官方宿主与 Gateway 的请求身份和结果脱敏证据。（REL-01）
 - [ ] 6.2 配置 task role 为 WorkBuddy 并执行 subagent，验证加载、OAuth、identity、payload hook、Streaming、tool calling、结果返回和 B 登录后无 A 身份；实际 headless 验证加载/认证/模型/请求/工具不依赖 TUI。（REL-01、AUTH-07）
 - [ ] 6.3 执行 unit/真实类型 contract/真实 OMP integration/WorkBuddy Live E2E 四层验证，确认 V2 §13 十二类永久回归全部存在且行为通过，Mock/fixture/临时目录不读取真实凭据并正确释放资源。（REL-03）
-- [ ] 6.4 执行完整 Release Matrix：install/type/fresh login/first identity/restart/expired access/invalid refresh/missing accountId/missing orgId/A→B/logout/至少三模型/thinking/真实图片/read-grep-bash/sequential-multi/main/subagent/headless/free-all-empty/Billing success-5xx-timeout-slow/isolation/logging；逐例记录结果，必需项不许以 N/A 或 Mock 代替。（REL-02）
+- [ ] 6.4 执行完整 Release Matrix：install/type/fresh login/first identity/restart/expired access/invalid refresh/missing accountId/optional-org no-enterprise/A→B/logout/至少三模型/thinking/真实图片/read-grep-bash/sequential-multi/main/subagent/headless/free-all-empty/Billing success-5xx-timeout-slow/isolation/logging；逐例记录结果，必需项不许以 N/A 或 Mock 代替。（REL-02）
 - [ ] 6.5 审查源码与实际日志、错误、网络、文件和诊断附件，确认 Token/Authorization 不入日志、仓库、项目或第三方，identity 输出脱敏，网络只到功能所需官方国际端点，Desktop 数据未改变。（REL-04）
 - [ ] 6.6 保存 `release-evidence.md`：OMP version/commit、extension version/commit、Node/Bun runtime、日期、账号类型、模型 IDs、矩阵结果、known limitations、脱敏证据；补齐 Requirement→Implementation→Test 实际定位，未运行/失败不得标通过。（REL-05）
 - [ ] 6.7 真实冒烟及矩阵通过后完成入口 composition root/模块边界收尾，删除失去用途的旧认证与兼容代码、临时探针和脚本；验证没有生产占位实现、额外 CredentialStore/Transport 框架或被误加载的 helper。（HOST-02、AUTH-01；D11）

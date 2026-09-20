@@ -2,6 +2,7 @@ import { LoginCancelledError } from "@oh-my-pi/pi-ai/error";
 import {
   pollPluginToken,
   refreshPluginToken,
+  startPluginLogin,
   WorkBuddyOAuthError,
   type WorkBuddyOAuthErrorKind,
 } from "../src/workbuddy-api.ts";
@@ -30,6 +31,21 @@ async function expectCancelled(promise: Promise<unknown>): Promise<LoginCancelle
   }
   throw new Error("expected cancellation rejection");
 }
+
+await expectKind(
+  pollPluginToken("state", async () => new Response("{", {
+    headers: { "Content-Type": "application/json" },
+  }), { deadlineMs: 100 }),
+  "invalid_response",
+);
+await expectKind(
+  pollPluginToken("state", async () => Response.json({}), { deadlineMs: 100 }),
+  "invalid_response",
+);
+await expectKind(
+  pollPluginToken("state", async () => Response.json({ code: 0, data: [] }), { deadlineMs: 100 }),
+  "invalid_response",
+);
 const pending = () => Response.json({ code: 11217 });
 const success = () => Response.json({ code: 0, data: { accessToken: "access", refreshToken: "refresh", expiresIn: 3600, uid: "account", enterpriseId: "org" } });
 
@@ -109,6 +125,13 @@ await new Promise((resolve) => setTimeout(resolve, 5));
 rateAbort.abort("extension shutdown");
 await expectCancelled(rateWait);
 assert(calls === 1, "cancelled Retry-After wait issued another request");
+
+calls = 0;
+const loginStartRateError = await expectKind(startPluginLogin(async () => {
+  calls += 1;
+  return new Response(null, { status: 429, headers: { "Retry-After": "0" } });
+}), "rate_limited");
+assert(loginStartRateError.status === 429 && calls === 1, "login-start rate limit was generically retried");
 
 calls = 0;
 const rateError = await expectKind(refreshPluginToken("refresh", "org", async () => {

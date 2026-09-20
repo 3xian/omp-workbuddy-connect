@@ -1,6 +1,6 @@
 # ADR: WorkBuddy Request Identity Binding
 
-Status: Accepted for M1 implementation — M0 gate passed; authenticated Task E2E remains M5
+Status: Accepted — M0 and M1 gates passed; full Task tool/reasoning/release E2E remains M5
 
 Verified host: OMP 18.2.6 at `78b753124d11f8dd3ae73e2524125890ff7c977e`
 
@@ -8,11 +8,11 @@ Date: 2026-09-20
 
 ## Context
 
-Every WorkBuddy Chat request must bind three values to one durable OAuth credential identity:
+Every WorkBuddy Chat request must bind the following to one durable OAuth credential identity:
 
 - host-provided Bearer token, which may refresh between retry attempts;
 - `X-User-Id` from the same durable row's `accountId`;
-- `X-Enterprise-Id` from the same durable row's `orgId`.
+- exactly one enterprise semantic from that row: `X-Enterprise-Id` when optional `orgId` exists, otherwise `X-No-Enterprise-Id: 1`.
 
 The first modifier probe proved that static identity values in `model.headers` become stale when an existing session retains an A model object after login B. That rules out long-lived static credential snapshots, but it does not prove that current-session model rebinding is the only supported solution.
 
@@ -54,7 +54,7 @@ modifyModels()
   -> install WorkBuddy-only identity resolver
   -> AuthStorage.getOAuthAccess(provider, request sessionId, { signal })
   -> validate exactly one stored WorkBuddy OAuth credential
-  -> materialize X-User-Id and X-Enterprise-Id immediately before dispatch
+  -> materialize X-User-Id and exactly one of X-Enterprise-Id / X-No-Enterprise-Id immediately before dispatch
 ```
 
 The resolver must compose, not replace, the existing resolver because Provider fixed headers may already be represented by `resolveHeaders` rather than `model.headers`.
@@ -73,7 +73,7 @@ The resolver must compose, not replace, the existing resolver because Provider f
 
 Sequential A→B switching deletes A before storing B. Even a retained model object resolves B dynamically on its next request. More than one stored WorkBuddy OAuth credential must be rejected before Chat dispatch.
 
-The actual OMP Task executor lifecycle contract is verified by the synthetic host/runtime harness in `test/contract/task-runtime-contract.test.mts` and summarized in `headless-behavior.md`; it is not production WorkBuddy Task authentication evidence. `test/contract/persisted-credential-restart.test.mts` follows restart order—persist A → register → `session_start` bind → fresh `find()` → request-boundary resolution—and separately asserts that the pre-bind projection remains visible with its resolver installed; it then emits `session_switch` and resolves B from the retained model. `test/contract/request-identity-binding.test.mts` exercises the same register → bind → find → built-in `openai-completions` order through normal, forced-refresh, 401-retry, retained-model A→B, and two-row fail-closed paths. Authenticated WorkBuddy Task E2E remains an M5 release gate.
+The actual OMP Task executor lifecycle contract is verified by the synthetic host/runtime harness in `test/contract/task-runtime-contract.test.mts` and summarized in `headless-behavior.md`. `test/contract/persisted-credential-restart.test.mts` follows restart order—persist A → register → `session_start` bind → fresh `find()` → request-boundary resolution—and separately asserts that the pre-bind projection remains visible with its resolver installed; it then emits `session_switch` and resolves B from the retained model. `test/contract/request-identity-binding.test.mts` exercises the same register → bind → find → built-in `openai-completions` order through normal, forced-refresh, 401-retry, retained-model A→B, and two-row fail-closed paths. The M1 live gate additionally configured `modelRoles.task = workbuddy/hy3` and completed a non-canned request in a fresh authenticated B subagent. Full Task tool calling, reasoning, streaming-detail, and release-matrix E2E remain M5.
 
 ## Rejected fallback
 

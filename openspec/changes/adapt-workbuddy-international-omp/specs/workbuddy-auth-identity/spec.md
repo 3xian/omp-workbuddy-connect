@@ -99,7 +99,7 @@ v1 SHALL 只支持一个 stored WorkBuddy OAuth credential。`listOAuthAccounts(
 - **THEN** 宿主 WorkBuddy credential 被删除，后续 Chat 不可认证，迟到响应不恢复登录状态或 Widget，Desktop 登录保持不变
 
 ### Requirement: AUTH-09 Cancellable OAuth polling and actionable errors
-OAuth polling SHALL 响应用户取消、session abort、extension shutdown，停止后续轮询并终止可取消的在途请求；错误 SHALL 区分授权拒绝、轮询超时、用户取消、网络失败、服务端 5xx 和限流。429 携带有效 Retry-After 时 SHALL 在总超时与取消边界内遵守，不新增通用重试框架。
+OAuth polling SHALL 响应用户取消、session abort、extension shutdown，停止后续轮询并终止可取消的在途请求；错误 SHALL 区分授权拒绝、轮询超时、用户取消、网络失败、服务端 5xx 和限流。仅 authorization polling 收到 429 且携带有效 Retry-After 时 SHALL 在总轮询截止时间与取消边界内等待后继续 poll。一次性的 login-start 与 refresh 请求收到 429 时 SHALL 返回 `rate_limited`，MUST NOT 在插件中建立独立重试循环。
 
 #### Scenario: Cancellation during request or poll delay
 - **WHEN** 用户取消、会话中止或扩展关闭发生在 HTTP 请求或下一次轮询等待期间
@@ -110,5 +110,9 @@ OAuth polling SHALL 响应用户取消、session abort、extension shutdown，�
 - **THEN** 返回对应错误，不把拒绝当作继续等待，也不无限轮询
 
 #### Scenario: Rate limit or network failure
-- **WHEN** 返回 429 和有效 Retry-After，或遇到网络失败或 5xx
-- **THEN** 限流等待遵守 Retry-After 且可取消，网络失败和 5xx 分别可识别，错误不包含认证秘密
+- **WHEN** authorization polling 返回 429 和有效 Retry-After，或任一 OAuth 请求遇到网络失败或 5xx
+- **THEN** polling 限流等待遵守 Retry-After 且可取消，网络失败和 5xx 分别可识别，错误不包含认证秘密
+
+#### Scenario: One-shot endpoint rate limit
+- **WHEN** login-start 或 refresh 返回 429
+- **THEN** 返回 `rate_limited` 且插件只发起一次请求，不建立独立 retry loop

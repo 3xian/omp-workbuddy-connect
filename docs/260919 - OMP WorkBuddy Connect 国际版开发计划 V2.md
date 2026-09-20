@@ -722,7 +722,7 @@ X-Domain
 
 ```text
 X-User-Id
-X-Enterprise-Id
+X-Enterprise-Id 或 X-No-Enterprise-Id: 1（二选一）
 ```
 
 `oauth.modifyModels()` 只负责为 WorkBuddy model 安装经过 M0 验证的 credential-aware identity binding。首选机制：
@@ -733,7 +733,8 @@ existing model.resolveHeaders
 AuthStorage.getOAuthAccess(provider, sessionId, { signal })
         ↓
 accountId → X-User-Id
-orgId     → X-Enterprise-Id
+orgId 存在 → X-Enterprise-Id
+orgId 缺省 → X-No-Enterprise-Id: 1
 ```
 
 固定 Header resolver 与账号 resolver 必须组合；不得把账号信息长期写入静态 `model.headers`。由于 Bearer 与 identity 是两次解析，必须通过实际出站 normal/refresh/retry/A→B 验证明同 credential generation，不能仅证明 resolver 最终读到新账号。
@@ -1679,13 +1680,13 @@ server 5xx
 rate limit
 ```
 
-429 如有：
+仅 authorization polling 对 429 携带的有效：
 
 ```text
 Retry-After
 ```
 
-优先遵守。
+在总轮询截止时间与取消边界内等待后继续 poll。一次性的 login-start 与 refresh 请求遇到 429 时向宿主/调用方返回 `rate_limited`，插件不建立独立 retry loop。
 
 ---
 
@@ -1880,7 +1881,7 @@ v1 发布前必须完成以下真实测试。
 | Refresh | Expired access |
 | Failure | Invalid refresh |
 | Identity | Missing accountId |
-| Identity | Missing orgId |
+| Identity | Optional orgId / no-enterprise path |
 | Switch | Account A → Account B |
 | Logout | Credential truly invalid |
 | Chat | ≥3 real models |

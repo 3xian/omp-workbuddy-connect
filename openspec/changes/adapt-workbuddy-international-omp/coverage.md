@@ -73,7 +73,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | 8.5 | logout 明确操作顺序 | AUTH-08；UX-02/04 | D4 | 2.7；5.3/5.5 |
 | 8.6 | Credits 使用 OMP 凭据、失败不影响 Chat | UX-03 | D4/D8 | 5.1/5.2 |
 | 8.7 | 四类事件失效 generation，迟到结果不回写 | UX-04 | D9 | 5.5 |
-| 8.8 | 三类取消、六类错误、429 Retry-After | AUTH-09 | D10 | 2.9/2.10 |
+| 8.8 | 三类取消、六类错误、polling Retry-After、one-shot 429 | AUTH-09 | D10 | 2.9/2.10 |
 | 8.9 | session_start/turn_start，接受下一 turn 更新 | UX-05 | D9 | 5.4 |
 | 8.10 | 无 UI 不影响 auth/model/payload/transport | UX-06；REL-01 | D9/D11 | 1.6；5.6；6.2 |
 | 8.11 | commands/credits/slow/stale/restart/headless M4 gate | UX-01–07 | D8–D10 | 5.7 |
@@ -113,7 +113,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | Expired access | AUTH-03 Forced expiry | 2.3/2.11 |
 | Invalid refresh | AUTH-03 Invalid refresh | 2.3 |
 | Missing accountId | AUTH-05 Stored credential lacks accountId | 2.5 |
-| Missing orgId | AUTH-05 Optional orgId uses explicit no-enterprise Chat semantics | 2.5 |
+| Optional orgId / no-enterprise | AUTH-05 Optional orgId uses explicit no-enterprise Chat semantics | 2.5 |
 | Account A→B | AUTH-07 Sequential switch | 2.8/2.11 |
 | Logout truly invalid | AUTH-08 Logout | 2.7/2.11 |
 | ≥3 real models | MODEL-01；REL-02 | 3.10 |
