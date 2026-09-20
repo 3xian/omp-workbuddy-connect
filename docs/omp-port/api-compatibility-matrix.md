@@ -17,16 +17,16 @@ Host contract: `@oh-my-pi/pi-ai@18.2.6` and `@oh-my-pi/pi-coding-agent@18.2.6`, 
 | `model_select` | Not in the extension event union | Removed; use supported `turn_start` for deferred model-dependent UI refresh | 18.2.6 event type; typecheck; loader has no unknown-event failure |
 | Marker header | No host contract; existed only to find requests for the removed header hook | Removed | Provider registration no longer emits `X-Pi-WorkBuddy` |
 | Legacy `thinkingLevelMap` | Not part of OMP 18.2.6 `ProviderModelConfig` | Removed; OMP canonical `thinking` metadata is not implemented yet | M2 task 3.2 remains pending; no reasoning E2E capability is claimed |
-| Account identity headers | Must eventually come from the same host credential generation as Bearer authentication | Not implemented in this batch; current legacy credential/header code is not the target contract | Tasks 1.4–1.5 must establish host behavior before M1 implements `modifyModels()` projection |
+| Account identity headers | Must eventually come from the same host credential generation as Bearer authentication | M0 found a current-session rebind gap; implementation remains blocked until a supported atomic path is designed | `modifier-behavior.md`: fresh lookup returns B, but the existing A `Model` reference remains stale after official `/login` refresh |
 | `before_provider_request` | Supported payload hook | Retain, scoped by the current WorkBuddy model-ID set | Typecheck; `test/scope.test.mts` proves a foreign payload is byte-for-byte unchanged |
 | OAuth `login()` | Supported | Retain for the M0 protocol probe; production credential-boundary hardening is M1 | Typecheck and loader binding |
 | OAuth `refreshToken()` | Supported | Retain for M0; remove legacy credential fallback in M1 | Typecheck and loader binding |
 | OAuth `getApiKey()` | Supported | Retain as the Bearer source; identity fail-closed validation is M1 | Typecheck and loader binding |
-| OAuth `modifyModels()` | Supported and receives the catalog plus credentials | Do not guess behavior; task 1.5 must verify full-catalog, rebuild, exception, stale-reference, and subagent behavior before M1 | Type/source inspection only; runtime behavior intentionally not marked verified |
+| OAuth `modifyModels()` | Supported; receives the full catalog and current credentials during lazy catalog composition | Full-catalog scope verified; keep foreign rows unchanged and validate identity independently in `getApiKey()` because exceptions fall back to unprojected rows | `modifier-behavior.md`: 5,112 rows/70 providers, rebuild timing, exception fallback, stale reference, and child-resolution evidence |
 | `fetchDynamicModels()` | Supported Provider capability | Decision deferred to the task 1.7 Dynamic Model ADR | Type/source inspection only |
 | `usage` / UsageProvider | Supported host capability | Decision deferred to the task 1.8 Credits / Usage ADR | Type/source inspection only |
-| `session_start` | Supported event | Retain; optional Billing/UI work remains non-blocking | Typecheck and `test/session-start.test.mts` |
-| `turn_start` | Supported event | Use as the current supported lifecycle point for model-dependent UI refresh | Typecheck and official loader binding |
+| `session_start` | Supported in interactive and headless sessions | Retain; optional Billing/UI work remains non-blocking and must branch on `ctx.hasUI` | `test/session-start.test.mts`; `headless-behavior.md` parent/child-shaped runtime evidence |
+| `turn_start` | Supported in interactive and headless sessions | Use as the current supported lifecycle point for model-dependent UI refresh | Typecheck plus parent/child-shaped headless emission |
 | Custom Chat transport/parser | Not required for the WorkBuddy OpenAI-compatible endpoint | Prohibited; continue using host `openai-completions` | Provider config contains no custom transport |
 
 ## Verification result
@@ -40,6 +40,6 @@ Host contract: `@oh-my-pi/pi-ai@18.2.6` and `@oh-my-pi/pi-coding-agent@18.2.6`, 
 
 ## Current implementation boundary
 
-**Loadable does not mean authenticated-runtime ready.** The extension currently proves only the OMP registration/type/loading baseline. Canonical Thinking metadata, AuthStorage ownership, credential-bound identity headers, headless/subagent semantics, and authenticated WorkBuddy Chat remain unverified and must not be advertised as working.
+**Loadable does not mean authenticated-runtime ready.** M0 now verifies AuthStorage persistence/removal/cancellation, full-catalog modifier behavior, and headless parent/child-shaped lifecycle. Canonical Thinking metadata and authenticated WorkBuddy Chat remain unverified.
 
-This batch proves native loading and the static/public registration contract. It does not claim OAuth persistence, credential deletion, modifier refresh semantics, headless task-role behavior, or a successful WorkBuddy Chat request; those remain tasks 1.4–1.6 and later live gates.
+Current-session A→B identity atomicity is not proven: official `/login` refresh leaves an existing A `Model` reference stale while a fresh registry lookup returns B. `modifier-behavior.md` records the blocking evidence. M0 must remain blocked until a supported rebind design is proven; M1 implementation must not start on the assumption that refresh mutates old model objects.

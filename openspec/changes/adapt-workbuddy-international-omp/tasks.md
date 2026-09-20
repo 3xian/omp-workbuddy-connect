@@ -5,7 +5,7 @@
 - [x] 1.1 保存 `docs/omp-port/baseline-manifest.md`：Fork 仓库/实际分支/exact SHA、upstream exact SHA、OMP 18.2.6 exact SHA、完整工作区差异和运行环境；核对 design 中观测值并明确未提交用户修改，不把 HEAD 当完整工作区。（HOST-01）
 - [x] 1.2 修复 `loginWorkBuddy` 函数闭合等现有加载问题，校准 manifest/import/类型导出、固定 OMP 开发依赖与锁文件为 18.2.6，更新 tsconfig 覆盖实际模块；以模块导入和 `tsc --noEmit` 零错误验证，不用 any/抑制绕过契约。（HOST-01/02）
 - [x] 1.3 按 design D1 完成 API Compatibility Matrix，移除 Provider 顶层 name（若存在）、refreshModels、before_provider_headers、model_select、Marker 等不支持契约，区分合法 OAuth name；以真实类型和官方加载无未知字段/事件/模块错误验证。（HOST-02/03）
-- [ ] 1.4 在隔离官方 OMP 配置中用最小协议探针验证 `/login workbuddy`、重复登录 replace/append/rotate、持久化、refresh、provider-scoped 删除及重启；保存 `credential-behavior.md`，明确公开方法路径与多 active credential 检测能力，不读取用户真实存储做破坏性实验。（HOST-03、AUTH-07）
+- [x] 1.4 在隔离官方 OMP 配置中用最小协议探针验证 `/login workbuddy`、重复登录 replace/append/rotate、持久化、refresh、provider-scoped 删除及重启；保存 `credential-behavior.md`，明确公开方法路径与多 active credential 检测能力，不读取用户真实存储做破坏性实验。（HOST-03、AUTH-07）
 - [ ] 1.5 验证 modifier 的完整 catalog 输入、registry rebuild、credential 更新时机、异常后的行为、重注册后旧 model 引用以及 subagent 新模型；记录六项证据并确定公开的刷新/失效路径，无法证明身份一致时阻断 M0。（HOST-03、AUTH-04/06）
 - [ ] 1.6 验证 headless/task role 的扩展、OAuth、payload hook 加载与可用公开取消/shutdown 信号；记录真实 OMP 行为而非仅类型推断，证明认证不需要交互 TUI。（HOST-03、REL-01）
 - [ ] 1.7 调查现有 upstream/官方资料与授权可访问的稳定 authenticated product/model API，交付 `adr-dynamic-models.md`；记录 endpoint 证据、identity 可用性、原生缓存和空 scope 可行性，明确 D6 的 A/B 选择及未选理由。（HOST-04、MODEL-06）
