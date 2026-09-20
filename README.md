@@ -13,14 +13,26 @@ WorkBuddy AI 国际版 provider for OMP。认证、模型目录、scope、Gatewa
 
 ## 安装
 
-要求 OMP `18.2.6`。当前包未发布到 npm registry；从可信源码 checkout 使用 OMP 正式安装命令：
+要求 OMP `18.2.6`。正式发布采用固定 GitHub tag；`v1.1.5` tag 创建后执行：
 
 ```bash
-omp --profile workbuddy install /absolute/path/to/omp-workbuddy-connect
-omp --profile workbuddy
+omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.5
+omp
 ```
 
-`omp install` 按 `package.json` 的 `omp.extensions` 加载入口。`--profile workbuddy` 可选，但推荐用于隔离凭据、设置和会话。首次启动后先执行 `/login workbuddy`；如果 `free` 范围为空，执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。完成首次登录和选模后，日常启动可直接使用 `omp --profile workbuddy --model workbuddy/hy3`。
+进入 OMP 后先执行 `/login workbuddy`；如果默认 `free` 范围为空，执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。插件默认安装到 user scope，可供不同项目中的默认 OMP 环境使用。named profile 是独立环境，不会自动继承默认环境的插件或凭据；`--profile workbuddy` 仅适合隔离测试，不是普通用户的正式安装步骤。
+
+当前不通过 npm registry 或 OMP Marketplace 分发，也不要从未固定的 `main` 分支安装。开发者从本地 checkout 调试时使用：
+
+```bash
+omp plugin link /absolute/path/to/omp-workbuddy-connect
+```
+
+卸载 GitHub 安装：
+
+```bash
+omp plugin uninstall omp-workbuddy-connect
+```
 
 ## 登录
 

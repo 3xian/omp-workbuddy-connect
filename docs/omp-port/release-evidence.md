@@ -40,6 +40,21 @@ npm pack --dry-run --json
 PASS: 12-entry artifact containing only package metadata, entrypoint, runtime source, README, and LICENSE
 ```
 
+The GitHub distribution mechanism was verified before the release tag existed, using the immutable post-acceptance implementation commit:
+
+```text
+omp --profile <isolated> plugin install github:ha5h6r000wn/omp-workbuddy-connect#4a6b328a56d73b0a8f43441aa261c2299a116a0b --json
+PASS: package v1.1.5 installed and enabled from GitHub
+
+omp --profile <isolated> plugin doctor --json
+PASS: plugin manifest and installation state healthy
+
+omp --profile <isolated> plugin uninstall omp-workbuddy-connect --json
+PASS: plugin removed; subsequent plugin list was empty
+```
+
+This verifies GitHub resolution, installation, discovery, health checks, and uninstall against the committed production implementation. The M5 OAuth/restart evidence used the same production implementation through an official local install. The documented `#v1.1.5` user command becomes valid only after that immutable tag is created.
+
 ## Release Matrix
 
 | Domain / case | Result | Execution evidence | Implementation / durable evidence |
@@ -119,3 +134,4 @@ Detailed AUTH/MODEL/GATE/UX mappings remain in `docs/omp-port/requirement-implem
 5. v1 does not import Desktop credentials, add a custom Provider transport, use an online dynamic-catalog endpoint, or provide immediate model-selector UI refresh.
 6. OMP 18.2.6 exposes aggregate usage refresh. The Widget filters to WorkBuddy after the host fetch, but another configured provider may also refresh when its cache expires.
 7. The tested production implementation is captured by post-acceptance commit `4a6b328a56d73b0a8f43441aa261c2299a116a0b`. This release-metadata hardening is a later working-tree change, and no immutable release tag exists yet; create the final documentation commit and tag before external publication.
+8. v1 distribution is intentionally GitHub-tag-only. OMP Marketplace catalog publication and npm registry publication are deferred.
