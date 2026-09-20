@@ -9,7 +9,7 @@
 **上游项目**：`icekale/pi-workbuddy-connect`  
 **目标服务**：WorkBuddy AI 国际版  
 **目标服务域名**：`https://www.workbuddy.ai`  
-**文档状态**：开发需求基线（Requirement Revision 1.4）  
+**文档状态**：最终实现收口（Requirement Revision 1.5）
 **版本目标**：v1.0
 
 
@@ -28,6 +28,8 @@ Revision 1.2 根据 M3 证据审计把旧 payload patch 从“必须保留”改
 Revision 1.3 记录 M3 live gate：OMP 18.2.6 的原生 named `tool_choice` 对象在 `deepseek-v4.1-flash` 上触发 WorkBuddy Gateway HTTP 400/code `11101`，服务端字段要求字符串。恢复唯一最小差异：仅对活动 WorkBuddy 模型把 named 对象复制转换为函数名字符串；同一 forced-read 场景复验通过。其余候选仍删除。
 
 Revision 1.4 修正请求边界：OMP 18.2.6 会把本次 provider request 的精确 Model 作为 `before_provider_request` 的 `ctx.model`，故 payload compatibility 以 `ctx.model.provider === "workbuddy"` 过滤，不再依赖 ID Set。Hook 异常会被宿主记录后吞没，活动 scope、切换期和 retained Model 的 fail-closed 阻断因此迁移到 WorkBuddy-bound `resolveHeaders`。
+
+Revision 1.5 完成最终实现收口：第 36 节同步 M0–M5 实际状态；把已评估但明确排除 v1 的 Dynamic Model 在线端点、Desktop credential import、多账号轮换和 custom transport 从“待实现”改为架构裁决；发布证据仍区分功能门禁通过与不可变 tag 发布。
 
 ---
 
@@ -1215,44 +1217,44 @@ OMP < 18.2.6
 
 ## P0
 
-- [ ] Manifest 改为 OMP extension
-- [ ] package import 改为 `@oh-my-pi/*`
-- [ ] Provider schema OMP 化
-- [ ] 删除 `before_provider_headers`
-- [ ] 删除 Marker Header
-- [ ] Authorization 改为 OMP OAuth/API key pipeline
-- [ ] uid → OAuth `accountId`
-- [ ] enterpriseId → OAuth `orgId`
-- [ ] 使用 `modifyModels()` 为 WorkBuddy 安装经过验证的 request-boundary identity binding
-- [ ] Token refresh 保留 account identity
-- [ ] `thinkingLevelMap` → OMP `thinking`
-- [ ] `buildPiModels()` → `buildOmpModels()`
+- [x] Manifest 改为 OMP extension
+- [x] package import 改为 `@oh-my-pi/*`
+- [x] Provider schema OMP 化
+- [x] 删除 `before_provider_headers`
+- [x] 删除 Marker Header
+- [x] Authorization 改为 OMP OAuth/API key pipeline
+- [x] uid → OAuth `accountId`
+- [x] enterpriseId → OAuth `orgId`
+- [x] 使用 `modifyModels()` 为 WorkBuddy 安装经过验证的 request-boundary identity binding
+- [x] Token refresh 保留 account identity
+- [x] `thinkingLevelMap` → OMP `thinking`
+- [x] `buildPiModels()` → `buildOmpModels()`
 - [x] 保留 `before_provider_request` 作为最小 compatibility boundary；使用 request-bound Provider 身份过滤，把 retained-model/scope fail-closed guard 放到 WorkBuddy `resolveHeaders`
 - [x] 审核旧 Tool Choice transform；live Gateway code `11101` 证明 named 对象需转换为函数名字符串，已保留最小 copy-on-write 修正
 - [x] 审核旧 reasoning history cleanup；无 Gateway 证据，已删除
-- [ ] 删除 unsupported `refreshModels`
-- [ ] 确保 WorkBuddy OpenAI streaming 正常
-- [ ] OAuth credential 以 OMP AuthStorage 为主
+- [x] 删除 unsupported `refreshModels`
+- [x] 确保 WorkBuddy OpenAI streaming 正常
+- [x] OAuth credential 以 OMP AuthStorage 为唯一来源
 
 ## P1
 
-- [ ] `/workbuddy`
-- [ ] `/workbuddy free`
-- [ ] `/workbuddy all`
-- [ ] `/workbuddy logout`
-- [ ] 积分 Widget
-- [ ] `model_select` → session/turn lifecycle
-- [ ] Vision model compatibility
-- [ ] 正确处理无 UI 模式
-- [ ] main agent / subagent 测试
+- [x] `/workbuddy`
+- [x] `/workbuddy free`
+- [x] `/workbuddy all`
+- [x] `/workbuddy logout`
+- [x] 积分 Widget
+- [x] `model_select` → session/turn lifecycle
+- [x] Vision model compatibility
+- [x] 正确处理无 UI 模式
+- [x] main agent / subagent 测试
 
-## P2
+## P2 架构评估 / 明确非目标
 
-- [ ] `fetchDynamicModels`
-- [ ] Desktop credential import
-- [ ] OMP UsageProvider
-- [ ] 多账号支持研究
-- [ ] 更可靠的 Provider-specific payload interception
+- [x] Dynamic Model 架构完成评估；v1 采用 Desktop cache → builtin fallback，不采用 `fetchDynamicModels`
+- [x] Desktop credential import 已评估并明确排除 v1；凭据仅来自 OMP AuthStorage
+- [x] OMP UsageProvider 已实现
+- [x] 多账号行为已完成调查；v1 不支持轮换，存储行数不等于 1 时 fail closed
+- [x] Provider-specific payload isolation 已通过 request-bound `ctx.model.provider` 实现，无需 custom transport
 
 ---
 

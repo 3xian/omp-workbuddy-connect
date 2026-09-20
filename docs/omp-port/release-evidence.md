@@ -13,8 +13,10 @@ This report contains redacted outcomes only. OAuth tokens, refresh tokens, Autho
 | OMP | `18.2.6` |
 | Frozen OMP source commit | `78b753124d11f8dd3ae73e2524125890ff7c977e` |
 | Extension manifest version | `1.1.5` |
-| Extension base commit | `5ce20af5ee2822690ea2fa08ecbec41c11788346` |
-| Candidate state | Base commit plus the M5 working-tree changes named in this report; no release commit or tag was created by this acceptance run |
+| Acceptance execution base | `5ce20af5ee2822690ea2fa08ecbec41c11788346` |
+| M5 tested working tree | Acceptance base plus the M5 changes documented in this report |
+| Post-acceptance implementation commit | `4a6b328a56d73b0a8f43441aa261c2299a116a0b`; created after the live run and captures the tested production implementation |
+| Release tag | Not created; external publication remains pending |
 | Node | `v26.9.0` |
 | Bun | `1.3.14` |
 | Account type | WorkBuddy international free subscription; identity redacted |
@@ -26,6 +28,16 @@ The extension was installed through the official host command, not only loaded b
 ```text
 omp --profile <isolated> install . --json
 name=omp-workbuddy-connect, version=1.1.5, enabled=true
+```
+
+Packaging declarations were checked independently of the actual installation:
+
+```text
+omp --profile <isolated> install . --dry-run --json
+PASS: manifest name/version/extension declaration resolved
+
+npm pack --dry-run --json
+PASS: 12-entry artifact containing only package metadata, entrypoint, runtime source, README, and LICENSE
 ```
 
 ## Release Matrix
@@ -41,7 +53,7 @@ name=omp-workbuddy-connect, version=1.1.5, enabled=true
 | Failure / invalid refresh | PASS | An isolated real host row was expired with an invalid refresh value; actual headless invocation failed before Chat and stored no successful replacement | OAuth protocol regression; fail-closed provider checks |
 | Identity / missing accountId | PASS | accountId was removed from an isolated host row; actual headless model resolution returned no WorkBuddy model and made no Chat request | `validateStoredCredential`; provider regression |
 | Identity / optional org / no-enterprise | PASS | The live international account has no enterprise identity; login, refresh, and streamed Chat passed on the no-enterprise path | `X-No-Enterprise-Id` request-bound resolver; M1 redacted live evidence |
-| Switch / A → B | PASS | Prior live gate deleted A, authorized a distinct B, and used B from a retained main session and fresh Task session; both identities remain redacted | `requireBoundAccess`; `docs/omp-port/requirement-implementation-test-matrix.md` |
+| Switch / A → B | PASS (prior live + final-candidate contracts) | The M1 live gate deleted A, authorized a distinct B, and used B from a retained main session and fresh Task session. M5 did not repeat a second-account OAuth ceremony; the final candidate reran permanent real-AuthStorage/runtime A→B coverage, and its `src/provider.ts`/`src/auth.ts` identity implementation is unchanged from the live-tested base | `src/provider.ts` request-bound `resolveHeaders`, `validateResolvedIdentity`, and `AuthStorage.getOAuthAccess`; request-identity and Task runtime regressions |
 | Logout / credential invalid | PASS | `/workbuddy logout` left zero WorkBuddy OAuth rows; subsequent real headless invocation failed before transport | provider logout regression |
 | Chat / three real models | PASS | Hy3, Hy4 preview, and Deepseek-V4.1-Flash each returned their unique live marker | model catalog and native transport regressions |
 | Thinking / supported effort | PASS | Hy3 headless high effort emitted a streamed thinking block and result; Hy4 high and Deepseek high completed real requests | canonical `thinking` metadata; model-transport regression |
@@ -106,4 +118,4 @@ Detailed AUTH/MODEL/GATE/UX mappings remain in `docs/omp-port/requirement-implem
 4. Dynamic model metadata comes from the Desktop product cache. Builtin fallback supports `all` only; it is not free evidence.
 5. v1 does not import Desktop credentials, add a custom Provider transport, use an online dynamic-catalog endpoint, or provide immediate model-selector UI refresh.
 6. OMP 18.2.6 exposes aggregate usage refresh. The Widget filters to WorkBuddy after the host fetch, but another configured provider may also refresh when its cache expires.
-7. The tested candidate has a precise base commit plus local M5 changes but no release commit/tag; create that immutable commit before publishing an external artifact.
+7. The tested production implementation is captured by post-acceptance commit `4a6b328a56d73b0a8f43441aa261c2299a116a0b`. This release-metadata hardening is a later working-tree change, and no immutable release tag exists yet; create the final documentation commit and tag before external publication.

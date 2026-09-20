@@ -17,10 +17,10 @@ WorkBuddy AI 国际版 provider for OMP。认证、模型目录、scope、Gatewa
 
 ```bash
 omp --profile workbuddy install /absolute/path/to/omp-workbuddy-connect
-omp --profile workbuddy --model workbuddy/hy3
+omp --profile workbuddy
 ```
 
-`omp install` 按 `package.json` 的 `omp.extensions` 加载入口。`--profile workbuddy` 可选，但推荐用于隔离凭据、设置和会话。启动后执行 `/login workbuddy`；如果 `free` 范围为空，执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。
+`omp install` 按 `package.json` 的 `omp.extensions` 加载入口。`--profile workbuddy` 可选，但推荐用于隔离凭据、设置和会话。首次启动后先执行 `/login workbuddy`；如果 `free` 范围为空，执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。完成首次登录和选模后，日常启动可直接使用 `omp --profile workbuddy --model workbuddy/hy3`。
 
 ## 登录
 

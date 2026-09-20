@@ -22,7 +22,7 @@ WorkBuddy SHALL 在 main agent 完成 chat、thinking、tool、streaming、refre
 - **THEN** 完成模型调用和工具，且没有隐式交互 UI 依赖
 
 ### Requirement: REL-02 Complete release matrix
-v1 SHALL 通过 V2 的全部 Release Matrix：官方安装、零类型错误、fresh OAuth、首请求身份、重启、过期刷新、无效 refresh、缺 accountId/缺 orgId、A→B、真正 logout、至少三个真实模型、支持的 thinking、真实图片、read/grep/bash、连续与多工具、main/subagent/headless、free/all/empty free、Billing 成功/5xx/慢或超时、Provider 隔离及秘密不泄露。支持的 parallel tools SHALL 一并验证。
+v1 SHALL 通过 V2 的全部 Release Matrix：官方安装、零类型错误、fresh OAuth、首请求身份、重启、过期刷新、无效 refresh、缺 accountId、optional orgId / no-enterprise、A→B、真正 logout、至少三个真实模型、支持的 thinking、真实图片、read/grep/bash、连续与多工具、main/subagent/headless、free/all/empty free、Billing 成功/5xx/慢或超时、Provider 隔离及秘密不泄露。支持的 parallel tools SHALL 一并验证。
 
 #### Scenario: Required release case has no passing evidence
 - **WHEN** 任一必需案例未运行、失败或仅有 Mock 结果

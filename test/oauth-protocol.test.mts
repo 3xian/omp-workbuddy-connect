@@ -126,10 +126,17 @@ rateAbort.abort("extension shutdown");
 await expectCancelled(rateWait);
 assert(calls === 1, "cancelled Retry-After wait issued another request");
 
-await expectKind(startPluginLogin(async () => Response.json({
-  code: 0,
-  data: { state: "state", authUrl: "https://example.invalid/login" },
-})), "invalid_response");
+for (const authUrl of [
+  "https://example.invalid/login",
+  "https://user:pass@www.workbuddy.ai/login",
+  "http://www.workbuddy.ai/login",
+  "https://www.workbuddy.ai.evil.example/login",
+]) {
+  await expectKind(startPluginLogin(async () => Response.json({
+    code: 0,
+    data: { state: "state", authUrl },
+  })), "invalid_response");
+}
 const trustedStart = await startPluginLogin(async () => Response.json({
   code: 0,
   data: { state: "state", authUrl: "https://www.workbuddy.ai/login?platform=CLI" },

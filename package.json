@@ -10,6 +10,12 @@
   ],
   "license": "MIT",
   "type": "module",
+  "files": [
+    "extensions",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "omp": {
     "extensions": [
       "./extensions"
