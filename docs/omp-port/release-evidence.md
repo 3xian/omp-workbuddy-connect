@@ -16,7 +16,7 @@ This report contains redacted outcomes only. OAuth tokens, refresh tokens, Autho
 | Acceptance execution base | `5ce20af5ee2822690ea2fa08ecbec41c11788346` |
 | M5 tested working tree | Acceptance base plus the M5 changes documented in this report |
 | Post-acceptance implementation commit | `4a6b328a56d73b0a8f43441aa261c2299a116a0b`; created after the live run and captures the tested production implementation |
-| Release tag | `v1.1.5`; freezes the release-metadata revision containing this report |
+| Release tag | `v1.1.5` → `655e9626c22ea4dfca90b26acd1c1585bdb0b2a3`; this post-release Bun prerequisite clarification is not included in the frozen tag |
 | Node | `v26.9.0` |
 | Bun | `1.3.14` |
 | Account type | WorkBuddy international free subscription; identity redacted |
@@ -53,7 +53,7 @@ omp --profile <isolated> plugin uninstall omp-workbuddy-connect --json
 PASS: plugin removed; subsequent plugin list was empty
 ```
 
-This verifies GitHub resolution, installation, discovery, health checks, and uninstall against the committed production implementation. The M5 OAuth/restart evidence used the same production implementation through an official local install. The documented `#v1.1.5` user command becomes valid only after that immutable tag is created.
+This verifies GitHub resolution, installation, discovery, health checks, and uninstall against the committed production implementation. The published `#v1.1.5` tag was subsequently installed, diagnosed, and uninstalled successfully with the same result. Both executions placed external Bun `1.3.14` on `$PATH`: OMP 18.2.6 Plugin Manager invokes `bun` for GitHub install/uninstall even when OMP itself is a compiled binary. The M5 OAuth/restart evidence used the same production implementation through an official local install.
 
 ## Release Matrix
 
@@ -134,3 +134,4 @@ Detailed AUTH/MODEL/GATE/UX mappings remain in `docs/omp-port/requirement-implem
 5. v1 does not import Desktop credentials, add a custom Provider transport, use an online dynamic-catalog endpoint, or provide immediate model-selector UI refresh.
 6. OMP 18.2.6 exposes aggregate usage refresh. The Widget filters to WorkBuddy after the host fetch, but another configured provider may also refresh when its cache expires.
 7. v1 distribution is intentionally GitHub-tag-only. OMP Marketplace catalog publication and npm registry publication are deferred.
+8. GitHub install and uninstall require an external `bun` executable on `$PATH` because OMP 18.2.6 Plugin Manager shells out to Bun. This prerequisite belongs to the host distribution path, not the extension runtime.

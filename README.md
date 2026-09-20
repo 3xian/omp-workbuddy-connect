@@ -13,11 +13,24 @@ WorkBuddy AI 国际版 provider for OMP。认证、模型目录、scope、Gatewa
 
 ## 安装
 
-要求 OMP `18.2.6`。正式发布采用固定 GitHub tag：
+要求 OMP `18.2.6`，并要求外部 Bun 可执行文件在 `$PATH` 中。OMP Plugin Manager 安装或卸载 GitHub 插件时会调用 `bun`；OMP 自身的编译二进制不能替代这个外部命令。macOS 可先执行：
+
+```bash
+brew install oven-sh/bun/bun
+bun --version
+```
+
+其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。然后通过固定 GitHub tag 安装：
 
 ```bash
 omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.5
 omp
+```
+
+如果安装时报 `Executable not found in $PATH: "bun"`，说明 Bun 尚未安装或当前 shell 找不到它。使用 Bun 官方安装脚本时，通常还需要重新打开终端，或执行：
+
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
 ```
 
 进入 OMP 后先执行 `/login workbuddy`；如果默认 `free` 范围为空，执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。插件默认安装到 user scope，可供不同项目中的默认 OMP 环境使用。named profile 是独立环境，不会自动继承默认环境的插件或凭据；`--profile workbuddy` 仅适合隔离测试，不是普通用户的正式安装步骤。
