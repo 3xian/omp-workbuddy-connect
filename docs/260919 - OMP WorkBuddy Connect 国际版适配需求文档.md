@@ -9,7 +9,7 @@
 **上游项目**：`icekale/pi-workbuddy-connect`  
 **目标服务**：WorkBuddy AI 国际版  
 **目标服务域名**：`https://www.workbuddy.ai`  
-**文档状态**：开发需求基线（Requirement Revision 1.1）
+**文档状态**：开发需求基线（Requirement Revision 1.3）
 **版本目标**：v1.0
 
 
@@ -22,6 +22,10 @@
 3. 本需求文档中未被上述文件收紧或替代的内容。
 
 Revision 1.1 已同步三项收紧：nickname 不再别名映射为 OAuth email；认证身份存在歧义时 fail closed；多账号不只是不保证轮换，而是必须证明单一有效账号及顺序换号无身份混用。
+
+Revision 1.2 根据 M3 证据审计把旧 payload patch 从“必须保留”改为 compatibility candidates：当前没有可复现 Gateway failure case，reasoning cleanup、tool choice rewrite、request-body token clamp、forced stream、developer rewrite、unsupported-field cleanup 与自动 system prompt 均不保留；未来只有脱敏服务端失败证据成立时才恢复最小差异。
+
+Revision 1.3 记录 M3 live gate：OMP 18.2.6 的原生 named `tool_choice` 对象在 `deepseek-v4.1-flash` 上触发 WorkBuddy Gateway HTTP 400/code `11101`，服务端字段要求字符串。恢复唯一最小差异：仅对活动 WorkBuddy 模型把 named 对象复制转换为函数名字符串；同一 forced-read 场景复验通过。其余候选仍删除。
 
 ---
 
@@ -695,50 +699,26 @@ OMP 18.2.6 Extension API 支持 Provider request payload hook，而内置 OpenAI
 
 ---
 
-# 19. Payload Hook 保留逻辑
+# 19. Payload Compatibility Candidates
 
-以下逻辑需要继续保留并逐项测试：
+旧实现中的 payload 变换只能作为候选，不默认保留。每项候选必须同时具备：删除后可复现的 WorkBuddy Gateway 失败、脱敏响应、适用模型/版本和最小修正回归；否则插件保持 OMP 原生 payload。
 
-### 19.1 Assistant Reasoning Replay 清理
+### 19.1 Assistant Reasoning Replay Cleanup
 
-继续执行现有：
-
-```text
-stripAssistantReasoning
-```
-
-避免历史 assistant reasoning 内容以 WorkBuddy 不接受的形式重新提交。
+`stripAssistantReasoning` 当前已删除。插件不清理 assistant reasoning/history，普通内容、assistant tool calls、`tool_call_id` 与 tool results 由 OMP 原生 history 转换维护。只有真实 Gateway 拒绝 reasoning replay 的证据成立时，才允许增加不破坏工具关联的最小清理。
 
 ### 19.2 Tool Choice Normalization
 
-保留 WorkBuddy 特殊：
+隔离 M3 live gate 证明 WorkBuddy Gateway 的 `tool_choice` 字段只接受字符串：OMP 原生 named 对象在 `deepseek-v4.1-flash` 上返回脱敏 HTTP 400/code `11101`。插件因此仅对活动 WorkBuddy payload 进行 copy-on-write，把 `{type:"function", function:{name}}` 转为函数名字符串；`auto` 等字符串值、tools、arguments streaming、工具结果关联及其他字段仍由 OMP 原生 Agent/transport 负责。同一 `/force:read` 场景在修正后完成一次 `Read` 和最终回答。
 
-```text
-tool_choice
-```
+### 19.3 Model-specific Max Tokens
 
-转换。
+request-body token clamp 当前已从 payload hook 删除。M2 中 `deepseek-v4.1-flash` 的 16,384 上限仍作为 `Model.maxTokens` 目录安全约束，由宿主生成 `max_tokens`；该目录约束不构成 M3 payload transform，其真实服务端上限仍需 live 验证。
 
-不得假设 OMP 标准 OpenAI Tool Calling 与 WorkBuddy gateway 完全一致。
+### 19.4 Unsupported Fields and Prompt Semantics
 
-### 19.3 Model-specific Max Tokens Clamp
+forced `stream=true`、developer/system rewrite、标准 `reasoning_effort`/`max_tokens` 重写、tools 删除、unsupported-field cleanup 和自动 system prompt 当前均不保留。OMP 已原生正确处理的标准字段不得在插件重复覆盖；未来新增例外必须满足本章证据门槛。
 
-保留上游插件已经存在的特殊模型 token clamp，例如当前针对特定 DeepSeek 模型的限制。
-
-### 19.4 Payload Cleanup
-
-保留 WorkBuddy 已验证需要删除或调整的字段。
-
-但对于 OMP 已原生正确处理的：
-
-```text
-developer → system
-standard reasoning_effort
-stream=true
-standard max_tokens
-```
-
-应尽量交由 OMP，不重复实现。
 
 ---
 
@@ -1255,9 +1235,9 @@ OMP < 18.2.6
 - [ ] Token refresh 保留 account identity
 - [ ] `thinkingLevelMap` → OMP `thinking`
 - [ ] `buildPiModels()` → `buildOmpModels()`
-- [ ] 保留 `before_provider_request`
-- [ ] 保留 Tool Choice WorkBuddy compatibility
-- [ ] 保留 reasoning history cleanup
+- [x] 保留 `before_provider_request` 作为最小 compatibility boundary 与 retained-model guard
+- [x] 审核旧 Tool Choice transform；live Gateway code `11101` 证明 named 对象需转换为函数名字符串，已保留最小 copy-on-write 修正
+- [x] 审核旧 reasoning history cleanup；无 Gateway 证据，已删除
 - [ ] 删除 unsupported `refreshModels`
 - [ ] 确保 WorkBuddy OpenAI streaming 正常
 - [ ] OAuth credential 以 OMP AuthStorage 为主

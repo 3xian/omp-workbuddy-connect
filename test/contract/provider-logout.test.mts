@@ -15,6 +15,18 @@ const desktopCredential = join(desktopDir, "credential.json");
 await mkdir(desktopDir, { recursive: true });
 await writeFile(desktopCredential, "desktop-owned-credential\n");
 const desktopBefore = await readFile(desktopCredential, "utf8");
+const productConfigPath = join(temp, "product-config.json");
+await writeFile(productConfigPath, JSON.stringify({
+  models: [{
+    id: "hy3",
+    name: "Hy3",
+    credits: "x0.00",
+    maxInputTokens: 192_000,
+    maxOutputTokens: 64_000,
+    supportsReasoning: true,
+    reasoning: { supportedEfforts: ["low", "high"], canDisableThinking: false },
+  }],
+}));
 
 const authStorage = await AuthStorage.create(join(temp, "auth.db"));
 const registry = new ModelRegistry(authStorage, join(temp, "models.yml"), {
@@ -31,7 +43,11 @@ await authStorage.set("workbuddy", {
 
 const originalFetch = globalThis.fetch;
 const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
+const originalProductConfig = process.env.WORKBUDDYAI_PRODUCT_CONFIG;
+process.env.WORKBUDDYAI_PRODUCT_CONFIG = productConfigPath;
 process.env.PI_CODING_AGENT_DIR = temp;
+const { refreshDirsFromEnv } = await import("@oh-my-pi/pi-utils");
+refreshDirsFromEnv();
 let releaseBilling!: (response: Response) => void;
 let billingCalls = 0;
 globalThis.fetch = async () => {
@@ -138,5 +154,8 @@ try {
   globalThis.fetch = originalFetch;
   if (originalAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = originalAgentDir;
+  if (originalProductConfig === undefined) delete process.env.WORKBUDDYAI_PRODUCT_CONFIG;
+  else process.env.WORKBUDDYAI_PRODUCT_CONFIG = originalProductConfig;
+  refreshDirsFromEnv();
   await rm(temp, { recursive: true, force: true });
 }

@@ -2,23 +2,27 @@
 
 > **Development status — not release-ready**
 >
-> M0、M1 与 M2 已完成；M3–M5 尚未完成，因此本分支不可发布。
+> M0–M3 已完成；M4–M5 尚未完成，因此本分支不可发布。
 > 权威实施进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
 > 下文描述当前开发分支行为；尚未通过的里程碑能力会明确标注。
 
 ## 当前开发分支
 
-WorkBuddy AI 国际版 provider for OMP。当前认证、模型目录契约和 scope 切换安全已迁移到 OMP；Gateway/UI/release gate 仍在开发。
+WorkBuddy AI 国际版 provider for OMP。当前认证、模型目录契约、scope 切换安全与最小 Gateway 兼容已迁移到 OMP；UI/release gate 仍在开发。
 
 移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
 ## 开发加载
 
-当前分支尚未发布，不应使用上游仓库的 `pi install` 命令冒充本实现。检出本仓库后使用绝对路径加载：
+当前分支尚未发布，不应使用上游仓库的 `pi install` 命令冒充本实现。开发时由 OMP 18.2.6 显式加载本地入口；独立 profile 可隔离日常凭据和会话：
 
 ```bash
-pi -e /absolute/path/to/omp-workbuddy-connect
+omp --profile workbuddy-m3-live \
+  --no-extensions \
+  --extension /absolute/path/to/omp-workbuddy-connect/extensions/workbuddy.ts
 ```
+
+`--no-extensions` 仅关闭环境中的自动发现，不会禁用显式 `--extension`。启动后执行 `/login workbuddy`；如果 `free` 范围为空，登录后执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。
 
 ## 登录
 
@@ -46,7 +50,7 @@ pi -e /absolute/path/to/omp-workbuddy-connect
 
 ## 设置
 
-pi 没有 DSH 那种插件配置卡片，等价入口有两处：
+OMP 没有 DSH 那种插件配置卡片，等价入口有两处：
 
 - **侧栏 widget** — 账号、token 过期时间、目录来源与 fallback 原因、各积分包余量，以及当前模型列表（空范围会明确显示）。
 - **`/workbuddy`** — 弹出选择菜单：
@@ -74,7 +78,7 @@ pi 没有 DSH 那种插件配置卡片，等价入口有两处：
 npx --yes bun@1.3.14 extensions/workbuddy.ts --self-check
 ```
 
-覆盖 payload 规整、请求预算限制、积分解析与 widget 渲染；模型和认证边界由下列独立测试覆盖。
+覆盖最小 payload compatibility boundary、请求预算限制、积分解析与 widget 渲染；模型和认证边界由下列独立测试覆盖。
 
 ## 与上游的差异
 
@@ -83,12 +87,16 @@ npx --yes bun@1.3.14 extensions/workbuddy.ts --self-check
 - 推理档由 OMP canonical `thinking` metadata 驱动；宿主根据 `efforts`、`requiresEffort` 和 Gateway compat 生成 `reasoning_effort`。
 - 选 Default（auto）时不主动选择 effort；选择具体档位、required off 和 optional off 均由 OMP transport 根据模型 metadata 处理。
 - Deepseek-V4.1-Flash 的目录与请求有效输出上限均为 16k（`FLASH_MAX_TOKENS`）：已记录的 Gateway 行为显示更大预算可能陷入重复推理循环。产品目录原始 `maxOutputTokens` 可以更高，但不会作为实际请求上限公开。
-- 发送前剔除 assistant 消息里回放的 `reasoning` / `thinking` / `reasoning_content` 字段，上游端点会拒绝这些字段。
+- 插件当前不清理 assistant reasoning/history；OMP 原生 history 与 tool association 保持不变。只有真实 WorkBuddy Gateway 拒绝证据可复现时，才增加最小兼容转换。
+- WorkBuddy Gateway 的 `tool_choice` 只接受字符串；插件仅把 OMP 原生 named-choice 对象复制为函数名字符串。该差异来自隔离 live gate 的可复现 `400` / code `11101`，其他 tool/prompt/history 字段不改写。
 - 不按模型名称猜测 reasoning effort，也不为缺少可信能力信息的模型生成全档默认。
 
 ## 测试
 
 ```bash
+npx --yes bun@1.3.14 test/payload.test.mts
+npx --yes bun@1.3.14 test/tool-loop.test.mts
+npx --yes bun@1.3.14 test/native-transport.test.mts
 npx --yes bun@1.3.14 test/model-catalog.test.mts
 npx --yes bun@1.3.14 test/model-transport.test.mts
 npx --yes bun@1.3.14 test/settings.test.mts

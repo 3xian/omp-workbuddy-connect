@@ -1,6 +1,7 @@
 import {
   asProviderPayload,
   isCurrentWorkBuddyPayload,
+  normalizeNamedToolChoice,
   payloadModelId,
 } from "../src/payload.ts";
 
@@ -29,10 +30,18 @@ assert(payloadModelId(parsed) === "contract-active", "payload model ID was not r
 assert(isCurrentWorkBuddyPayload(parsed, new Set(["contract-active"])), "active payload was not recognized");
 assert(!isCurrentWorkBuddyPayload(parsed, new Set(["other"])), "foreign payload was classified as WorkBuddy");
 assert(JSON.stringify(native) === before, "payload parsing changed host-generated fields");
+const normalized = normalizeNamedToolChoice(native);
+assert(normalized !== native, "named tool choice did not create a compatibility copy");
+assert(normalized.tool_choice === "lookup", "named tool choice was not encoded as the Gateway string name");
+assert(native.tool_choice.function.name === "lookup", "named tool compatibility mutated the host payload");
+const automatic = { model: "contract-active", tool_choice: "auto", messages: [] };
+assert(normalizeNamedToolChoice(automatic) === automatic, "string tool choice was needlessly copied");
+const unrelated = { model: "contract-active", tool_choice: { type: "custom", function: { name: "lookup" } } };
+assert(normalizeNamedToolChoice(unrelated) === unrelated, "non-function choice was needlessly rewritten");
 
 const stringPayload = asProviderPayload(JSON.stringify(native));
 assert(stringPayload?.model === native.model, "serialized host payload did not parse");
 assert(asProviderPayload("{") === undefined, "invalid JSON payload was accepted");
 assert(asProviderPayload([]) === undefined && asProviderPayload(null) === undefined, "non-object payload was accepted");
 
-console.log("OK: payload boundary identifies model scope without rewriting native semantics");
+console.log("OK: payload boundary preserves host semantics except the evidenced named tool_choice string delta");

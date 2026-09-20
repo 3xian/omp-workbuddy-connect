@@ -10,12 +10,18 @@ import type { AgentDefinition } from "@oh-my-pi/pi-coding-agent/task/types";
 
 const root = process.cwd();
 const temp = await mkdtemp(join(tmpdir(), "workbuddy-task-contract-"));
+const previousTaskLog = process.env.WORKBUDDY_TASK_CONTRACT_LOG;
+const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+const previousAuthFile = process.env.WORKBUDDY_AUTH_FILE;
+const previousProductConfig = process.env.WORKBUDDYAI_PRODUCT_CONFIG;
 const observerLog = join(temp, "observer.jsonl");
 process.env.WORKBUDDY_TASK_CONTRACT_LOG = observerLog;
 process.env.PI_CODING_AGENT_DIR = temp;
 process.env.WORKBUDDY_AUTH_FILE = join(temp, "missing-desktop-auth.json");
 const productConfigPath = join(temp, "product-config.json");
 process.env.WORKBUDDYAI_PRODUCT_CONFIG = productConfigPath;
+const { refreshDirsFromEnv } = await import("@oh-my-pi/pi-utils");
+refreshDirsFromEnv();
 await writeFile(productConfigPath, JSON.stringify({
   models: [{
     id: "hy3",
@@ -228,5 +234,14 @@ try {
   console.log("OK: actual Task runtime role, custom transport, hooks, abort, shutdown, and account guard");
 } finally {
   authStorage.close();
+  if (previousTaskLog === undefined) delete process.env.WORKBUDDY_TASK_CONTRACT_LOG;
+  else process.env.WORKBUDDY_TASK_CONTRACT_LOG = previousTaskLog;
+  if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+  else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+  if (previousAuthFile === undefined) delete process.env.WORKBUDDY_AUTH_FILE;
+  else process.env.WORKBUDDY_AUTH_FILE = previousAuthFile;
+  if (previousProductConfig === undefined) delete process.env.WORKBUDDYAI_PRODUCT_CONFIG;
+  else process.env.WORKBUDDYAI_PRODUCT_CONFIG = previousProductConfig;
+  refreshDirsFromEnv();
   await rm(temp, { recursive: true, force: true });
 }

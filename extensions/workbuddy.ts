@@ -16,6 +16,7 @@ import {
 import {
   asProviderPayload,
   isCurrentWorkBuddyPayload,
+  normalizeNamedToolChoice,
   payloadModelId,
 } from "../src/payload.ts";
 import { loadSettings, saveSettings } from "../src/settings.ts";
@@ -372,7 +373,7 @@ export default async function (pi: ExtensionAPI) {
     if (transitioning && (knownIds.has(modelId) || pendingIds.has(modelId))) {
       throw new Error(`WorkBuddy model "${modelId}" is unavailable while its scope is changing`);
     }
-    if (isCurrentWorkBuddyPayload(payload, activeIds)) return event.payload;
+    if (isCurrentWorkBuddyPayload(payload, activeIds)) return normalizeNamedToolChoice(payload);
     if (knownIds.has(modelId)) {
       throw new Error(
         `WorkBuddy model "${modelId}" is outside the active "${scope}" scope; select an available model`,
@@ -460,6 +461,9 @@ if (process.argv.includes("--self-check")) {
   const ours = new Set(["hy3", "deepseek-v4.1-flash"]);
   if (!isCurrentWorkBuddyPayload(payload, ours)) throw new Error("scope: own model accepted");
   if (JSON.stringify(nativePayload) !== before) throw new Error("native payload mutated");
+  const compatible = normalizeNamedToolChoice(payload);
+  if (compatible.tool_choice !== "foo") throw new Error("named tool choice compatibility");
+  if (JSON.stringify(nativePayload) !== before) throw new Error("named tool choice mutated native payload");
   const foreign = asProviderPayload({ model: "grok-4.6" });
   if (!foreign || isCurrentWorkBuddyPayload(foreign, ours)) throw new Error("scope: foreign model must be rejected");
   if (asProviderPayload("{") !== undefined || asProviderPayload([]) !== undefined) throw new Error("invalid payload accepted");

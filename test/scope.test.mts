@@ -62,10 +62,14 @@ try {
   const active = { ...foreign, model: "contract-active" };
   const activeBefore = JSON.stringify(active);
   const activeResult = hook({ type: "before_provider_request", payload: active });
-  assert(activeResult === active, "active WorkBuddy payload identity changed");
-  assert(JSON.stringify(active) === activeBefore, "active WorkBuddy payload fields were changed");
+  assert(activeResult !== active, "active named WorkBuddy payload was not copied for compatibility");
+  assert(activeResult.tool_choice === "bash", "active named tool choice was not encoded as a Gateway string");
+  assert(JSON.stringify(active) === activeBefore, "active WorkBuddy host payload was mutated");
 
-  console.log("OK: hook recognizes the active ID and leaves active and nonmatching payloads byte-equivalent");
+  const activeAuto = { ...foreign, model: "contract-active", tool_choice: "auto" };
+  assert(hook({ type: "before_provider_request", payload: activeAuto }) === activeAuto, "compatible active payload identity changed");
+
+  console.log("OK: hook isolates foreign payloads and applies only the evidenced WorkBuddy named-choice delta");
 } finally {
   if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = previousAgentDir;

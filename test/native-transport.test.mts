@@ -5,6 +5,7 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
+// Synthetic standard-capability fixture: exercises OMP transport behavior, not WorkBuddy Gateway support.
 const model: Model<"openai-completions"> = {
   id: "transport-contract",
   name: "Transport Contract",

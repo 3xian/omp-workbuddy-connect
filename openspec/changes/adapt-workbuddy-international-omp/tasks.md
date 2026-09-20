@@ -49,7 +49,7 @@
 - [x] 4.4 对证据要求的 reasoning cleanup 保留永久回归，验证普通消息、assistant tool calls、tool_call_id 和 tool results 关联完整，真实下一轮能使用工具结果。（GATE-04）
 - [x] 4.5 验证 auto/named tool_choice 的 WorkBuddy 规整、arguments streaming、单工具、连续工具、多工具及支持时 parallel tools，完成工具执行→结果回送→下一轮回答，而非只验证参数拼接。（GATE-05）
 - [x] 4.6 用宿主原生 openai-completions 验证 text/reasoning/tool deltas、usage、DONE、HTTP error、Abort、Retry；证明无插件 SSE/tool parser、双重重试或自定义 Chat HTTP 路径。（GATE-06）
-- [ ] 4.7 汇总普通对话、reasoning history、named/sequential/multi 工具、参数流、abort/error/retry 和隔离证据，所有 patch 均关联服务端 case 后才通过 M3。（GATE-01–06）
+- [x] 4.7 汇总普通对话、reasoning history、named/sequential/multi 工具、参数流、abort/error/retry 和隔离证据，所有 patch 均关联服务端 case 后才通过 M3。（GATE-01–06）
 
 ## 5. M4 — Commands、Credits 与可选 UI
 
