@@ -2,12 +2,12 @@
 
 > **Development status — not release-ready**
 >
-> `feat/omp-port` is an in-progress OMP-native port. See
+> `feat/omp-port` has passed the M0 host-contract gate. M1–M5 production
+> implementation and live WorkBuddy validation are still incomplete, so this
+> branch is not release-ready. See
 > `openspec/changes/adapt-workbuddy-international-omp/tasks.md` for the
-> authoritative implementation status. The port is not authenticated-runtime
-> ready and has not passed the M0 gate or live WorkBuddy E2E validation.
-> Do not use the legacy Pi installation or credential instructions below as
-> current OMP instructions.
+> authoritative implementation status. Do not use the legacy Pi installation
+> or credential instructions below as current OMP instructions.
 
 ## Legacy upstream behavior
 

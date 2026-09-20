@@ -46,7 +46,7 @@ Observed results:
 | Shutdown | All three sessions emitted `session_shutdown` with `keepAlive=false` |
 | Ambiguous stored accounts | Two stored OAuth rows were rejected by the request resolver before the synthetic transport; added transport attempts: 0 |
 
-The probe used temporary AuthStorage/model-cache/config paths and missing Desktop auth/product paths. It made no network request and removed its temporary directory. The probe files themselves were temporary M0 artifacts and are not retained.
+The probe uses temporary AuthStorage/model-cache/config paths and missing Desktop auth/product paths. It makes no network request and removes its temporary directory. The executable regression contract is retained at `test/contract/task-runtime-contract.test.mts` with its observer fixture.
 
 ## Lifecycle decisions
 

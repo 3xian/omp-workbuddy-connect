@@ -69,18 +69,18 @@ M0 交付拟存于 `docs/omp-port/`：`baseline-manifest.md`、`api-compatibilit
 
 登录拒绝缺失或无效 access/refresh/expiry/uid/enterpriseId；刷新以传入宿主 credential 为唯一输入，保留既有身份和明确 email，新的 Token/expiry 必须合法。刷新响应缺省 refresh 的保留行为只有得到官方协议证据后才能保留，不能以旧过期时间伪造成功；响应身份与旧身份矛盾视为失败。
 
-`getApiKey()` 在返回 access 前重验必要身份，不手动向 Chat 注入 Authorization。request identity resolver 同样校验必要身份，并必须证明与宿主 Bearer 选择同一 credential generation。modifier 内校验用于隐藏非法/歧义的 WorkBuddy rows，但因宿主捕获 modifier 异常，绝不是唯一阻断点。缺 accountId/orgId 分别验证实际 Chat 请求计数为零。替代方案“Widget 警告后继续”违反 fail-closed，拒绝。
+`getApiKey()` 在返回 access 前重验必要身份，不手动向 Chat 注入 Authorization。request identity resolver 同样校验必要身份，并必须证明与宿主 Bearer 绑定同一 durable OAuth credential row/account identity。modifier 内校验用于隐藏非法/歧义的 WorkBuddy rows，但因宿主捕获 modifier 异常，绝不是唯一阻断点。缺 accountId/orgId 分别验证实际 Chat 请求计数为零。替代方案“Widget 警告后继续”违反 fail-closed，拒绝。
 
-### D3 — 身份 generation 与单账号安全边界
+### D3 — Durable credential identity 与单账号安全边界
 
-`Credential Generation` 表示宿主一次可用 credential 状态（Token、accountId、orgId 和 durable credential id）。它不是新增持久化字段，也不是 UI generation。单账号刷新必须保留身份；账号替换必须使后续 request-boundary Bearer 与身份解析共同切换到新 generation。
+安全边界是宿主 durable credential row 及其 accountId/orgId，不是一次 access-token generation。单账号 refresh 或 401 retry 可更换 Bearer，但必须保留同一 durable row 的身份；账号替换必须使后续 request-boundary Bearer 与身份解析共同切换到新 row。该术语与仅用于异步 UI 的 `stateGeneration` 无关。
 
 `modifyModels(models, credentials)` 只处理 `model.provider === 'workbuddy'`，保留其他行，并为 WorkBuddy 安装已验证的 credential-aware identity binding：组合模型既有 `resolveHeaders` 与基于 `AuthStorage.getOAuthAccess(provider, sessionId, { signal })` 的身份 resolver；不得用长期静态 `model.headers` 保存账号快照。固定 Header 包括 Accept、X-Requested-With、Origin=`https://www.workbuddy.ai`、Referer=`https://www.workbuddy.ai/`、User-Agent（以已验证协议为准）、X-Product=`SaaS`、X-Domain=`www.workbuddy.ai`。不保留 Marker 或缺身份时的 Chat 降级 Header。
 ExtensionAPI 注册入口本身不暴露 ModelRegistry；只有 ExtensionContext 提供公开 `modelRegistry`。M0 1.5 已证明实际 headless `session_start` 可在首个请求前捕获当前 session ID 与共享 registry/AuthStorage，未绑定必须 fail closed；actual Task executor 的独立扩展绑定由 1.6b 单独验收。
 
 `listOAuthAccounts('workbuddy')` 返回的 stored OAuth rows 是 v1 单账号判定依据：0 行未登录，1 行可继续，超过 1 行明确拒绝模型调用。`active` 仅表示指定 session 的 sticky row，不代表 stored credential 数量。不得自动选择、轮换或删除其他凭据。
 
-M0 1.5 已以真实本地出站请求验证 normal、forced refresh、401/retry、logout A→login B 与 abort 中 Authorization、X-User-Id、X-Enterprise-Id 和 durable credential id 同 generation。`getApiKey()` 与 `getOAuthAccess()` 虽是两次调用，但在单 stored account 不变量下，401 刷新只更新同一 durable row；保留的旧 Model 也会在下一请求动态解析 B。actual Task/subagent 生命周期仍由 1.6b 验证。
+M0 1.5 已以真实本地出站请求验证 normal、forced refresh、401/retry、logout A→login B 与 abort。401 retry 的 Bearer 从 A2 刷新为 A3，而 X-User-Id、X-Enterprise-Id 和 durable credential id 保持 row 1/account A/org A；这证明 same durable identity，而非 same access-token generation。单 stored account 不变量禁止重试轮换到 sibling row；保留的旧 Model 也会在下一请求动态解析 B。actual Task/subagent 生命周期已由 1.6b 验证。
 
 `ExtensionAPI.setModel(freshModel)` 保留为 OMP 未来破坏 resolver preservation 时的公开 fallback，本次不采用。不能证明一致性时仍须 fail closed，不 patch OMP、不恢复全局 fetch hook、不放宽规格。对已经发出的 A 请求不声称能追溯改写；迟到 A 结果不得恢复 B 的认证状态。
 
@@ -88,7 +88,7 @@ M0 1.5 已以真实本地出站请求验证 normal、forced refresh、401/retry�
 
 通过 M0 确认的公开 provider-scoped credential 删除入口实现 logout，不直接编辑宿主存储。顺序：失效 UI generation → 删除 WorkBuddy credential → 清理 widget/status → 失效认证运行态 → 按实测需要更新目录。失败必须报告，不把删除异常吞掉后显示成功。
 
-Billing 通过宿主公开认证解析获得有效 credential；不调用旧 `current/resolveCred`，不创建自己的 refresh 去重器。其直接 HTTP 请求所需 Authorization 只是 Billing 协议，不是给 Chat 注入 Authorization。刷新失败在 Billing 面表现为 unavailable，不能吞掉真正 Chat 的认证错误。桌面凭据和客户端数据均不修改。替代方案“仅 unlink 插件文件”无效且会重新回退 Desktop，删除。
+Billing 通过宿主公开认证解析获得有效 credential；`UsageCredential.accountId` 映射为现有协议要求的 Billing `X-User-Id`，orgId 用于 report scope，除非 live evidence 证明需要，不新增 Billing `X-Enterprise-Id`。不调用旧 `current/resolveCred`，不创建自己的 refresh 去重器。刷新失败在 Billing 面表现为 unavailable，不能吞掉真正 Chat 的认证错误。桌面凭据和客户端数据均不修改。替代方案“仅 unlink 插件文件”无效且会重新回退 Desktop，删除。
 
 ### D5 — 类型化模型能力，不机械搬字段
 
@@ -118,12 +118,11 @@ Model ID 冲突按 V2 L3 接受：非匹配 ID 请求必须完全不变；同名
 
 M0 结论记录于 `docs/omp-port/adr-credits-usage.md`：**选择宿主 UsageProvider**。18.2.6 的 Usage schema 可表达 credits 的 used/limit/remaining、accountId/orgId、tier、notes/metadata/raw，并向 fetcher 提供标准化 OAuth credential、AbortSignal 与宿主 fetch 生命周期；`ProviderConfigInput.usage` 由 AuthStorage 管理。
 
-M4 将现有 `POST /v2/billing/meter/get-user-resource` 适配为一个 WorkBuddy UsageProvider，`/workbuddy` 和可选 UI 消费同一 normalized report。Billing 不调用旧 `current/resolveCred`，不读取 Desktop/插件凭据，不创建 refresh 去重器；唯一刷新实现仍是 M1 OAuth callback。积分状态区分 available / unavailable / 未查询，parse 失败、5xx 或 timeout 不等于零。后台更新不进入 Chat critical path，显式状态命令才可等待刷新。
+M4 将现有 `POST /v2/billing/meter/get-user-resource` 适配为一个 WorkBuddy UsageProvider，使用 accountId 发送 `X-User-Id`，并显式设置 `retainLastGoodOnFailure: false`。`/workbuddy` 和可选 UI 消费同一 normalized report。Billing 不调用旧 `current/resolveCred`，不读取 Desktop/插件凭据，不创建 refresh 去重器；唯一刷新实现仍是 M1 OAuth callback。积分状态区分 available / unavailable / 未查询，parse 失败、5xx 或 timeout 必须成为 unavailable，不得显示零或 last-good 旧值。后台更新不进入 Chat critical path，显式状态命令才可等待刷新。
 
 ### D9 — 目录和 UI 是不同状态边界
 
-Scope 更新构建新目录与 ID Set，提交 Provider/selector 状态后持久化和更新 UI；注册或写设置失败不虚报切换成功，并避免保存新 scope 却继续展示旧目录。空模型数组的真实替换语义在 M0/M2 验证。当前模型被移除时明确要求重选，绝不自动换付费或任意 fallback。
-
+Scope 更新构建新目录与 ID Set，提交 Provider/selector 状态后持久化和更新 UI；注册或写设置失败不虚报切换成功，并避免保存新 scope 却继续展示旧目录。空模型数组的真实替换语义在 M0/M2 验证。当前模型被移除时明确要求重选，并在用户选择范围内模型前阻断 retained Model object 的后续 WorkBuddy transport；绝不自动换付费或任意 fallback。
 `stateGeneration` 是仅针对异步展示的内存计数，logout/account switch/scope/session teardown 递增；完成后比对 generation、当前模型和活动会话再应用结果。模型离开 WorkBuddy 时同步清理，迟到响应不能重显。使用 `session_start/turn_start`，接受下一 turn 更新限制；无 UI 时所有交互调用跳过，认证/注册/hooks 始终可用。
 
 设置只保存 scope 等非敏感值，使用宿主 getAgentDir 等实际公开目录规则，默认 `~/.omp/agent` 并尊重 `PI_CODING_AGENT_DIR`，不引入新环境变量。

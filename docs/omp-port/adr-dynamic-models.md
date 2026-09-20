@@ -29,9 +29,9 @@ This is negative evidence, not proof that WorkBuddy has no internal endpoint. It
 
 OMP 18.2.6 supports `ProviderConfigInput.fetchDynamicModels(apiKey)` in `config/model-registry.ts:3151-3158`. Its runtime manager is authoritative and uses the native SQLite model cache with a 24-hour TTL (`model-registry.ts:3001-3044`).
 
-The callback receives only a resolved API key. It does not receive accountId, orgId, durable credential id, session id, or the OAuth credential object. WorkBuddy v1 requires atomic access/account/org identity and rejects ambiguous stored accounts. Without a documented endpoint proving bearer-only authorization is sufficient, this callback cannot safely construct an identity-bound product request.
+The callback receives only a resolved API key, not accountId, orgId, durable credential id, session id, or the OAuth credential object. This is an integration cost and cache-safety risk, not a proof that identity-aware discovery is impossible: an extension closure could use public ModelRegistry/AuthStorage under the single-account invariant. That extra path is unjustified without a documented endpoint and identity contract.
 
-The native cache is keyed as provider discovery state, not by WorkBuddy free/all scope or account/org identity. Adopting it without an endpoint-specific invalidation contract could replay one account or scope's catalog into another.
+The native cache is keyed as provider discovery state, not by WorkBuddy free/all scope or account/org identity. A future Path A design would need explicit cache-key and invalidation evidence to prevent replaying one account or scope's catalog into another.
 
 ## Scope and fallback invariants
 
@@ -49,7 +49,7 @@ The current implementation violates items 3 and 4 by restoring `FREE_IDS`; M2 ta
 
 OMP static `registerProvider({ models: [] })` is not a clearing operation: 18.2.6 processes static overlays only when `config.models.length > 0` (`model-registry.ts:2931`). M2 therefore MUST explicitly remove the previous provider registration/overlay before registering an empty projection, or use another verified host operation that demonstrably removes stale rows. Merely re-registering an empty array is insufficient.
 
-`fetchDynamicModels` would support an authoritative empty dynamic result, but it remains unselected because the endpoint and identity contract are missing.
+`fetchDynamicModels` would support an authoritative empty dynamic result, but it remains unselected because no trustworthy endpoint/response contract was found. Identity and cache integration are secondary implementation risks.
 
 ## Source presentation
 
@@ -62,7 +62,7 @@ The UI and diagnostics will use exactly these source values for the selected pat
 
 ## Rejected alternative
 
-Path A was rejected for v1 because it would require one of the following unsupported assumptions: inventing an endpoint, treating bearer-only callback input as adequate identity, or accepting provider-wide cached results across account/scope changes. Native cache support alone does not make an unknown protocol safe.
+Path A was rejected for v1 decisively because adopting it would require inventing or trusting an undocumented endpoint. Its API-key-only callback and provider-wide cache add identity/scope integration work, but are not claimed to make a future official endpoint theoretically unusable.
 
 ## Consequences and M2 acceptance
 

@@ -43,16 +43,16 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 - **WHEN** refresh 失效、响应无效，或输入/输出身份不完整或矛盾
 - **THEN** 刷新不返回可用认证，报告明确错误并提示重新登录，不回退其他 Token 来源
 
-### Requirement: AUTH-04 Credential generation atomicity
-每次 WorkBuddy Chat 的 Authorization、X-User-Id 和 X-Enterprise-Id SHALL 对应同一 credential generation；Authorization 由宿主原生认证提供，账号 Headers SHALL 在请求边界从对应宿主 credential 解析，不得依赖长期静态账号 Header 快照。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
+### Requirement: AUTH-04 Durable credential identity binding
+每次 WorkBuddy Chat 的 Authorization、X-User-Id 和 X-Enterprise-Id SHALL 属于同一个 durable OAuth credential row 与 WorkBuddy account identity。401 retry 可刷新该行的 Bearer，但 accountId/orgId MUST 继续绑定同一 durable row；Authorization 由宿主原生认证提供，账号 Headers SHALL 在请求边界从对应宿主 credential 解析，不得依赖长期静态账号 Header 快照。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户首次登录后发出模型请求
-- **THEN** 实际出站请求的 Bearer、用户 ID、企业 ID 和 durable credential ID 一致，且携带官方国际版固定 Headers，无旧 Marker Header
+- **THEN** 实际出站请求的 Bearer、用户 ID、企业 ID 属于同一 durable credential ID，且携带官方国际版固定 Headers，无旧 Marker Header
 
 #### Scenario: Refresh, retry, and account switch
 - **WHEN** 单账号发生 forced refresh 或 401 retry，或 A logout 后 B 在已有会话登录
-- **THEN** 每次实际出站尝试的 Bearer、用户 ID、企业 ID 均来自该次选择的同一 credential generation，迟到 A 结果不会恢复旧身份
+- **THEN** forced refresh/401 retry 可更换 Bearer，但每次出站的 Bearer 与用户/企业身份仍属于同一 durable credential row；切换到 B 后不再使用 A row，迟到 A 结果不会恢复旧身份
 
 ### Requirement: AUTH-05 Three-layer fail closed
 系统 SHALL 在登录返回前、刷新返回前、提供请求 API key 前分别校验必要身份。只在模型投影抛异常不构成拒绝保证；任何必要身份缺失时 MUST 不提供可用认证且不发送 Chat Completion 请求。
@@ -81,7 +81,7 @@ v1 SHALL 只支持一个 stored WorkBuddy OAuth credential。`listOAuthAccounts(
 
 #### Scenario: Sequential account switch in existing session
 - **WHEN** A 登录并调用、刷新并调用，然后 A 退出、B 登录，并在已有会话和新 subagent 中请求
-- **THEN** B 登录完成后的请求不再带 A Bearer、A user ID 或 A enterprise ID，且每次请求的所有认证信息属于 B 的同一 credential generation
+- **THEN** B 登录完成后的请求不再带 A Bearer、A user ID 或 A enterprise ID，且每次请求的所有认证信息属于 B 的同一 durable credential row
 
 ### Requirement: AUTH-08 Provider-scoped logout
 `/workbuddy logout` SHALL 删除 OMP 中 WorkBuddy 的认证、使旧认证和身份运行态不可再用于新请求、清理 Widget/status 并使待返回积分失效，必要时更新模型。不得删除 Desktop credential 或 WorkBuddy 客户端数据。

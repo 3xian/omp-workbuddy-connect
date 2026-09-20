@@ -1,6 +1,6 @@
 # ADR: WorkBuddy Request Identity Binding
 
-Status: Accepted for M1 implementation — Task executor E2E remains a separate gate
+Status: Accepted for M1 implementation — M0 gate passed; authenticated Task E2E remains M5
 
 Verified host: OMP 18.2.6 at `78b753124d11f8dd3ae73e2524125890ff7c977e`
 
@@ -8,11 +8,11 @@ Date: 2026-09-20
 
 ## Context
 
-Every WorkBuddy Chat request must bind three values to one OAuth credential generation:
+Every WorkBuddy Chat request must bind three values to one durable OAuth credential identity:
 
-- host-provided Bearer token;
-- `X-User-Id` from `accountId`;
-- `X-Enterprise-Id` from `orgId`.
+- host-provided Bearer token, which may refresh between retry attempts;
+- `X-User-Id` from the same durable row's `accountId`;
+- `X-Enterprise-Id` from the same durable row's `orgId`.
 
 The first modifier probe proved that static identity values in `model.headers` become stale when an existing session retains an A model object after login B. That rules out long-lived static credential snapshots, but it does not prove that current-session model rebinding is the only supported solution.
 
@@ -42,7 +42,7 @@ Captured outbound attempts:
 
 The abort scenario resolved B row 2, then aborted inside `resolveHeaders`; zero HTTP requests reached the transport. The old A model object safely produced B identity because it retained a dynamic resolver rather than static account headers.
 
-This proves request-boundary account identity remains aligned with the host Bearer across normal, forced refresh, one 401 retry, sequential account switch, and abort under the v1 single-stored-account invariant.
+This proves request-boundary account identity remains aligned with the host Bearer's durable OAuth row across normal, forced refresh, one 401 retry, sequential account switch, and abort under the v1 single-stored-account invariant. It does not claim the access token is unchanged across a retry.
 
 ## Decision
 
@@ -65,13 +65,13 @@ The resolver must compose, not replace, the existing resolver because Provider f
 
 `ExtensionContext.modelRegistry` is public inside handlers, and `ModelRegistry.authStorage` is public. `ExtensionAPI` itself does not expose `modelRegistry`. The final probe captured the shared AuthStorage during an actual headless `session_start`; the resolver then used that closure successfully before every request. Production must keep the closure extension-instance-local and fail closed before transport if session initialization has not supplied it.
 
-## Atomicity boundary
+## Durable identity boundary
 
-`resolveHeaders` runs before the provider resolves its initial Bearer. Both calls use the same session ID and AuthStorage selection. On 401, the host may force-refresh the same durable row without rerunning headers; under the v1 invariant there is no sibling row to rotate to, and accountId/orgId remain attached to that row. The captured retry changed A2 to A3 while retaining row 1 and A identity.
+`resolveHeaders` runs before the provider resolves its initial Bearer. Both calls use the same session ID and AuthStorage selection. On 401, the host force-refreshes the same durable row without rerunning headers: the captured retry changed A2 to A3 while retaining row 1, account A, and org A. Therefore the invariant is durable credential identity, not access-token generation.
 
 Sequential A→B switching deletes A before storing B. Even a retained model object resolves B dynamically on its next request. More than one stored WorkBuddy OAuth credential must be rejected before Chat dispatch.
 
-Actual OMP Task executor lifecycle remains task 1.6b, and live authenticated WorkBuddy Task E2E remains a release gate. Those gates validate extension loading and live protocol behavior; they do not reopen the request-binding mechanism selected here unless contrary evidence appears.
+The actual OMP Task executor lifecycle contract is verified in `test/contract/task-runtime-contract.test.mts` and summarized in `headless-behavior.md`. The permanent `test/contract/request-identity-binding.test.mts` regression exercises built-in `openai-completions` through normal, forced-refresh, 401-retry, retained-model A→B, and two-row fail-closed paths. Authenticated WorkBuddy Task E2E remains an M5 release gate and does not reopen the binding mechanism unless contrary live evidence appears.
 
 ## Rejected fallback
 
@@ -84,5 +84,5 @@ Actual OMP Task executor lifecycle remains task 1.6b, and live authenticated Wor
 - The resolver must compose the model's existing resolver so fixed provider headers survive.
 - `getOAuthCredential(provider)` remains unsuitable because it is not session-aware.
 - Modifier exceptions cannot enforce safety: invalid or ambiguous identity should remove WorkBuddy rows from the projected catalog, while `getApiKey` and the request resolver independently fail closed.
-- M1 may implement this ADR, but M0 as a whole remains gated by the other incomplete M0 tasks.
+- M0 has passed. M1 implements this ADR; authenticated WorkBuddy identity and Task E2E remain later gates.
 - No OMP patch, private API, custom Chat transport, or global fetch interception is needed.

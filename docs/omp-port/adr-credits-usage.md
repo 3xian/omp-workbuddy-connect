@@ -26,6 +26,7 @@ OMP 18.2.6 expresses the required data:
 `ProviderConfigInput.usage` installs a runtime provider in AuthStorage (`config/model-registry.ts:2918-2923`, `3139-3142`). The host resolves a normalized credential and owns refresh, credential selection, timeout/cache, and fetch lifecycle before calling `fetchUsage`.
 
 This is sufficient to represent account, remaining credits, plan/tier, identity scope, and unavailable results without a second credential authority.
+OMP otherwise retains the last good report after fetch failure. WorkBuddy MUST register `retainLastGoodOnFailure: false`; without it, a 5xx/timeout/parse failure would surface stale credits and violate the required available/unavailable distinction.
 
 ## WorkBuddy protocol mapping
 
@@ -38,8 +39,11 @@ The existing protocol evidence is:
 
 M4 will move this protocol into the UsageProvider boundary and map each pack to a `UsageLimit`:
 
-| WorkBuddy value | Usage value |
+| WorkBuddy value | Usage value / request behavior |
 |---|---|
+| `UsageCredential.accessToken` | Billing `Authorization: Bearer …` |
+| `UsageCredential.accountId` | Billing `X-User-Id`; missing accountId means zero Billing requests |
+| `UsageCredential.orgId` | report `scope.orgId`; do not send `X-Enterprise-Id` unless live protocol evidence requires it |
 | package identifier/name | `id`, `label` |
 | capacity size | `amount.limit` |
 | capacity remaining | `amount.remaining` |
@@ -49,7 +53,7 @@ M4 will move this protocol into the UsageProvider boundary and map each pack to 
 | plan/package description | `scope.tier`, `label`, and/or `metadata` according to the actual response |
 | full response | redacted `raw` or `metadata`; never Token/Authorization |
 
-The aggregate report may include a total limit only when the response supports a mathematically valid sum. Parse failure, 5xx, timeout, or missing required fields returns `null`/unavailable; it MUST NOT produce a zero-credit report.
+The aggregate report may include a total limit only when the response supports a mathematically valid sum. The provider sets `retainLastGoodOnFailure: false`; parse failure, 5xx, timeout, or missing required fields therefore returns `null`/unavailable rather than a stale last-good report, and MUST NOT produce a zero-credit report.
 
 ## Authentication and lifecycle
 
@@ -57,6 +61,7 @@ The aggregate report may include a total limit only when the response supports a
 - It does not call `current()`, `resolveCred()`, Desktop files, `.workbuddy-auth.json`, or environment credential files.
 - It does not refresh a token. OMP AuthStorage owns refresh and retry lifecycle.
 - It honors `params.signal` for the HTTP request and any host-provided wait.
+- It maps `credential.accountId` to Billing `X-User-Id`. `orgId` scopes the report but is not sent as `X-Enterprise-Id` without live evidence.
 - The provider enforces the same single-stored-account and required accountId/orgId invariant selected by the M1 authentication boundary. Ambiguity or missing identity yields unavailable with zero Billing requests.
 - Logout/account replacement invalidates cached/displayed results using the M4 UI generation guard; Usage data never restores authentication state.
 
@@ -78,4 +83,4 @@ An independent `credits.ts` Billing client with its own credential lookup/refres
 
 ## Consequences and M4 acceptance
 
-M4 must verify normalized account/org/plan/packs, success with genuine zero, 5xx, timeout, slow response, malformed response, abort, ambiguous credentials, logout with a pending result, and non-blocking startup/Chat. `/workbuddy` must report unavailable rather than zero when no valid report exists. Live Billing evidence remains an M4/M5 gate; this ADR does not claim it has run.
+M4 must verify normalized account/org/plan/packs, `X-User-Id`, absence of unevidenced `X-Enterprise-Id`, success with genuine zero, last-good followed by 5xx/timeout/malformed response becoming unavailable, abort, ambiguous credentials, logout with a pending result, and non-blocking startup/Chat. `/workbuddy` must report unavailable rather than zero or a stale number when no current valid report exists. Live Billing evidence remains an M4/M5 gate; this ADR does not claim it has run.

@@ -9,13 +9,14 @@ Verified: 2026-09-20
 | Object | Exact value |
 |---|---|
 | Fork baseline | `6b91ab6753bcb8b5603859b2d9646644a4e62258` |
-| Current evidence HEAD | `55aae5053ef96103a704ec51e81a1b81bf663257` on `feat/omp-port` |
+| Runtime probe base | `55aae5053ef96103a704ec51e81a1b81bf663257` on `feat/omp-port` |
+| M0 gate record commit | `9727df23534f68c3abe3440403e2a9bb589fd986` |
 | Upstream baseline | `cb2398e3374144db0c088d7a4887dc0913342858` |
 | OMP 18.2.6 | `78b753124d11f8dd3ae73e2524125890ff7c977e` |
 | Installed contracts | `@oh-my-pi/pi-ai@18.2.6`, `@oh-my-pi/pi-coding-agent@18.2.6` |
 | Runtime | Darwin arm64; Node `v26.9.0`; Bun `1.3.14`; TypeScript `7.0.2` |
 
-The evidence HEAD identifies the committed base under the current M0 working tree; the working-tree documentation changes are not misrepresented as part of that commit. `baseline-manifest.md` remains the authoritative separation of frozen commit and workspace state.
+The runtime probe base identifies the code used for the recorded experiments. The later gate-record commit documents those results. Subsequent review fixes do not rewrite either historical commit; `baseline-manifest.md` remains the authoritative separation of frozen commits and workspace state.
 
 ## Six required deliverables
 

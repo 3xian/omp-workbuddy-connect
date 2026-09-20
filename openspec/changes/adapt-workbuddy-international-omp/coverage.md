@@ -3,6 +3,7 @@
 ## 范围与判定口径
 
 权威输入：`docs/260919 - OMP WorkBuddy Connect 国际版开发计划 V2.md`。本文件记录规划覆盖，不代表 M0 或任何运行验收完成；所有实施任务保持未勾选。原需求补充未被 V2 改变的端点/目录规则，旧计划的 nickname→email、无条件保留补丁、空 free 回退及固定延期 ADR 等做法不再采用。
+V2 作为冻结的历史规划输入保留其 `credential generation` 原文。后续宿主实验证明 401 retry 会在不重跑外层 Header resolver 的情况下刷新 Bearer，因此实施语义由 AUTH-04、D3 与 `docs/omp-port/adr-request-identity-binding.md` 收紧为 same durable OAuth credential row/account identity；Bearer MAY 在同一 row 内从 A2 更新为 A3。
 
 本 change 的六个 capability 前缀：HOST=`omp-host-integration`、AUTH=`workbuddy-auth-identity`、MODEL=`workbuddy-model-catalog`、GATE=`workbuddy-gateway-compatibility`、UX=`workbuddy-management-ui`、REL=`workbuddy-release-validation`。完整 requirement 标题及场景在对应 `specs/<capability>/spec.md`；D1–D12 在 `design.md`；数字任务编号在 `tasks.md`。任务范围按包含首尾编号解释。
 
@@ -17,7 +18,7 @@
 | 2.2 | OMP 18.2.6 exact SHA、禁用通配验证 | HOST-01/02 | Context；D1 | 1.1/1.2 |
 | 2.3 | upstream 精确提交及修改来源区分 | HOST-01 | Context；D1 | 1.1 |
 | 3.1 | AuthStorage 唯一来源，旧凭据不回退 | AUTH-01 | D2/D4 | 2.2；5.1 |
-| 3.2 | Token/user/enterprise 同一 generation | AUTH-04/07 | D3 | 2.4/2.8/2.11 |
+| 3.2 | Bearer/user/enterprise 同一 durable credential row/account identity | AUTH-04/07 | D3 | 2.4/2.8/2.11 |
 | 3.3 | 不完整认证不发 Chat | AUTH-05 | D2 | 2.1/2.3/2.5 |
 | 3.4 | 模型 metadata 决定协议 | MODEL-01–04 | D5 | 3.1–3.4 |
 | 3.5 | 宿主标准、插件差异、禁止重复基础设施 | HOST-02；GATE-06 | Non-Goals；D11 | 1.3；4.6；6.7 |

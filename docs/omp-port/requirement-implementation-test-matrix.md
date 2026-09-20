@@ -16,10 +16,10 @@ Status vocabulary: **PASS** means the named gate evidence was executed; **PARTIA
 | AUTH-01 | `src/auth.ts`, provider composition | legacy-source rejection | AuthStorage-only resolver contract | restart with legacy files ignored | fresh login/chat | M1 PLANNED / NOT RUN |
 | AUTH-02 | `src/auth.ts` login mapping | missing/invalid fields; nickname/email | OAuth callback return type | persistence/restart identity | login response variants | M1 PLANNED / NOT RUN |
 | AUTH-03 | `src/auth.ts`, `workbuddy-api.ts` refresh | token/expiry/identity preservation | host `refreshToken` callback | forced expiry and invalid refresh | live forced refresh | M1 PLANNED / NOT RUN |
-| AUTH-04 | `src/provider.ts` resolver | generation/header composition | `Model.resolveHeaders` + host Authorization | normal/refresh/401/A→B requests | redacted gateway identity | M1 PARTIAL: M0 probe PASS; production/live NOT RUN |
+| AUTH-04 | `src/provider.ts` resolver | durable-row/header composition | `Model.resolveHeaders` + host Authorization | `test/contract/request-identity-binding.test.mts`: normal/refresh/401 same-row identity; A→B row switch | redacted gateway identity | M1 PARTIAL: executable host contract PASS; production/live NOT RUN |
 | AUTH-05 | auth validation at login/refresh/request | missing accountId/orgId | getApiKey fail-closed | zero-request negative cases | live malformed credential | M1 PLANNED / NOT RUN |
 | AUTH-06 | WorkBuddy-only modifier/resolver | mixed catalog preservation | `modifyModels` full-catalog probe | foreign provider request unchanged | mixed-provider session | M1 PARTIAL: M0 modifier PASS |
-| AUTH-07 | single-account guard | 0/1/2 stored rows | `listOAuthAccounts` semantics | actual Task two-row zero-transport probe | multi-row authenticated attempt | M1 PARTIAL: host/Task contract PASS |
+| AUTH-07 | single-account guard | 0/1/2 stored rows | `listOAuthAccounts` semantics | permanent identity and actual Task zero-transport contract tests | multi-row authenticated attempt | M1 PARTIAL: host/Task contract PASS |
 | AUTH-08 | provider-scoped logout | state invalidation ordering | public AuthStorage delete | delete/restart/no-old-request | logout then live request | M1 PARTIAL: M0 delete contract PASS |
 | AUTH-09 | OAuth controller | cancel/error/Retry-After cases | OAuth AbortSignal contract | user/session/shutdown cancellation | live deny/429/timeout | M1 PLANNED / NOT RUN |
 | GATE-01 | `src/payload.ts`, evidence log | one regression per retained delta | real payload hook contract | unpatched/patched fixture requests | gateway failure/success pair | M3 PLANNED / NOT RUN |
@@ -28,9 +28,9 @@ Status vocabulary: **PASS** means the named gate evidence was executed; **PARTIA
 | GATE-04 | reasoning cleanup | content/tool/result association | OMP history types | next-turn tool result reuse | live reasoning + tool history | M3 PLANNED / NOT RUN |
 | GATE-05 | native tool loop | named/auto argument fixtures | OMP tool delta parser | single/sequential/multi/parallel tools | live tool loop | M3 PLANNED / NOT RUN |
 | GATE-06 | native `openai-completions` | no custom parser/transport | stream/error/abort/retry contract | local protocol server matrix | live streaming/error | M3 PLANNED / NOT RUN |
-| UX-01 | `src/ui.ts`, command state | available/unavailable/not-queried render | command registration | command output states | live account/credits/plan | M4 PLANNED / NOT RUN |
+| UX-01 | `src/ui.ts`, command state | available/unavailable/not-queried render; no stale last-good | command registration | command output after success→failure | live account/credits/plan | M4 PLANNED / NOT RUN |
 | UX-02 | command orchestration | free/all/logout transitions | command/UI API contract | credential unchanged/deleted cases | live commands | M4 PLANNED / NOT RUN |
-| UX-03 | WorkBuddy UsageProvider | credits pack parser | UsageProvider normalized schema | slow/5xx/timeout nonblocking | live Billing | M4 PLANNED / NOT RUN; ADR accepted |
+| UX-03 | WorkBuddy UsageProvider | credits parser and genuine-zero cases | normalized schema; `retainLastGoodOnFailure=false`; `X-User-Id` | slow/5xx/timeout nonblocking and unavailable | live Billing | M4 PLANNED / NOT RUN; ADR accepted |
 | UX-04 | UI `stateGeneration` | stale-result discard | session/scope identity inputs | logout/account/scope/teardown races | live pending Billing switch | M4 PLANNED / NOT RUN |
 | UX-05 | lifecycle display | visibility render | session_start/turn_start hooks | switch in/out next-turn refresh | interactive model switch | M4 PLANNED / NOT RUN |
 | UX-06 | UI guards | no-UI branch | `ctx.hasUI` contract | headless SDK and Task probes | authenticated headless tools | M4 PARTIAL: M0 headless/Task PASS |
@@ -41,7 +41,7 @@ Status vocabulary: **PASS** means the named gate evidence was executed; **PARTIA
 | MODEL-04 | catalog/request budget clamp | lower/equal/higher budgets | host max token field | catalog/request consistency | live server limit | M2 PLANNED / NOT RUN |
 | MODEL-05 | free projection | paid/unknown/empty fixtures | zero cost not free evidence | empty scope clears stale rows | live pricing confirmation | M2 PLANNED / NOT RUN |
 | MODEL-06 | Desktop cache→builtin source | missing/malformed/valid source cases | ADR and host registration semantics | source labels and fallback | cache-derived real IDs | M2 PLANNED / NOT RUN; ADR accepted |
-| MODEL-07 | provider/scope/settings commit | transition rollback cases | unregister/re-register semantics | free/all/empty/restart; credential invariant | live selector behavior | M2 PLANNED / NOT RUN |
+| MODEL-07 | provider/scope/settings commit | transition rollback and stale-model block | unregister/re-register semantics | all→paid→free(empty) next Chat zero transport; restart; credential invariant | live selector behavior | M2 PLANNED / NOT RUN |
 | REL-01 | composed main/task/headless paths | component regressions | official host API/type checks | main + actual Task + headless scenarios | chat/thinking/tools/refresh/task | M5 PARTIAL: M0 Task/headless contract PASS |
 | REL-02 | release runner/evidence | matrix schema validation | install/type gate | all local release cases | every required live case | M5 PLANNED / NOT RUN |
 | REL-03 | test suites by layer | pure behavior suite | real OMP type/API suite | official runtime suite | live E2E suite | M5 PLANNED / NOT RUN |
@@ -53,8 +53,8 @@ Status vocabulary: **PASS** means the named gate evidence was executed; **PARTIA
 
 - HOST-01: `baseline-manifest.md`
 - HOST-02/03: `api-compatibility-matrix.md`, `credential-behavior.md`, `modifier-behavior.md`
-- AUTH-04/06/07/08: `adr-request-identity-binding.md` and its local HTTP/AuthStorage evidence
-- HOST-03/REL-01/UX-06: `headless-behavior.md`, including the actual `runSubprocess` Task executor probe
+- AUTH-04/06/07/08: `adr-request-identity-binding.md`, `test/contract/request-identity-binding.test.mts`, and local AuthStorage evidence
+- HOST-03/REL-01/UX-06: `headless-behavior.md` and `test/contract/task-runtime-contract.test.mts`, which exercises the actual `runSubprocess` Task executor
 - HOST-04/MODEL-06: `adr-dynamic-models.md`
 - HOST-04/UX-03: `adr-credits-usage.md`
 - HOST-05: this matrix and `m0-gate.md`

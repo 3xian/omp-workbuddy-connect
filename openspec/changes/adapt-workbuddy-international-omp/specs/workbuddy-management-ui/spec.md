@@ -7,7 +7,7 @@
 ## ADDED Requirements
 
 ### Requirement: UX-01 Management command reports truthful state
-`/workbuddy` SHALL 提供 login state、account、credits、plan、scope、model count、model source 和 provider state。没有真实积分结果时 SHALL 显示 unavailable/查询失败，不把异常伪装成零积分；昵称缺失可使用账号显示，不污染 OAuth email。
+`/workbuddy` SHALL 提供 login state、account、credits、plan、scope、model count、model source 和 provider state。没有当前有效积分结果时 SHALL 显示 unavailable/查询失败，不把异常伪装成零积分，也不得在请求失败后把宿主 last-good cache 当作当前结果；昵称缺失可使用账号显示，不污染 OAuth email。
 
 #### Scenario: Status with available credits
 - **WHEN** 已登录用户执行 `/workbuddy` 且积分接口成功
@@ -15,7 +15,7 @@
 
 #### Scenario: Status with billing error
 - **WHEN** 积分接口 5xx、超时或无法解析有效结果
-- **THEN** 状态说明积分不可用而不是 0 credits，其他已知状态仍可查看
+- **THEN** 状态说明积分不可用而不是 0 credits 或上一次成功的旧值，其他已知状态仍可查看
 
 ### Requirement: UX-02 Required scope and logout commands
 系统 SHALL 支持 `/workbuddy free`、`/workbuddy all`、`/workbuddy logout`，分别遵守目录范围一致性及 provider-scoped logout 契约。切换不触发重新登录；logout SHALL 先使旧异步状态失效，再删除认证、清理显示并更新 Provider 状态。
@@ -29,7 +29,7 @@
 - **THEN** 命令报告失败而不虚报已安全退出，旧积分结果不能恢复 UI，用户能够采取重新退出措施
 
 ### Requirement: UX-03 Optional billing never blocks critical plane
-积分 SHALL 使用宿主 WorkBuddy credential 和刷新生命周期，不读取旧凭据或自行刷新 Token。积分、Widget、TUI 不可用 SHALL 不阻塞 session startup 或正常 Chat；选用 Usage 生命周期还是独立 Billing client SHALL 遵守 M0 ADR。
+积分 SHALL 使用宿主 WorkBuddy credential 和刷新生命周期，不读取旧凭据或自行刷新 Token。WorkBuddy UsageProvider SHALL 设置 `retainLastGoodOnFailure: false`，将 accountId 映射为 Billing `X-User-Id`，且没有 live 证据时不得擅自发送 Billing `X-Enterprise-Id`。积分、Widget、TUI 不可用 SHALL 不阻塞 session startup 或正常 Chat。
 
 #### Scenario: Billing is slow or unavailable
 - **WHEN** 积分请求挂起、超时、5xx，或 UI 渲染失败
