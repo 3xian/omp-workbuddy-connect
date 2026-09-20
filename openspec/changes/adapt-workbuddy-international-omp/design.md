@@ -100,12 +100,11 @@ free 判定只采用可信计费证据。有效目录无免费条目时返回空
 
 ### D6 — Dynamic Model ADR 是有界实施分支
 
-M0 调查范围是已有 upstream 协议、官方产品配置文档/响应及授权可访问的官方端点，不猜测 endpoint 或扫描第三方。ADR 记录稳定性、认证/identity 需求、实际能力及选择理由。
+M0 调查了已有 upstream 实现、仓库资料、授权可访问的 Desktop 产品配置以及 OMP 18.2.6 动态发现契约。结论记录于 `docs/omp-port/adr-dynamic-models.md`：**选择 Path B（Desktop product cache → builtin fallback）**。
 
-- Path A：证据支持且决定纳入 v1，使用 `fetchDynamicModels` 与宿主缓存；验证认证参数是否足以携带身份、scope 是否被缓存/静态 fallback 再次扩宽、空 free 是否清除旧列表。选择该路径后实现与测试任务在本 change 内完成。
-- Path B：无可靠接口或原生接入不能满足约束，采用 Desktop product cache → builtin fallback；声明缓存依赖。桌面产品配置读取与 Desktop credential 读取是不同权限边界，后者仍禁止。
+未发现具有稳定文档、响应契约和身份生命周期证据的国际版 authenticated product/model endpoint。OMP `fetchDynamicModels(apiKey)` 只接收 API key，不能携带本项目要求的 accountId/orgId/durable credential/session identity；其 24 小时 provider cache 也不按账号或 free/all scope 区分，因此 v1 不采用 Path A。Desktop 产品元数据读取与 Desktop credential 读取是不同权限边界，后者仍禁止。
 
-这是 V2 明确要求在 M0 做出的研究决策，不是需要用户预先选择的产品歧义；两条分支和验收已纳入 tasks，不将任意一条标为已验证。未选路径记录不采用理由而不是实现空壳。
+有效 Desktop 目录不会因 free 为空而被 builtin 扩宽；已知付费与未知价格不得进入 free。来源显示为 `desktop-cache` 或 `builtin-fallback`。OMP 18.2.6 的静态 `models: []` 不清除旧 overlay，M2 必须先移除旧 Provider/overlay 或使用另一个经验证的清除操作。未来采用 remote 路径需要新 ADR 和 endpoint/identity/cache/live 证据。
 
 ### D7 — Gateway patch 必须逐项有证据
 
@@ -117,9 +116,9 @@ Model ID 冲突按 V2 L3 接受：非匹配 ID 请求必须完全不变；同名
 
 ### D8 — Credits / Usage ADR 与可选管理面
 
-M0 比较 UsageProvider 是否表达 account/remaining credits/plan、提供身份并复用认证生命周期。适合则优先宿主 Usage；否则 `credits.ts` 管理解析/状态、`workbuddy-api.ts` 请求 Billing。两条路径均满足 UX-01/03，不能为采用 Usage 丢失套餐/账号或建立第二套 refresh。
+M0 结论记录于 `docs/omp-port/adr-credits-usage.md`：**选择宿主 UsageProvider**。18.2.6 的 Usage schema 可表达 credits 的 used/limit/remaining、accountId/orgId、tier、notes/metadata/raw，并向 fetcher 提供标准化 OAuth credential、AbortSignal 与宿主 fetch 生命周期；`ProviderConfigInput.usage` 由 AuthStorage 管理。
 
-积分状态区分 available / unavailable / 未查询，不把 parse 失败或 5xx 当成 total=0。`/workbuddy` 展示全部必需字段；生命周期只发起非阻塞更新，UI/Billing 失败不进入 Chat critical path。显式状态命令可以异步取得结果，但不能锁住后台模型执行。
+M4 将现有 `POST /v2/billing/meter/get-user-resource` 适配为一个 WorkBuddy UsageProvider，`/workbuddy` 和可选 UI 消费同一 normalized report。Billing 不调用旧 `current/resolveCred`，不读取 Desktop/插件凭据，不创建 refresh 去重器；唯一刷新实现仍是 M1 OAuth callback。积分状态区分 available / unavailable / 未查询，parse 失败、5xx 或 timeout 不等于零。后台更新不进入 Chat critical path，显式状态命令才可等待刷新。
 
 ### D9 — 目录和 UI 是不同状态边界
 

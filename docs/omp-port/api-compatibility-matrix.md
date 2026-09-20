@@ -27,9 +27,9 @@ Host contract: `@oh-my-pi/pi-ai@18.2.6` and `@oh-my-pi/pi-coding-agent@18.2.6`, 
 | OAuth `refreshToken()` | Supported | Retain for M0; remove legacy credential fallback in M1 | Typecheck and loader binding |
 | OAuth `getApiKey()` | Supported | Retain as the Bearer source; identity fail-closed validation is M1 | Typecheck and loader binding |
 | OAuth `modifyModels()` | Supported; receives the full catalog and current credentials during lazy catalog composition | Keep foreign rows unchanged; install WorkBuddy request binding; invalid/ambiguous identity should remove WorkBuddy rows rather than throw | `modifier-behavior.md`: 5,112 rows/70 providers, exception fallback, stale static reference, resolver preservation |
-| `fetchDynamicModels()` | Supported Provider capability | Decision deferred to the task 1.7 Dynamic Model ADR | Type/source inspection only |
-| `usage` / UsageProvider | Supported host capability | Decision deferred to the task 1.8 Credits / Usage ADR | Type/source inspection only |
-| `session_start` | Supported in interactive and headless sessions | Retain; optional Billing/UI work remains non-blocking and must branch on `ctx.hasUI` | `test/session-start.test.mts`; `headless-behavior.md` parent/child-shaped runtime evidence |
+| `fetchDynamicModels()` | Supported; callback receives only API key; native authoritative SQLite cache TTL is 24h | Do not use for v1: no stable authenticated WorkBuddy model endpoint and insufficient account/org/scope identity; select Desktop cache → builtin fallback | `adr-dynamic-models.md`; source/type inspection; static `models: []` also confirmed not to clear overlays |
+| `usage` / UsageProvider | Supported; normalized credential includes account/org and report supports remaining credits/tier/metadata | Select host UsageProvider; one Billing adapter, host OAuth refresh lifecycle, no second refresher | `adr-credits-usage.md`; `pi-ai/src/usage.ts`; ProviderConfig registration source |
+| `session_start` | Supported in interactive, headless, and actual Task sessions | Retain; optional Billing/UI work remains non-blocking and must branch on `ctx.hasUI` | `test/session-start.test.mts`; `headless-behavior.md` SDK and actual Task evidence |
 | `turn_start` | Supported in interactive and headless sessions | Use as the current supported lifecycle point for model-dependent UI refresh | Typecheck plus parent/child-shaped headless emission |
 | Custom Chat transport/parser | Not required for the WorkBuddy OpenAI-compatible endpoint | Prohibited; continue using host `openai-completions` | Provider config contains no custom transport |
 
@@ -42,9 +42,10 @@ Host contract: `@oh-my-pi/pi-ai@18.2.6` and `@oh-my-pi/pi-coding-agent@18.2.6`, 
 - Foreign-provider payload isolation check: passed.
 - Non-blocking `session_start` check: passed.
 - Request-boundary atomicity probe under Bun 1.3.14: lifecycle AuthStorage capture, fixed+identity composition, normal request, forced refresh, 401 retry, A→B through a retained model, and abort-before-transport all passed.
+- Actual `runSubprocess()` Task executor probe: `@task` resolved `workbuddy/hy3`; three independent extension bindings; headless sessions; post-hook `stream=true`; required `yield`; cancellation; shutdown; two-account fail-closed with zero transport attempts.
 
 ## Current implementation boundary
 
-**Loadable does not mean authenticated-runtime ready.** M0 now verifies AuthStorage persistence/removal/cancellation, full-catalog modifier behavior, SDK headless lifecycle, and the `resolveHeaders` / `getOAuthAccess` request-boundary mechanism across normal, refresh, retry, account switch, and abort. Canonical Thinking metadata, actual Task executor behavior, and authenticated WorkBuddy Chat remain unverified.
+**Loadable does not mean authenticated-runtime ready.** M0 verifies AuthStorage persistence/removal/cancellation, full-catalog modifier behavior, SDK headless lifecycle, the actual Task executor lifecycle, and the `resolveHeaders` / `getOAuthAccess` request-boundary mechanism across normal, refresh, retry, account switch, and abort. Canonical Thinking metadata and authenticated WorkBuddy Chat remain unverified.
 
-Task 1.5 selects the request-boundary resolver; it no longer blocks M0. M0 remains incomplete on tasks 1.6b–1.10. Production single-account fail-closed enforcement and live WorkBuddy E2E remain M1 work. See `adr-request-identity-binding.md`.
+Task 1.5 selects the request-boundary resolver; D6 selects Desktop cache → builtin fallback; D8 selects host UsageProvider. Production single-account enforcement and live WorkBuddy E2E remain M1/M5 work. See the three ADRs in `docs/omp-port/`.

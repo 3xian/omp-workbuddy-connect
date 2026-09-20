@@ -8,11 +8,11 @@
 - [x] 1.4 在隔离官方 OMP 配置中用最小协议探针验证 `/login workbuddy`、同身份 replace、异身份 append/rotation、持久化、refresh、provider-scoped 删除及重启；保存 `credential-behavior.md`，确认 `listOAuthAccounts()` 可检测多个 stored OAuth credential，且不读取用户真实存储做破坏性实验。（HOST-03、AUTH-07）
 - [x] 1.5 完成 Request Identity Binding Decision：保留 modifier 六项既有证据，验证 `modifyModels()` 安装并组合 `Model.resolveHeaders()`、从公开 ExtensionContext 安全捕获 registry/AuthStorage、`getOAuthAccess()` 的 request-boundary 行为，以及 normal/forced refresh/401 retry/logout A→B/abort 下实际出站 Bearer、UserId、EnterpriseId、credentialId 同 generation；失败则依次验证公开 `ExtensionAPI.setModel()` rebind 与 reload/new-session fail-closed，更新 `adr-request-identity-binding.md` 后才解除 M0 阻断。（HOST-03、AUTH-04/05/06/07）
 - [x] 1.6a 验证真实 SDK headless parent 与 child-shaped session 的扩展、OAuth、payload hook、公开 abort/dispose/shutdown 契约；保存 `headless-behavior.md`，证明认证协议不需要交互 TUI。（HOST-03、REL-01）
-- [ ] 1.6b 使用 actual OMP Task executor + synthetic/dummy provider 验证 role model、独立扩展绑定、payload hook 与取消/shutdown；不得用 child-shaped SDK session 代替 Task runtime，authenticated WorkBuddy Task E2E 留在 M5。（HOST-03、REL-01）
-- [ ] 1.7 调查现有 upstream/官方资料与授权可访问的稳定 authenticated product/model API，交付 `adr-dynamic-models.md`；记录 endpoint 证据、identity 可用性、原生缓存和空 scope 可行性，明确 D6 的 A/B 选择及未选理由。（HOST-04、MODEL-06）
-- [ ] 1.8 评估 UsageProvider 对 account/remaining credits/plan/identity 与宿主认证生命周期的表达，交付 `adr-credits-usage.md`；以真实类型/协议证据选择宿主 Usage 或独立 Billing，明确无第二刷新器。（HOST-04、UX-03）
-- [ ] 1.9 建立 `requirement-implementation-test-matrix.md`，将本 change 全部 requirement ID 关联目标模块、四层验证与阶段 gate；检查每项均有验证入口，未运行保留未通过状态。（HOST-05、REL-03/05）
-- [ ] 1.10 验收 M0 六项交付与 gate：exact commits、零类型错误、官方加载、OAuth/logout/modifier 及 headless/subagent 契约证据全部齐全；仅通过后进入 M1，并据发现重估 M1–M5，不承诺原 12–18 日总工期。（HOST-05）
+- [x] 1.6b 使用 actual OMP Task executor + synthetic/dummy provider 验证 role model、独立扩展绑定、payload hook 与取消/shutdown；不得用 child-shaped SDK session 代替 Task runtime，authenticated WorkBuddy Task E2E 留在 M5。（HOST-03、REL-01）
+- [x] 1.7 调查现有 upstream/官方资料与授权可访问的稳定 authenticated product/model API，交付 `adr-dynamic-models.md`；记录 endpoint 证据、identity 可用性、原生缓存和空 scope 可行性，明确 D6 的 A/B 选择及未选理由。（HOST-04、MODEL-06）
+- [x] 1.8 评估 UsageProvider 对 account/remaining credits/plan/identity 与宿主认证生命周期的表达，交付 `adr-credits-usage.md`；以真实类型/协议证据选择宿主 Usage 或独立 Billing，明确无第二刷新器。（HOST-04、UX-03）
+- [x] 1.9 建立 `requirement-implementation-test-matrix.md`，将本 change 全部 requirement ID 关联目标模块、四层验证与阶段 gate；检查每项均有验证入口，未运行保留未通过状态。（HOST-05、REL-03/05）
+- [x] 1.10 验收 M0 六项交付与 gate：exact commits、零类型错误、官方加载、OAuth/logout/modifier 及 headless/subagent 契约证据全部齐全；仅通过后进入 M1，并据发现重估 M1–M5，不承诺原 12–18 日总工期。（HOST-05）
 
 ## 2. M1 — 完整认证与身份不变量
 
