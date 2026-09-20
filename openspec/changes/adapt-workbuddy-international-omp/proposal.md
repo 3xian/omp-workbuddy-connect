@@ -35,4 +35,4 @@
 - 实现影响 `extensions/workbuddy.ts`、`package.json`、锁文件、`tsconfig.json`、`test/`、README，以及拟按职责提取的 `src/{auth,provider,workbuddy-api,models,payload,credits,settings,ui}.ts`。不修改 OMP 本体、WorkBuddy Desktop 凭据或客户端数据。
 - 对外行为变化集中于认证来源、单账号安全约束、模型收费/能力声明和管理命令；OAuth 与 Billing 网络限于功能所需官方国际版 endpoints。
 - P1 管理和 Agent 能力属于 v1 发布门槛；真正多账号、Desktop import、增强 Provider 识别、即时模型切换 UI 不在关键路径。动态模型/Usage 仅在 M0 证明适合后走选定分支。
-- 本 change 仅产出规划文档，所有实现与验收任务保持未完成；真实账号、Gateway 和官方宿主运行证据由后续 apply 获取。先为 M0 预留 1–2 工程日，随后重估 M1–M5；不承诺原计划 12–18 日总工期。
+- 本 change 已进入 apply 阶段；`tasks.md` 是实施完成状态的唯一权威来源，规划文档定义目标契约，运行证据仅在实际执行和验证后记录。M0 tasks 1.1–1.3 是首个已应用批次；后续仍按 M0 gate 推进并在完成后重估 M1–M5，不承诺原计划 12–18 日总工期。

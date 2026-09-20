@@ -2,7 +2,7 @@
 
 Captured: 2026-09-20
 
-## Fork baseline
+## Frozen Fork Baseline
 
 - Repository: `https://github.com/ha5h6r000wn/omp-workbuddy-connect`
 - Branch: `feat/omp-port`
@@ -30,21 +30,28 @@ The Fork baseline is therefore not identical to the current upstream commit.
 
 `package.json` and `package-lock.json` pin both OMP packages to `18.2.6`; wildcard peer constraints are not used.
 
-## Working-tree boundary
+## Applied Implementation State
 
-At the start of this apply batch, `git status --short --untracked-files=all` was empty. There were no pre-existing tracked or untracked user modifications to preserve.
+- Batch: M0 tasks 1.1–1.3
+- Commit: `78afae977ee35b76b4f640b18c508ddb25d0f123`
+- Remote state when verified: `origin/feat/omp-port` pointed to the same commit
+- Working tree immediately after the commit: clean
 
-The first implementation batch intentionally creates an uncommitted delta relative to the frozen Fork commit:
+Completed:
 
-- `extensions/workbuddy.ts`: syntax repair and removal of unsupported OMP contracts.
-- `package.json`: exact OMP 18.2.6 peer/development constraints.
-- `package-lock.json`: lockfile regenerated from the exact manifest constraints.
-- `tsconfig.json`: checks all extension and future `src` TypeScript modules.
-- `docs/omp-port/baseline-manifest.md`: this manifest.
-- `docs/omp-port/api-compatibility-matrix.md`: verified host-contract matrix.
-- `openspec/changes/adapt-workbuddy-international-omp/tasks.md`: completion state, updated only after verification.
+- 1.1 Reproducible baseline
+- 1.2 Compile and native-load baseline
+- 1.3 OMP 18.2.6 API contract cleanup
 
-This list separates the implementation workspace from commit `6b91ab6753bcb8b5603859b2d9646644a4e62258`; the commit must not be described as the complete current workspace.
+Verification:
+
+- `npx tsc --noEmit`: passed with zero errors
+- OMP 18.2.6 `loadExtensions()`: one extension, zero errors, Provider `workbuddy`
+- Extension self-check: passed
+- Foreign-provider payload isolation: passed
+- Non-blocking `session_start`: passed
+
+The applied commit is evidence for the first batch, not a replacement for frozen baseline `6b91ab6753bcb8b5603859b2d9646644a4e62258`. Later review-fix or implementation commits form subsequent evidence points.
 
 ## Runtime
 

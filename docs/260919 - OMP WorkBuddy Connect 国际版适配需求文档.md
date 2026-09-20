@@ -9,8 +9,19 @@
 **上游项目**：`icekale/pi-workbuddy-connect`  
 **目标服务**：WorkBuddy AI 国际版  
 **目标服务域名**：`https://www.workbuddy.ai`  
-**文档状态**：开发需求基线  
+**文档状态**：开发需求基线（Requirement Revision 1.1）
 **版本目标**：v1.0
+
+
+## 1.1 实施裁决与修订说明
+
+本文件定义产品目标和初始技术基线。对于 OpenSpec change `adapt-workbuddy-international-omp`，发生明确技术契约冲突时，实施优先级为：
+
+1. 经评审的 OpenSpec normative specs；
+2. `260919 - OMP WorkBuddy Connect 国际版开发计划 V2.md`；
+3. 本需求文档中未被上述文件收紧或替代的内容。
+
+Revision 1.1 已同步三项收紧：nickname 不再别名映射为 OAuth email；认证身份存在歧义时 fail closed；多账号不只是不保证轮换，而是必须证明单一有效账号及顺序换号无身份混用。
 
 ---
 
@@ -100,22 +111,20 @@ copilot.tencent.com
 
 国内版作为后续独立需求。
 
-### 4.3 暂不保证 WorkBuddy 多账号轮换
+### 4.3 v1.0 仅支持一个有效 WorkBuddy 账号
 
 v1.0 正式支持：
 
 > 一个 WorkBuddy Provider 对应一个有效 WorkBuddy AI OAuth Account。
 
-OMP 自身虽然支持同一 Provider 多 OAuth credential，但 WorkBuddy 请求除 Bearer Token 外还需要与账号绑定的：
+OMP 自身虽然可保存同一 Provider 的多个 OAuth credential，但 WorkBuddy 请求除 Bearer Token 外还需要与账号绑定的：
 
 ```text
 X-User-Id
 X-Enterprise-Id
 ```
 
-OMP 18.2.6 尚未向 Extension 暴露 per-request credential-aware header callback，因此多账号自动轮换存在 Token 与身份 Header 不一致的可能。
-
-首版不解决该问题。
+OMP 18.2.6 尚未向 Extension 暴露 per-request credential-aware header callback，因此不得宣称或依赖多账号自动轮换。若公开 API 能可靠检测多个 active WorkBuddy credential，模型调用必须明确拒绝且不得擅自删除凭据；若不能可靠检测，必须通过 A 账号调用与刷新、退出、B 账号登录、已有会话和新 subagent 的顺序换号验收证明无身份混用。任何 Bearer 与身份 Header 不一致或无法证明一致的情况都必须 fail closed，不得发送 Chat 请求。
 
 ### 4.4 不重新实现 OpenAI Streaming Transport
 
@@ -308,6 +317,7 @@ expiresAtMs
 uid
 enterpriseId
 nickname
+email（可选；仅当官方响应明确提供真实 email 时）
 domain
 ```
 
@@ -319,7 +329,8 @@ refreshToken      → refresh
 expiresAtMs       → expires
 uid               → accountId
 enterpriseId      → orgId
-nickname          → email / display identity
+email             → email（仅真实、已验证的 email）
+nickname          → 仅用于当前 UI 展示，不写入 OAuth email
 domain            → 不保存，国际版固定 www.workbuddy.ai
 ```
 
@@ -332,9 +343,11 @@ return {
     expires: credential.expiresAtMs,
     accountId: credential.uid,
     orgId: credential.enterpriseId,
-    email: credential.nickname,
+    ...(isVerifiedEmail(credential.email) ? { email: credential.email } : {}),
 };
 ```
+
+不得为持久化 nickname 新建 credential 文件；重启后 nickname 不可用时，以账号标识展示。
 
 OMP AuthStorage 应成为 WorkBuddy credential 的唯一正式存储来源。OMP 的 stored OAuth credential 本身支持持久化、解析和刷新。
 

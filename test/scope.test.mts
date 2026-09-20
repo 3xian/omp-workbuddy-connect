@@ -1,4 +1,4 @@
-// Proves the before_provider_request hook leaks into other providers' payloads.
+// Proves the WorkBuddy before_provider_request hook does not mutate non-WorkBuddy provider payloads.
 const ext: any = await import("../extensions/workbuddy.ts");
 
 const handlers: Record<string, Function[]> = {};

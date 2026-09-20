@@ -1,4 +1,17 @@
-# pi-workbuddy-connect
+# OMP WorkBuddy Connect
+
+> **Development status — not release-ready**
+>
+> `feat/omp-port` is an in-progress OMP-native port. M0 tasks 1.1–1.3
+> establish only the OMP 18.2.6 compile and extension-loading baseline.
+> AuthStorage ownership, identity headers, canonical model metadata,
+> headless/subagent behavior, and live WorkBuddy E2E are not yet validated.
+> Do not use the legacy Pi installation or credential instructions below as
+> current OMP instructions.
+
+## Legacy upstream behavior
+
+The remaining sections document the inherited Pi implementation and are retained only as migration context. They are not the contract of the unfinished OMP port.
 
 WorkBuddy AI 国际版 provider for [pi](https://pi.dev)。在 pi 里直接使用 WorkBuddy AI 桌面 App 的模型。
 

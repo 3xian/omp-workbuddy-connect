@@ -4,7 +4,9 @@
 
 动机见 `proposal.md`。裁决来源为 `docs/260919 - OMP WorkBuddy Connect 国际版开发计划 V2.md`；原需求文档补充 V2 未改变的国际版端点、配置目录和命令定义。前一轮计划不是优先于 V2 的约束。
 
-### 已观察的规划基线
+### Historical Planning Snapshot
+
+以下观测描述 OpenSpec change 最初提出时的仓库状态，作为设计背景保留，不代表当前实现。正式冻结基线、已应用证据和完成状态分别以 `docs/omp-port/baseline-manifest.md`、`docs/omp-port/api-compatibility-matrix.md` 和 `tasks.md` 为准。
 
 | 对象 | 仓库/标识 | 精确版本或提交 | 证据与边界 |
 |---|---|---|---|
@@ -14,9 +16,9 @@
 | 包版本 | `omp-workbuddy-connect` | 当前 manifest `1.1.5` | V2 的 v1 是功能基线，不自动降级包版本 |
 | 未提交修改 | `.gitignore`、`extensions/workbuddy.ts`、`package.json` | 本次观察相对 HEAD 共 22 additions / 11 deletions | 只记录已跟踪差异，不声称覆盖未跟踪文件；M0 保存完整工作区证据，不能覆盖用户工作 |
 
-当前实现仍在一个 `extensions/workbuddy.ts` 中：`saveOwn/current/resolveCred` 维护旧凭据；refresh 从旧文件补身份并丢失身份输出；Provider 仍用 Marker、unsupported hook/refreshModels；scope 空集合回退 `FREE_IDS`；模型默认扩展到全部 effort；payload 自动插入 system。`package.json` 已有 OMP manifest/import，但 peer 为 `*`；`tsconfig.json` 只列扩展入口。现有两个测试保护 payload 隔离和启动不阻塞，但后者写旧凭据文件。
+规划快照中的实现仍集中在 `extensions/workbuddy.ts`：`saveOwn/current/resolveCred` 维护旧凭据；refresh 从旧文件补身份并丢失身份输出；Provider 使用 Marker、unsupported hook/refreshModels；scope 空集合回退 `FREE_IDS`；模型默认扩展到全部 effort；payload 自动插入 system。当时 `package.json` 已有 OMP manifest/import，但 peer 为 `*`；`tsconfig.json` 只列扩展入口。两个既有测试保护 payload 隔离和启动不阻塞，后者使用旧凭据文件。
 
-前轮已执行 `node --experimental-strip-types test/scope.test.mts` 并记录 `ERR_INVALID_TYPESCRIPT_SYNTAX`，本轮源码仍显示 login 函数缺少闭合；不重复确认已知失败。本轮不修代码、不运行真实 OAuth、不声明 M0 完成。
+规划轮次曾执行 `node --experimental-strip-types test/scope.test.mts` 并记录 `ERR_INVALID_TYPESCRIPT_SYNTAX`；当时源码仍显示 login 函数缺少闭合。该历史失败不代表当前 apply 状态，修复及复验结果见上述证据文件。
 
 宿主参考：[18.2.6 Extension types](https://github.com/can1357/oh-my-pi/blob/78b753124d11f8dd3ae73e2524125890ff7c977e/packages/coding-agent/src/extensibility/extensions/types.ts)、[ModelRegistry](https://github.com/can1357/oh-my-pi/blob/78b753124d11f8dd3ae73e2524125890ff7c977e/packages/coding-agent/src/config/model-registry.ts)。已读源码表明 modifier 接收完整目录，异常被捕获并可能继续提供未投影目录；这些事实不能替代宿主运行验证。
 
@@ -176,4 +178,4 @@ V2 §13 的十二类长期回归全部保留，不用“字段被转发”或源
 - V2 明确授权 M0 ADR 分支，因此此处规划决策机制与两条实施路径，而不是把尚未运行的架构实验宣称完成。
 - V2 §6.2 的完整模型语义落在 resolved Model；注册对象仍遵守真实 ProviderModelConfig，避免为字段列表引入编译错误。
 - V2 对隔离的强要求与 L3 同名限制同时保留：modifier 对全部非 WorkBuddy 严格隔离；payload hook 对非匹配 ID 严格隔离，同名风险明确列示。
-- 本轮只产生 OpenSpec planning artifacts；覆盖检查见 `coverage.md`，该文件不是已完成的 M0 Requirement → Implementation → Test 实验证据。
+- OpenSpec 最初规划轮次只产生 planning artifacts；`coverage.md` 仅记录规划覆盖，不是 M0 Requirement → Implementation → Test 的实验通过证据。apply 阶段的完成状态以 `tasks.md` 为准。
