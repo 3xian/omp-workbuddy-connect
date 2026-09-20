@@ -39,19 +39,23 @@ function finiteNumber(value: unknown): number | undefined {
 function packageQuantity(account: RecordValue): { remaining: number; limit?: number; used?: number } | undefined {
   const hasCycleValues = ["CycleCapacitySize", "CycleCapacityRemain", "CycleCapacityUsed"]
     .some((key) => Object.hasOwn(account, key));
-  const remaining = finiteNumber(account[hasCycleValues ? "CycleCapacityRemain" : "CapacityRemain"]);
-  if (remaining === undefined) return undefined;
+  const remainingKey = hasCycleValues ? "CycleCapacityRemain" : "CapacityRemain";
+  const limitKey = hasCycleValues ? "CycleCapacitySize" : "CapacitySize";
+  const usedKey = hasCycleValues ? "CycleCapacityUsed" : "CapacityUsed";
+  const remaining = finiteNumber(account[remainingKey]);
+  if (remaining === undefined || remaining < 0) return undefined;
 
-  const rawLimit = finiteNumber(account[hasCycleValues ? "CycleCapacitySize" : "CapacitySize"]);
-  const rawUsed = finiteNumber(account[hasCycleValues ? "CycleCapacityUsed" : "CapacityUsed"]);
-  const normalizedRemaining = Math.max(0, remaining);
-  const limit = rawLimit !== undefined && rawLimit >= 0 ? rawLimit : undefined;
-  const used = rawUsed !== undefined && rawUsed >= 0
-    ? rawUsed
-    : limit !== undefined && normalizedRemaining <= limit
-      ? limit - normalizedRemaining
-      : undefined;
-  return { remaining: normalizedRemaining, ...(limit !== undefined ? { limit } : {}), ...(used !== undefined ? { used } : {}) };
+  const hasLimit = Object.hasOwn(account, limitKey);
+  const limit = finiteNumber(account[limitKey]);
+  if (hasLimit && (limit === undefined || limit < 0 || remaining > limit)) return undefined;
+
+  const hasUsed = Object.hasOwn(account, usedKey);
+  const reportedUsed = finiteNumber(account[usedKey]);
+  if (hasUsed && (reportedUsed === undefined || reportedUsed < 0 || (limit !== undefined && reportedUsed > limit))) {
+    return undefined;
+  }
+  const used = reportedUsed ?? (limit !== undefined ? limit - remaining : undefined);
+  return { remaining, ...(limit !== undefined ? { limit } : {}), ...(used !== undefined ? { used } : {}) };
 }
 
 /** Strictly accepts a successful Billing envelope. Invalid data is unavailable, never zero. */
@@ -61,7 +65,7 @@ export function parseWorkBuddyCredits(envelope: unknown): WorkBuddyCredits | und
   const data = record(root.data);
   const response = record(data?.Response);
   const payload = record(response?.Data);
-  if (!payload || !Array.isArray(payload.Accounts)) return undefined;
+  if (!payload || !Array.isArray(payload.Accounts) || payload.Accounts.length === 0) return undefined;
 
   const packs: WorkBuddyCreditPack[] = [];
   for (const [index, value] of payload.Accounts.entries()) {
@@ -117,18 +121,30 @@ export function summarizeWorkBuddyUsage(report: UsageReport): WorkBuddyCredits |
   const plans = Array.isArray(metadata?.plans)
     ? metadata.plans.filter((value): value is string => typeof value === "string")
     : [];
-  if (totalRemaining === undefined || totalRemaining < 0) return undefined;
+  if (
+    totalRemaining === undefined
+    || totalRemaining < 0
+    || (metadata?.totalLimit !== undefined && (totalLimit === undefined || totalLimit < totalRemaining))
+  ) return undefined;
 
   const packs: WorkBuddyCreditPack[] = [];
   for (const limit of report.limits) {
-    if (limit.amount.unit !== "credits" || !Number.isFinite(limit.amount.remaining)) return undefined;
-    const remaining = Math.max(0, limit.amount.remaining!);
+    const remaining = finiteNumber(limit.amount.remaining);
+    const packLimit = finiteNumber(limit.amount.limit);
+    const used = finiteNumber(limit.amount.used);
+    if (
+      limit.amount.unit !== "credits"
+      || remaining === undefined
+      || remaining < 0
+      || (limit.amount.limit !== undefined && (packLimit === undefined || packLimit < remaining))
+      || (limit.amount.used !== undefined && (used === undefined || used < 0 || (packLimit !== undefined && used > packLimit)))
+    ) return undefined;
     packs.push({
       id: limit.id,
       name: limit.label,
       remaining,
-      ...(limit.amount.limit !== undefined ? { limit: limit.amount.limit } : {}),
-      ...(limit.amount.used !== undefined ? { used: limit.amount.used } : {}),
+      ...(packLimit !== undefined ? { limit: packLimit } : {}),
+      ...(used !== undefined ? { used } : {}),
     });
   }
   return { totalRemaining, ...(totalLimit !== undefined ? { totalLimit } : {}), plans, packs };
@@ -138,7 +154,7 @@ export function createWorkBuddyUsageProvider(validateCredential: CredentialGuard
   return {
     id: WORKBUDDY_USAGE_PROVIDER,
     retainLastGoodOnFailure: false,
-    validatesCredentials: true,
+    validatesCredentials: false,
     supports: ({ provider, credential }) => provider === WORKBUDDY_USAGE_PROVIDER
       && credential.type === "oauth"
       && Boolean(credential.accessToken && credential.accountId),

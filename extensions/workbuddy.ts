@@ -126,12 +126,19 @@ export default async function (pi: ExtensionAPI) {
     ui.invalidate("WorkBuddy logout");
     try {
       await provider.logout();
-      installProvider(models);
-      ui.clear(ctx, "WorkBuddy logout complete");
-      notify(ctx, "WorkBuddy 已断开登录", "info");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       notify(ctx, `WorkBuddy 退出失败：${message}`, "error");
+      return;
+    }
+
+    ui.clear(ctx, "WorkBuddy logout complete");
+    try {
+      installProvider(models);
+      notify(ctx, "WorkBuddy 已断开登录", "info");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      notify(ctx, `WorkBuddy 已断开登录，但 Provider 状态刷新失败：${message}`, "warning");
     }
   }
 

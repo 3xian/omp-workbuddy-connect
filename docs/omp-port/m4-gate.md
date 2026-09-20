@@ -11,7 +11,8 @@ Tasks 5.1–5.7 are complete:
 - `src/credits.ts` implements the WorkBuddy `UsageProvider` with `retainLastGoodOnFailure: false` and strict Billing response parsing;
 - `src/workbuddy-api.ts` owns the sole Billing HTTP adapter and uses only the host-supplied OAuth access token and accountId;
 - Billing sends `X-User-Id`, does not send unevidenced `X-Enterprise-Id`, and has no credential lookup or refresh path of its own;
-- valid zero credits remain available, while HTTP failure, timeout, malformed data, missing identity, and ambiguous stored accounts are unavailable;
+- valid zero credits remain available, while negative/incoherent quantities, empty package lists, HTTP failure, timeout, malformed data, missing identity, and ambiguous stored accounts are unavailable;
+- `validatesCredentials: false` accurately states that Billing is optional usage data, not an evidenced credential-health probe;
 - `/workbuddy`, `/workbuddy free`, `/workbuddy all`, and `/workbuddy logout` expose the required management operations;
 - `src/ui.ts` owns Widget/status rendering and the display-only `stateGeneration` guard;
 - account replacement, scope changes, model departure, logout, session switch, and session teardown invalidate old asynchronous results;
@@ -28,11 +29,12 @@ No legacy credential file, Desktop credential, environment credential, plugin re
 2. orgId remains report scope only and does not become Billing `X-Enterprise-Id`;
 3. account, pack, plan, remaining, limit, and used data normalize into `UsageReport`;
 4. genuine numeric zero remains a successful report;
-5. a successful report followed by 5xx becomes unavailable instead of serving last-good data;
-6. malformed responses and timeout become unavailable;
-7. two stored WorkBuddy rows produce zero Billing HTTP requests.
+5. negative remaining/used/limit, remaining or used above limit, and an empty package list are unavailable;
+6. a successful report followed by 5xx becomes unavailable instead of serving last-good data;
+7. malformed responses and timeout become unavailable;
+8. two stored WorkBuddy rows produce zero Billing HTTP requests.
 
-The parser requires a successful envelope and a structurally valid `Accounts` array. It never converts missing or malformed fields into a zero-credit report.
+The parser requires a successful envelope, a non-empty structurally valid `Accounts` array, and coherent non-negative numeric quantities. It never clamps malformed values into a zero-credit report.
 
 ## Commands and UI lifecycle
 
@@ -52,6 +54,8 @@ The parser requires a successful envelope and a structurally valid `Accounts` ar
 ## Known limitation
 
 OMP 18.2.6 exposes `session_start` and `turn_start`, not a required `model_select` event for this extension. A model switch may therefore update the WorkBuddy Widget/status on the next `turn_start`. Authentication, model resolution, and Chat routing do not wait for or depend on that display refresh.
+
+OMP 18.2.6 publicly exposes aggregate `fetchUsageReports()` but no provider-scoped fetch. The Widget filters the aggregate result after host-managed fetching; another configured provider may also be refreshed when its usage cache expires. This preserves host refresh/cache/timeout/single-flight ownership and is included in the M5 network audit.
 
 ## Verification
 

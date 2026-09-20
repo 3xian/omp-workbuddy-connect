@@ -5,6 +5,7 @@ import { AuthStorage } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { createWorkBuddyProvider } from "../src/provider.ts";
+import { parseWorkBuddyCredits } from "../src/credits.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -65,6 +66,25 @@ registry.registerProvider("workbuddy", controller.config([]));
 try {
   const usage = authStorage.usageProviderFor("workbuddy");
   assert(usage?.retainLastGoodOnFailure === false, "UsageProvider retained stale successful credits");
+  assert(usage.validatesCredentials === false, "UsageProvider overclaimed credential health validation");
+
+  const semanticallyInvalidAccounts: unknown[] = [
+    { PackageName: "negative remaining", CycleCapacitySize: 10, CycleCapacityRemain: -1 },
+    { PackageName: "remaining above limit", CycleCapacitySize: 10, CycleCapacityRemain: 11 },
+    { PackageName: "negative used", CycleCapacitySize: 10, CycleCapacityRemain: 5, CycleCapacityUsed: -1 },
+    { PackageName: "used above limit", CycleCapacitySize: 10, CycleCapacityRemain: 5, CycleCapacityUsed: 11 },
+    { PackageName: "negative limit", CycleCapacitySize: -1, CycleCapacityRemain: 0 },
+  ];
+  for (const account of semanticallyInvalidAccounts) {
+    assert(parseWorkBuddyCredits({
+      code: 0,
+      data: { Response: { Data: { Accounts: [account] } } },
+    }) === undefined, "semantically invalid numeric credits were accepted");
+  }
+  assert(parseWorkBuddyCredits({
+    code: 0,
+    data: { Response: { Data: { Accounts: [] } } },
+  }) === undefined, "empty package list was presented as genuine zero without live evidence");
 
   let reports = await authStorage.fetchUsageReports();
   assert(reports?.length === 1, "successful Billing response did not produce one report");
@@ -120,7 +140,7 @@ try {
   assert(reports?.length === 0, "ambiguous stored accounts produced Billing usage");
   assert(calls === callsBeforeAmbiguous, "ambiguous stored accounts reached Billing HTTP");
 
-  console.log("OK: UsageProvider maps identity, genuine zero, failures, timeout, and stale-cache policy");
+  console.log("OK: UsageProvider maps identity, strict numeric semantics, failures, timeout, and stale-cache policy");
 } finally {
   authStorage.close();
   await rm(temp, { recursive: true, force: true });

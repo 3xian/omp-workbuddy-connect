@@ -61,11 +61,16 @@ globalThis.fetch = async () => {
 
 const handlers: Record<string, Function[]> = {};
 let command: ((args: unknown, ctx: any) => Promise<void>) | undefined;
+let failNextRegister = false;
 const pi: any = {
   on(name: string, handler: Function) {
     (handlers[name] ??= []).push(handler);
   },
   registerProvider(name: string, config: unknown) {
+    if (failNextRegister) {
+      failNextRegister = false;
+      throw new Error("simulated provider refresh failure");
+    }
     registry.registerProvider(name, config as never);
   },
   unregisterProvider(name: string) {
@@ -124,9 +129,15 @@ try {
   );
 
   (authStorage as unknown as { remove(provider: string): Promise<void> }).remove = originalRemove;
+  failNextRegister = true;
   await command("logout", ctx);
   assert(authStorage.listOAuthAccounts("workbuddy").length === 0, "provider-scoped logout did not delete host credentials");
-  assert(notifications.at(-1)?.message.includes("已断开"), "successful logout was not reported");
+  assert(
+    notifications.at(-1)?.type === "warning"
+      && notifications.at(-1)?.message.includes("已断开登录")
+      && notifications.at(-1)?.message.includes("Provider 状态刷新失败"),
+    "post-delete provider refresh failure obscured the successful logout",
+  );
   assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "logout did not clear Widget/status");
 
   let resolverAfterSuccessRejected = false;

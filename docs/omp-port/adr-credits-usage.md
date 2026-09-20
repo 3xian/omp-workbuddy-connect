@@ -27,6 +27,7 @@ OMP 18.2.6 expresses the required data:
 
 This is sufficient to represent account, remaining credits, plan/tier, identity scope, and unavailable results without a second credential authority.
 OMP otherwise retains the last good report after fetch failure. WorkBuddy MUST register `retainLastGoodOnFailure: false`; without it, a 5xx/timeout/parse failure would surface stale credits and violate the required available/unavailable distinction.
+OMP 18.2.6 exposes only aggregate `fetchUsageReports()` publicly; its provider-scoped report fetch is private. WorkBuddy UI therefore filters the aggregate result after host-managed fetching. When another configured provider's host cache has expired, a WorkBuddy refresh may also refresh that provider's usage. Reimplementing provider-scoped refresh would forfeit host OAuth refresh, timeout, cache, and single-flight ownership, so M4 accepts this side effect and includes it in the M5 network audit.
 
 ## WorkBuddy protocol mapping
 
@@ -53,7 +54,7 @@ M4 will move this protocol into the UsageProvider boundary and map each pack to 
 | plan/package description | `scope.tier`, `label`, and/or `metadata` according to the actual response |
 | full response | redacted `raw` or `metadata`; never Token/Authorization |
 
-The aggregate report may include a total limit only when the response supports a mathematically valid sum. The provider sets `retainLastGoodOnFailure: false`; parse failure, 5xx, timeout, or missing required fields therefore returns `null`/unavailable rather than a stale last-good report, and MUST NOT produce a zero-credit report.
+The aggregate report may include a total limit only when the response supports a mathematically valid sum. Remaining, limit, and used values must be finite and non-negative; remaining/used cannot exceed an explicit limit. Until live evidence defines an empty package list, `Accounts: []` is unavailable rather than genuine zero. The provider sets `retainLastGoodOnFailure: false`; parse failure, 5xx, timeout, or missing required fields therefore returns `null`/unavailable rather than a stale last-good report, and MUST NOT produce a zero-credit report.
 
 ## Authentication and lifecycle
 
@@ -63,6 +64,7 @@ The aggregate report may include a total limit only when the response supports a
 - It honors `params.signal` for the HTTP request and any host-provided wait.
 - It maps `credential.accountId` to Billing `X-User-Id`. `orgId` scopes the report but is not sent as `X-Enterprise-Id` without live evidence.
 - The provider enforces the same single-stored-account and required `accountId` invariant selected by the M1 authentication boundary. `orgId` remains optional and scopes the report when present. Ambiguity or missing `accountId` yields unavailable with zero Billing requests.
+- WorkBuddy declares `validatesCredentials: false`: current protocol handling returns unavailable for every Billing failure and has no live evidence that 401/403 reliably distinguishes revoked credentials from Billing unavailability. M5 may enable credential validation only with an evidenced error contract and typed auth failure propagation.
 - Logout/account replacement invalidates cached/displayed results using the M4 UI generation guard; Usage data never restores authentication state.
 
 Therefore there is exactly one refresh implementation: the OAuth provider callback registered in M1.
@@ -83,4 +85,4 @@ An independent `credits.ts` Billing client with its own credential lookup/refres
 
 ## Consequences and M4 acceptance
 
-M4 must verify normalized account/org/plan/packs, `X-User-Id`, absence of unevidenced `X-Enterprise-Id`, success with genuine zero, last-good followed by 5xx/timeout/malformed response becoming unavailable, abort, ambiguous credentials, logout with a pending result, and non-blocking startup/Chat. `/workbuddy` must report unavailable rather than zero or a stale number when no current valid report exists. Live Billing evidence remains an M4/M5 gate; this ADR does not claim it has run.
+M4 verifies normalized account/org/plan/packs, `X-User-Id`, absence of unevidenced `X-Enterprise-Id`, genuine zero, semantic-invalid numeric values, empty package lists, last-good followed by 5xx/timeout/malformed response becoming unavailable, ambiguous credentials, logout with a pending result, and non-blocking startup/Chat. `/workbuddy` reports unavailable rather than zero or a stale number when no current valid report exists. M4 accepts this local OMP integration and contract evidence. A real WorkBuddy Billing capture remains an M5 release gate.
