@@ -23,7 +23,7 @@ Production consequence: invalid or ambiguous identity should make the modifier r
 
 ## Request-boundary atomicity follow-up
 
-A final isolated probe installed a WorkBuddy-only `resolveHeaders` through `modifyModels()`, explicitly composing the model's existing resolver with lifecycle-captured `AuthStorage.getOAuthAccess()`. It then used the built-in `openai-completions` transport against a local HTTP server, with `AuthStorage.resolver()` supplying the host Bearer.
+The original isolated probe installed a WorkBuddy-only `resolveHeaders` through `modifyModels()`, explicitly composing the model's existing resolver with lifecycle-captured `AuthStorage.getOAuthAccess()`. It then used the built-in `openai-completions` transport against a local HTTP server, with `AuthStorage.resolver()` supplying the host Bearer. The 2026-09-21 cutover retained the observed transport contract but replaced the duplicate header-path OAuth selection with a validated sole-account lookup.
 
 Captured outbound attempts kept Bearer and identity on one durable row:
 
@@ -38,18 +38,20 @@ This verifies resolver preservation, fixed-header composition, lifecycle AuthSto
 ## Selected public path
 
 - Request-boundary materialization: `Model.resolveHeaders(signal)`.
-- Token plus identity from one OAuth selection: `AuthStorage.getOAuthAccess(provider, sessionId, options)`.
+- Host Bearer selection and refresh: `AuthStorage.resolver(provider, context)`.
+- Selected credential guard: WorkBuddy `getApiKey(credentials)` compares account/org identity with the sole stored row.
+- Header identity: `AuthStorage.listOAuthAccounts(provider)` must return exactly one row with `accountId`.
 - Catalog installation point: WorkBuddy-only `oauth.modifyModels()`.
-- Host Bearer and 401 retry: `AuthStorage.resolver(provider, context)`.
 - `ExtensionAPI.setModel(model)` remains a fallback if future OMP behavior invalidates resolver preservation; it is not needed for the selected path.
 - Static catalog refresh and lookup remain useful evidence paths, but old `Model` objects are not mutated.
 
 ## M0 result
 
-**Request-boundary credential atomicity is proven for task 1.5.** Static identity values in a retained A `Model` remain rejected. The accepted path is:
+**Request-boundary credential identity is preserved under the v1 single-account invariant without duplicate OAuth selection.** Static identity values in a retained A `Model` remain rejected. The accepted path is:
 
 ```text
-modifyModels -> compose resolveHeaders -> getOAuthAccess -> identity headers at dispatch
+host AuthStorage resolver -> getApiKey identity guard
+modifyModels -> compose resolveHeaders -> sole stored account -> identity headers
 ```
 
 The separate Task executor experiment remains task 1.6b. Live authenticated WorkBuddy Chat and production fail-closed implementation remain later gates. See `adr-request-identity-binding.md`.

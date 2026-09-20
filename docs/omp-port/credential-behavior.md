@@ -32,7 +32,7 @@ The official `/login` controller delegates to `session.modelRegistry.authStorage
 
 The v1 rule uses `listOAuthAccounts("workbuddy").length`: zero rows means logged out, one row is admissible, and more than one stored OAuth credential must fail closed. It must never silently choose, rotate, or delete one of several rows.
 
-`getOAuthCredential(provider)` is not session-aware and must not be used as the request identity source. `getOAuthAccess(provider, sessionId, options)` is the accepted public source for token and identity metadata from one selected row; the separate request-boundary probe demonstrated alignment with host Bearer resolution across normal, refresh, retry, sequential account switch, and abort. See `adr-request-identity-binding.md`.
+`getOAuthCredential(provider)` is not session-aware and must not be used as the request identity source. `getOAuthAccess(provider, sessionId, options)` remains the host's public token-plus-identity selection API, but WorkBuddy no longer calls it from `resolveHeaders()`: the host Bearer resolver performs the authoritative selection, `getApiKey(credentials)` validates that selection against the sole stored account, and headers use `listOAuthAccounts(provider)` to read that account's current identity.
 
 ## Public deletion and restart paths
 
@@ -40,7 +40,7 @@ The v1 rule uses `listOAuthAccounts("workbuddy").length`: zero rows means logged
 - Provider-scoped logout: `authStorage.remove("workbuddy")`.
 - Durable reload: `await authStorage.reload()` or a newly created `AuthStorage` bound to the same SQLite path.
 - Session-specific selection: `authStorage.pinSessionOAuthAccount("workbuddy", sessionId, credentialId)`.
-- Request-bound token plus identity: `authStorage.getOAuthAccess("workbuddy", sessionId, { signal })`.
+- Host request token resolution: `authStorage.resolver("workbuddy", context)` / `getApiKey(...)`; WorkBuddy header identity: validated sole row from `listOAuthAccounts("workbuddy")`.
 
 These paths are provider-scoped. No global credential deletion or private database mutation is required.
 
