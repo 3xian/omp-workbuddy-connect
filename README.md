@@ -13,7 +13,7 @@ WorkBuddy AI 国际版 provider for OMP。认证、模型目录、scope、Gatewa
 
 ## 安装
 
-要求 OMP `18.2.6`。正式发布采用固定 GitHub tag；`v1.1.5` tag 创建后执行：
+要求 OMP `18.2.6`。正式发布采用固定 GitHub tag：
 
 ```bash
 omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.5

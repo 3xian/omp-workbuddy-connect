@@ -16,7 +16,7 @@ This report contains redacted outcomes only. OAuth tokens, refresh tokens, Autho
 | Acceptance execution base | `5ce20af5ee2822690ea2fa08ecbec41c11788346` |
 | M5 tested working tree | Acceptance base plus the M5 changes documented in this report |
 | Post-acceptance implementation commit | `4a6b328a56d73b0a8f43441aa261c2299a116a0b`; created after the live run and captures the tested production implementation |
-| Release tag | Not created; external publication remains pending |
+| Release tag | `v1.1.5`; freezes the release-metadata revision containing this report |
 | Node | `v26.9.0` |
 | Bun | `1.3.14` |
 | Account type | WorkBuddy international free subscription; identity redacted |
@@ -133,5 +133,4 @@ Detailed AUTH/MODEL/GATE/UX mappings remain in `docs/omp-port/requirement-implem
 4. Dynamic model metadata comes from the Desktop product cache. Builtin fallback supports `all` only; it is not free evidence.
 5. v1 does not import Desktop credentials, add a custom Provider transport, use an online dynamic-catalog endpoint, or provide immediate model-selector UI refresh.
 6. OMP 18.2.6 exposes aggregate usage refresh. The Widget filters to WorkBuddy after the host fetch, but another configured provider may also refresh when its cache expires.
-7. The tested production implementation is captured by post-acceptance commit `4a6b328a56d73b0a8f43441aa261c2299a116a0b`. This release-metadata hardening is a later working-tree change, and no immutable release tag exists yet; create the final documentation commit and tag before external publication.
-8. v1 distribution is intentionally GitHub-tag-only. OMP Marketplace catalog publication and npm registry publication are deferred.
+7. v1 distribution is intentionally GitHub-tag-only. OMP Marketplace catalog publication and npm registry publication are deferred.
