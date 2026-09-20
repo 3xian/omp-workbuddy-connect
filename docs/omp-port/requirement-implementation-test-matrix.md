@@ -22,7 +22,7 @@ M1 live exit evidence (redacted):
 | HOST-02 | `package.json`, `extensions/workbuddy.ts` | import smoke | official `loadExtensions` | isolated official extension load | install/load matrix | M0 PASS |
 | HOST-03 | provider/auth/hook boundaries | protocol fixture probes | API compatibility, modifier, Task executor probes | OAuth persistence/logout/refresh/restart; actual Task lifecycle | explicit `modelRoles.task=workbuddy/hy3`; fresh B Task produced independent transformation result | M0 host contract PASS; M1 live PASS |
 | HOST-04 | D6/D8 architecture | ADR invariant review | `fetchDynamicModels` and `UsageProvider` type/source checks | empty static registration/source behavior | future endpoint/Billing confirmation | M0 PASS |
-| HOST-05 | gate/evidence docs | requirement inventory count | strict OpenSpec validation | M0 gate command set | M1 complete authentication chain | M0 PASS; M1 PASS; later gates NOT RUN |
+| HOST-05 | gate/evidence docs | requirement inventory count | strict OpenSpec validation | M0/M1/M2 gate command sets | M1 complete authentication chain; later live gates remain | M0 PASS; M1 PASS; M2 PASS; later gates NOT RUN |
 | AUTH-01 | `src/auth.ts`, provider composition | legacy-source rejection | AuthStorage-only resolver contract | legacy file ignored; `persisted-credential-restart.test.mts` uses host credential before extension registration | fresh login, streamed chat, restart recovery | M1 PASS |
 | AUTH-02 | `src/auth.ts` login mapping | `test/auth.test.mts`: missing/invalid fields; JWT subject; optional enterprise; nickname/email/domain | OAuth callback return type | host persistence contract plus legacy-source rejection | A/B authorization; redacted response/claim key shape | M1 PASS |
 | AUTH-03 | `src/auth.ts`, `src/workbuddy-api.ts` refresh | rotation/omission, token/expiry/identity preservation and contradiction rejection | production host `refreshToken` callback | frozen upstream omission fallback; optional enterprise refresh omits enterprise header; forced expiry/401 fixtures | forced expiry refreshed and streamed; restart remained usable | M1 PASS |
@@ -44,14 +44,14 @@ M1 live exit evidence (redacted):
 | UX-04 | UI `stateGeneration` | stale-result discard | session/scope identity inputs | logout/account/scope/teardown races | live pending Billing switch | M4 PLANNED / NOT RUN |
 | UX-05 | lifecycle display | visibility render | session_start/turn_start hooks | switch in/out next-turn refresh | interactive model switch | M4 PLANNED / NOT RUN |
 | UX-06 | UI guards | no-UI branch | `ctx.hasUI` contract | headless SDK and Task probes | authenticated headless tools | M4 PARTIAL: M0 headless/Task PASS |
-| UX-07 | `src/settings.ts` | path/scope/no-secret cases | OMP agent-dir rule | custom directory and restart | N/A | M4 PLANNED / NOT RUN |
-| MODEL-01 | `src/models.ts` | `model-catalog.test.mts`: parse/diagnose capabilities | ProviderModelConfig plus `ModelRegistry` final Model fields | valid/invalid rows and resolved runtime models | three real model IDs at M2 gate | M2 3.1 PASS; M2 live gate 3.10 NOT RUN |
-| MODEL-02 | canonical thinking metadata | supported/required/optional/unknown matrix | host effort generation and required-off clamp | `model-transport.test.mts`: high、required off 及 host-default optional disable floor | live supported effort and true off encoding | M2 3.2 canonical metadata/host contract PASS; live optional-off encoding gate 3.10 NOT RUN |
-| MODEL-03 | input/compat metadata | image capability projection | final Model image normalization | valid 1×1 PNG reaches local OpenAI transport as `image_url` | real WorkBuddy image request | M2 3.3 host transport PASS; live gate 3.10 NOT RUN |
-| MODEL-04 | catalog/request budget clamp | lower/higher and unrelated-model budgets | host-native max-token clamp without payload mutation | catalog 16k ceiling equals emitted request; smaller request preserved | live server limit | M2 3.4 catalog/transport PASS; live gate 3.10 NOT RUN |
-| MODEL-05 | free projection | paid/unknown/empty/builtin fixtures | zero cost is not free evidence | valid empty free projection; registry scope clearing remains pending | live pricing confirmation | M2 3.5 projection PASS; registry transition 3.7 and live gate 3.10 NOT RUN |
-| MODEL-06 | Desktop cache→builtin source | missing/malformed/valid source cases | ADR and host registration semantics | source labels and fallback | cache-derived real IDs | M2 PLANNED / NOT RUN; ADR accepted |
-| MODEL-07 | provider/scope/settings commit | transition rollback and stale-model block | unregister/re-register semantics | all→paid→free(empty) next Chat zero transport; restart; credential invariant | live selector behavior | M2 PLANNED / NOT RUN |
+| UX-07 | `src/settings.ts` | `settings.test.mts`: public agent path/scope/0600/no-secret | OMP `getAgentDir()` rule | custom directory and empty-free restart | N/A | M2 3.9 PASS; M4 UI gate remains |
+| MODEL-01 | `src/models.ts` | `model-catalog.test.mts`: parse/diagnose capabilities | ProviderModelConfig plus `ModelRegistry` final Model fields | four cache-derived IDs resolved through real registry | ≥3 live Chat models remains M5 | M2 PASS; live Chat gate NOT RUN |
+| MODEL-02 | canonical thinking metadata | supported/required/optional/unknown matrix | host effort generation and required-off clamp | real-cache Hy4/Hy3 thinking plus `model-transport.test.mts` | live supported effort and true off encoding remains M5 | M2 PASS; live encoding gate NOT RUN |
+| MODEL-03 | input/compat metadata | image capability projection | final Model image normalization | valid 1×1 PNG reaches local OpenAI transport as `image_url`; cache-derived models retain Vision | real WorkBuddy image request remains M5 | M2 PASS; live image gate NOT RUN |
+| MODEL-04 | catalog/request budget clamp | lower/higher and unrelated-model budgets | host-native max-token clamp without payload mutation | cache-derived context/max tokens plus emitted 16k clamp and smaller-budget preservation | live server limit remains M5 | M2 PASS; live server gate NOT RUN |
+| MODEL-05 | free projection | paid/unknown/empty/builtin fixtures | zero cost is not free evidence | real registry all→paid→free(empty), stale rows removed | live pricing confirmation remains M5 | M2 PASS; live pricing gate NOT RUN |
+| MODEL-06 | Desktop cache→builtin source | missing/unreadable/invalid JSON/schema/no-valid-row/valid-empty cases | ADR and host registration semantics | exact Widget source/fallback reason; cache-derived real IDs | future remote source requires new ADR | M2 PASS |
+| MODEL-07 | provider/scope/settings commit | registration/settings failure rollback and stale-model block | real unregister/re-register semantics | all→paid→free(empty) next Chat zero HTTP; restart; credential invariant | live selector UX remains M5 | M2 PASS |
 | REL-01 | composed main/task/headless paths | component regressions | official host API/type checks | main + actual Task + headless scenarios | chat/thinking/tools/refresh/task | M5 PARTIAL: M0 Task/headless contract PASS |
 | REL-02 | release runner/evidence | matrix schema validation | install/type gate | all local release cases | every required live case | M5 PLANNED / NOT RUN |
 | REL-03 | test suites by layer | pure behavior suite | real OMP type/API suite | official runtime suite | live E2E suite | M5 PLANNED / NOT RUN |
@@ -68,6 +68,13 @@ M1 live exit evidence (redacted):
 - HOST-04/MODEL-06: `adr-dynamic-models.md`
 - HOST-04/UX-03: `adr-credits-usage.md`
 - HOST-05: this matrix and `m0-gate.md`
+
+## M2 evidence index
+
+- MODEL-01–06: `src/models.ts`, `test/model-catalog.test.mts`, `test/model-transport.test.mts`, and the redacted real-cache sample `test/fixtures/desktop-product-config-real-sample.json`.
+- MODEL-06: `docs/omp-port/adr-dynamic-models.md`; exact `desktop-cache` / `builtin-fallback` source and five fallback reasons are exercised.
+- MODEL-07/UX-07: `src/settings.ts` and `test/contract/model-scope-lifecycle.test.mts`; real `ModelRegistry` covers unregister/re-register, rollback, authoritative empty, retained-model pretransport failure, restart, and unchanged AuthStorage credential.
+- Gate record: `docs/omp-port/m2-gate.md`. It distinguishes local real-cache/OMP evidence from later live Gateway Chat, Vision, effort, selector, and pricing gates.
 
 ## Coverage check
 

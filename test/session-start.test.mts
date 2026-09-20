@@ -38,6 +38,7 @@ try {
   const pi: any = {
     on: (name: string, fn: Function) => { (handlers[name] ??= []).push(fn); },
     registerProvider: () => {},
+    unregisterProvider: () => {},
     registerCommand: () => {},
   };
   await ext.default(pi);

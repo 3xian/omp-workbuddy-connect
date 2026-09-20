@@ -6,6 +6,7 @@ const registered: any[] = [];
 const pi: any = {
   on: (name: string, fn: Function) => { (handlers[name] ??= []).push(fn); },
   registerProvider: (id: string, cfg: any) => { registered.push({ id, cfg }); },
+  unregisterProvider: () => {},
   registerCommand: () => {},
 };
 

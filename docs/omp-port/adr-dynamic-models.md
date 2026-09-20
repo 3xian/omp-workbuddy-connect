@@ -1,6 +1,6 @@
 # ADR: WorkBuddy Dynamic Model Source
 
-Status: Accepted for M2
+Status: Accepted and implemented for M2
 
 Decision date: 2026-09-20
 
@@ -10,7 +10,7 @@ Applies to: OMP 18.2.6 (`78b753124d11f8dd3ae73e2524125890ff7c977e`), change `ada
 
 Choose D6 Path B: **Desktop product cache → builtin catalog fallback**.
 
-M2 will read product metadata from `~/.workbuddy-ai/cache/acc-product-config-v3.json` (or the existing test override), label a valid read `desktop-cache`, and use the maintained builtin catalog only when that file is missing, unreadable, or malformed, labelled `builtin-fallback`. It will not read Desktop credentials.
+M2 reads product metadata from `~/.workbuddy-ai/cache/acc-product-config-v3.json` (or the existing test override), labels a valid read `desktop-cache`, and uses the maintained builtin catalog only when that file is missing, unreadable, malformed, or contains a non-empty model array with no valid rows, labelled `builtin-fallback`. A literal valid `models: []` remains an authoritative empty Desktop catalog. The implementation does not read Desktop credentials.
 
 Path A (`fetchDynamicModels`) is not selected for v1. No stable, documented authenticated WorkBuddy international product/model endpoint with a response contract and lifecycle suitable for this extension was found in the current upstream implementation, repository documentation, or authorized local product artifacts. Endpoint guessing is prohibited.
 
@@ -43,7 +43,7 @@ Path B does not permit broadening a valid catalog:
 4. Builtins are used only when the product cache itself is unavailable or invalid, and `builtin-fallback` is not by itself evidence that a row is currently free.
 5. `all` means all models recognized in the selected source, not an assertion that the server exposes no others.
 
-The current implementation violates items 3 and 4 by restoring `FREE_IDS`; M2 task 3.5 owns the cutover. This ADR records the target architecture, not completion of M2.
+The implementation enforces these invariants in `src/models.ts`; `test/model-catalog.test.mts` permanently covers paid, unknown, literal-empty, missing, unreadable, invalid JSON/schema, and non-empty-without-valid-row cases.
 
 ## Empty-catalog feasibility
 
@@ -56,7 +56,7 @@ OMP static `registerProvider({ models: [] })` is not a clearing operation: 18.2.
 The UI and diagnostics will use exactly these source values for the selected path:
 
 - `desktop-cache`: valid Desktop product metadata file;
-- `builtin-fallback`: cache missing, unreadable, or malformed.
+- `builtin-fallback`: cache missing, unreadable, malformed, or non-empty without a valid model row; the UI also presents the exact fallback reason.
 
 `remote` remains reserved for a future ADR revision backed by an official authenticated endpoint and identity/cache evidence.
 
@@ -68,5 +68,5 @@ Path A was rejected for v1 decisively because adopting it would require inventin
 
 - No network product discovery in v1.
 - Product-cache access remains a non-secret metadata boundary; Desktop credential access remains forbidden.
-- M2 must add permanent missing/malformed/valid-paid/valid-unknown/valid-empty tests, accurate source labels, and a real stale-row clearing integration check.
+- Permanent missing/unreadable/malformed/no-valid-row/valid-paid/valid-unknown/valid-empty tests, accurate source labels, and a real `ModelRegistry` stale-row clearing integration check are recorded in `test/model-catalog.test.mts` and `test/contract/model-scope-lifecycle.test.mts`.
 - A future move to Path A requires a new accepted ADR with endpoint provenance, schema, bearer/account/org requirements, cache key/invalidation behavior, empty-result behavior, and live evidence.

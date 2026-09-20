@@ -50,6 +50,9 @@ const pi: any = {
   registerProvider(name: string, config: unknown) {
     registry.registerProvider(name, config as never);
   },
+  unregisterProvider(name: string) {
+    registry.unregisterProvider(name);
+  },
   registerCommand(name: string, definition: { handler(args: unknown, ctx: any): Promise<void> }) {
     if (name === "workbuddy") command = definition.handler;
   },

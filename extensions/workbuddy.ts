@@ -1,8 +1,4 @@
 // WorkBuddy AI international provider for OMP.
-import { readFileSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import {
   createWorkBuddyProvider,
@@ -15,36 +11,16 @@ import {
   FLASH_MAX_TOKENS,
   loadProductConfig,
   type ModelScope as Scope,
+  type ProductConfigFallbackReason,
+  type ProductConfigSource,
 } from "../src/models.ts";
+import { loadSettings, saveSettings } from "../src/settings.ts";
 
 type Cred = WorkBuddyBillingAccess & { expiresAtMs?: number; nickname?: string };
 
 const PROVIDER = "workbuddy";
 const GLOBAL_BASE = "https://www.workbuddy.ai";
 const CLIENT_UA = "CLI/2.63.2 CodeBuddy/2.63.2";
-function agentDir(): string {
-  return process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
-}
-
-
-
-
-
-function settingsPath(): string {
-  return join(agentDir(), ".workbuddy-settings.json");
-}
-
-export function loadSettings(): { scope: Scope } {
-  try {
-    const parsed = JSON.parse(readFileSync(settingsPath(), "utf8")) as { scope?: string };
-    if (parsed.scope === "all") return { scope: "all" };
-  } catch { /* default free */ }
-  return { scope: "free" };
-}
-
-async function saveSettings(scope: Scope): Promise<void> {
-  await writeFile(settingsPath(), `${JSON.stringify({ scope }, null, 2)}\n`, { mode: 0o600 });
-}
 
 
 
@@ -196,15 +172,37 @@ function bar(remain: number, size: number, width = 28): string {
   return `${"█".repeat(n)}${"░".repeat(width - n)}`;
 }
 
+const FALLBACK_REASON_LABELS: Record<ProductConfigFallbackReason, string> = {
+  missing: "缓存不存在",
+  unreadable: "缓存不可读",
+  "invalid-json": "JSON 无效",
+  "invalid-schema": "结构无效",
+  "no-valid-models": "无有效模型",
+};
+
+type CatalogExtra = {
+  scope: Scope;
+  models: { name: string }[];
+  source: ProductConfigSource;
+  fallbackReason?: ProductConfigFallbackReason;
+};
+
 export function widgetLines(input: {
   cred?: Cred;
   credits?: { total: number; packs: Pack[] };
   error?: string;
   scope?: Scope;
   models?: { name: string }[];
+  source?: ProductConfigSource;
+  fallbackReason?: ProductConfigFallbackReason;
 }): string[] {
   const scope = input.scope ?? "free";
   const lines = [`WorkBuddy AI · 国际版 · ${scope === "all" ? "全部模型" : "仅免费模型"}`];
+  const source = input.source ?? "builtin-fallback";
+  const fallback = input.fallbackReason ? ` · ${FALLBACK_REASON_LABELS[input.fallbackReason]}` : "";
+  lines.push(`目录  ${source}${fallback}`);
+  const names = (input.models ?? []).map((model) => model.name).join("  |  ");
+  lines.push(`模型  ${names || "（当前范围为空）"}`);
   if (!input.cred) {
     lines.push("未登录。设置 → 模型 → WorkBuddy AI → Connect，或 /login workbuddy");
     if (input.error) lines.push(input.error);
@@ -224,8 +222,6 @@ export function widgetLines(input: {
   } else if (input.error) {
     lines.push(`积分  ${input.error}`);
   }
-  const names = (input.models ?? []).map((model) => model.name).join("  |  ") || "（无模型）";
-  lines.push(`模型  ${names}`);
   lines.push("设置  /workbuddy");
   return lines;
 }
@@ -277,7 +273,7 @@ export function showsWorkBuddyCard(provider: unknown, force = false): boolean {
   return force || provider === PROVIDER;
 }
 
-type PaintCtx = { ui: Ui; model?: { provider?: string } };
+type PaintCtx = { ui: Ui; model?: { provider?: string; id?: string } };
 type PaintGuard = { signal: AbortSignal; current(): boolean };
 
 /** Paints the card and returns the lines drawn, or undefined when hidden/stale. */
@@ -286,7 +282,7 @@ async function paint(
   provider: WorkBuddyProviderController,
   guard: PaintGuard,
   notify = false,
-  extra: { scope: Scope; models: { name: string }[] } = { scope: "free", models: [] },
+  extra: CatalogExtra = { scope: "free", models: [], source: "builtin-fallback", fallbackReason: "missing" },
   force = false,
 ): Promise<string[] | undefined> {
   const { ui } = ctx;
@@ -310,7 +306,10 @@ async function paint(
   if (!guard.current()) return undefined;
   const lines = widgetLines({ cred, credits, error, ...extra });
   ui.setWidget("workbuddy", lines);
-  ui.setStatus("workbuddy", credits ? `积分 ${credits.total}` : cred ? "WorkBuddy 已登录" : "WorkBuddy 未登录");
+  const status = extra.models.length === 0
+    ? `WorkBuddy · ${extra.scope} 无模型`
+    : credits ? `积分 ${credits.total}` : cred ? "WorkBuddy 已登录" : "WorkBuddy 未登录";
+  ui.setStatus("workbuddy", status);
   if (notify) {
     ui.notify(
       error ? `WorkBuddy：${error}` : `WorkBuddy 已刷新 · 积分 ${credits?.total ?? "?"}`,
@@ -324,12 +323,21 @@ async function paint(
 export default async function (pi: ExtensionAPI) {
   const provider = createWorkBuddyProvider();
   let scope = loadSettings().scope;
-  let models = buildOmpModels(loadProductConfig(), scope);
-  let ids = new Set(models.map((model) => model.id));
+  let catalog = loadProductConfig();
+  let models = buildOmpModels(catalog, scope);
+  let activeIds = new Set(models.map((model) => model.id));
+  const knownIds = new Set(catalog.models.map((model) => model.id));
+  let pendingIds = new Set<string>();
+  let transitioning = false;
   let card: string[] | undefined;
   let uiGeneration = 0;
   let uiAbort = new AbortController();
-  const extra = () => ({ scope, models });
+  const extra = (): CatalogExtra => ({
+    scope,
+    models,
+    source: catalog.source,
+    fallbackReason: catalog.fallbackReason,
+  });
 
   function invalidateUi(reason: string): number {
     uiGeneration += 1;
@@ -338,11 +346,67 @@ export default async function (pi: ExtensionAPI) {
     return uiGeneration;
   }
 
-  function apply(next?: Scope) {
-    if (next) scope = next;
-    models = buildOmpModels(loadProductConfig(), scope);
-    ids = new Set(models.map((model) => model.id));
-    pi.registerProvider(PROVIDER, provider.config(models));
+  function replaceProvider(nextModels: typeof models): void {
+    pi.unregisterProvider(PROVIDER);
+    pi.registerProvider(PROVIDER, provider.config(nextModels));
+  }
+
+  function throwAfterRollback(previousModels: typeof models, original: unknown): never {
+    try {
+      replaceProvider(previousModels);
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [original, rollbackError],
+        "WorkBuddy model scope update failed and the previous provider could not be restored",
+      );
+    }
+    throw original;
+  }
+
+  async function switchScope(nextScope: Scope, ctx: PaintCtx): Promise<void> {
+    if (transitioning) throw new Error("WorkBuddy model scope update is already in progress");
+
+    const nextCatalog = loadProductConfig();
+    const nextModels = buildOmpModels(nextCatalog, nextScope);
+    const nextActiveIds = new Set(nextModels.map((model) => model.id));
+    const nextKnownIds = new Set(nextCatalog.models.map((model) => model.id));
+    const previousModels = models;
+    pendingIds = nextKnownIds;
+    transitioning = true;
+    try {
+      try {
+        replaceProvider(nextModels);
+      } catch (error) {
+        throwAfterRollback(previousModels, error);
+      }
+      try {
+        await saveSettings(nextScope);
+      } catch (error) {
+        throwAfterRollback(previousModels, error);
+      }
+
+      scope = nextScope;
+      catalog = nextCatalog;
+      models = nextModels;
+      activeIds = nextActiveIds;
+      for (const id of nextKnownIds) knownIds.add(id);
+      card = undefined;
+      invalidateUi("WorkBuddy model scope changed");
+
+      if (
+        ctx.model?.provider === PROVIDER
+        && typeof ctx.model.id === "string"
+        && !activeIds.has(ctx.model.id)
+      ) {
+        ctx.ui.notify(
+          `当前模型 ${ctx.model.id} 已不在 WorkBuddy ${scope} 范围内，请重新选择模型`,
+          "warning",
+        );
+      }
+    } finally {
+      pendingIds = new Set();
+      transitioning = false;
+    }
   }
 
   async function repaint(
@@ -375,12 +439,32 @@ export default async function (pi: ExtensionAPI) {
     }
   }
 
-  apply();
+  async function chooseScope(nextScope: Scope, ctx: PaintCtx): Promise<void> {
+    try {
+      await switchScope(nextScope, ctx);
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      ctx.ui.notify(`WorkBuddy 模型范围切换失败：${message}`, "error");
+      return;
+    }
+    await repaint(ctx, true, true);
+  }
+
+  replaceProvider(models);
 
   pi.on("before_provider_request", (event) => {
     const payload = asObject(event.payload);
-    if (!payload || !isWorkBuddyModel(payload.model, ids)) return;
-    return prepareChatPayload(payload);
+    if (!payload || typeof payload.model !== "string") return;
+    const modelId = payload.model;
+    if (transitioning && (knownIds.has(modelId) || pendingIds.has(modelId))) {
+      throw new Error(`WorkBuddy model "${modelId}" is unavailable while its scope is changing`);
+    }
+    if (activeIds.has(modelId)) return prepareChatPayload(payload);
+    if (knownIds.has(modelId)) {
+      throw new Error(
+        `WorkBuddy model "${modelId}" is outside the active "${scope}" scope; select an available model`,
+      );
+    }
   });
 
   pi.on("session_start", (_event, ctx) => {
@@ -419,9 +503,7 @@ export default async function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const cmd = String(args ?? "").trim().toLowerCase();
       if (cmd === "free" || cmd === "all") {
-        await saveSettings(cmd);
-        apply(cmd);
-        await repaint(ctx, true, true);
+        await chooseScope(cmd, ctx);
         return;
       }
       if (cmd === "logout" || cmd === "disconnect") {
@@ -435,12 +517,14 @@ export default async function (pi: ExtensionAPI) {
       ]);
       if (pick === undefined) return;
       if (pick.startsWith("列出全部")) {
-        await saveSettings("all");
-        apply("all");
-      } else if (pick.startsWith("只列出")) {
-        await saveSettings("free");
-        apply("free");
-      } else if (pick === "断开登录") {
+        await chooseScope("all", ctx);
+        return;
+      }
+      if (pick.startsWith("只列出")) {
+        await chooseScope("free", ctx);
+        return;
+      }
+      if (pick === "断开登录") {
         await logout(ctx);
         return;
       }

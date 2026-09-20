@@ -35,11 +35,11 @@
 - [x] 3.3 按 Gateway 生成 text/image 能力，必要时覆盖 stripImageInput；以真实图片输入证明请求未被宿主家族默认规则剥离，而非只验证 UI 标签。（MODEL-03）
 - [x] 3.4 将已有且有 Gateway 证据的模型 token clamp 同步到目录/请求，测试高于上限被限制和较小合法预算不被上调，contextWindow/maxTokens 不虚报。（MODEL-04、GATE-01）
 - [x] 3.5 重写免费过滤：已知付费和未知价格排除，有效目录免费为空不补 FREE_IDS；保留 paid/unknown/empty 三类永久回归，并证明 cost 零占位不用于宣称免费。（MODEL-05）
-- [ ] 3.6 实现 M0 Dynamic Model ADR 选中的唯一目录路径：A 使用 fetchDynamicModels/宿主缓存并验证 identity/scope/空集合；B 使用 Desktop product cache→builtin fallback 并验证缺失/损坏缓存及免费证据约束；两种选择均显示准确 model source，未选分支在 ADR 记理由、不写空实现。（MODEL-06；D6）
-- [ ] 3.7 完成 Provider 重注册与 scope 提交：同步模型、ID Set、selector、持久化和 Widget 状态；验证空数组真正替换旧目录、注册/设置失败不虚报成功，并保留 credential unchanged 永久回归。（MODEL-07）
-- [ ] 3.8 当前模型被新 scope 移除时提示用户重选，并在选择范围内模型前阻断该 retained Model object 的后续 WorkBuddy 请求；用真实 OMP 验证 all→paid model→free(empty)→next Chat 在 transport 前失败且 WorkBuddy HTTP 请求数为零，不自动选择付费或任意 fallback。（MODEL-07）
-- [ ] 3.9 提取非敏感 `src/settings.ts`，采用宿主 agent 目录规则与 PI_CODING_AGENT_DIR；验证默认 .omp 路径、scope 及 empty free 重启恢复且文件无 Token/credential。（MODEL-07、UX-07）
-- [ ] 3.10 验收至少三个模型的 metadata、thinking、Vision、context/max tokens、free/all/empty、scope restart 和重注册不改 credential；保存目录来源与真实模型 ID 证据后通过 M2。（MODEL-01–07）
+- [x] 3.6 实现 M0 Dynamic Model ADR 选中的唯一目录路径：A 使用 fetchDynamicModels/宿主缓存并验证 identity/scope/空集合；B 使用 Desktop product cache→builtin fallback 并验证缺失/损坏缓存及免费证据约束；两种选择均显示准确 model source，未选分支在 ADR 记理由、不写空实现。（MODEL-06；D6）
+- [x] 3.7 完成 Provider 重注册与 scope 提交：同步模型、ID Set、selector、持久化和 Widget 状态；验证空数组真正替换旧目录、注册/设置失败不虚报成功，并保留 credential unchanged 永久回归。（MODEL-07）
+- [x] 3.8 当前模型被新 scope 移除时提示用户重选，并在选择范围内模型前阻断该 retained Model object 的后续 WorkBuddy 请求；用真实 OMP 验证 all→paid model→free(empty)→next Chat 在 transport 前失败且 WorkBuddy HTTP 请求数为零，不自动选择付费或任意 fallback。（MODEL-07）
+- [x] 3.9 提取非敏感 `src/settings.ts`，采用宿主 agent 目录规则与 PI_CODING_AGENT_DIR；验证默认 .omp 路径、scope 及 empty free 重启恢复且文件无 Token/credential。（MODEL-07、UX-07）
+- [x] 3.10 验收至少三个模型的 metadata、thinking、Vision、context/max tokens、free/all/empty、scope restart 和重注册不改 credential；保存目录来源与真实模型 ID 证据后通过 M2。（MODEL-01–07）
 
 ## 4. M3 — 最小 Gateway 兼容与工具闭环
 

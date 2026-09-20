@@ -52,6 +52,9 @@ const pi = {
   registerProvider(name: string, config: Parameters<ModelRegistry["registerProvider"]>[1]) {
     registry.registerProvider(name, config);
   },
+  unregisterProvider(name: string) {
+    registry.unregisterProvider(name);
+  },
   registerCommand() {},
 };
 

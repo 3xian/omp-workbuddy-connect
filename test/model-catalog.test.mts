@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildOmpModels,
   clampModelMaxTokens,
@@ -100,10 +103,47 @@ assert(paidAndUnknown, "paid/unknown catalog was rejected");
 assert(buildOmpModels(paidAndUnknown, "free").length === 0, "empty free catalog was widened with fallbacks");
 assert(buildOmpModels(paidAndUnknown, "all").length === 2, "all scope did not mean the current cache catalog");
 
-const builtin = loadProductConfig("/definitely/missing/workbuddy-product-config.json");
-assert(builtin.source === "builtin", "missing cache did not select builtin catalog");
-assert(buildOmpModels(builtin, "free").length === 0, "builtin zero cost or stale credits claimed free status");
-assert(buildOmpModels(builtin, "all").length === 3, "builtin fallback catalog was unavailable in all scope");
+const temp = await mkdtemp(join(tmpdir(), "workbuddy-model-catalog-"));
+try {
+  const missing = loadProductConfig(join(temp, "missing.json"));
+  assert(missing.source === "builtin-fallback", "missing cache did not select builtin fallback");
+  assert(missing.fallbackReason === "missing", "missing cache reason was lost");
+  assert(buildOmpModels(missing, "free").length === 0, "builtin zero cost or stale credits claimed free status");
+  assert(buildOmpModels(missing, "all").length === 3, "builtin fallback catalog was unavailable in all scope");
+
+  const unreadablePath = join(temp, "cache-directory");
+  await mkdir(unreadablePath);
+  const unreadable = loadProductConfig(unreadablePath);
+  assert(unreadable.source === "builtin-fallback" && unreadable.fallbackReason === "unreadable", "unreadable cache reason was lost");
+
+  const invalidJsonPath = join(temp, "invalid-json.json");
+  await writeFile(invalidJsonPath, "{");
+  const invalidJson = loadProductConfig(invalidJsonPath);
+  assert(invalidJson.source === "builtin-fallback" && invalidJson.fallbackReason === "invalid-json", "invalid JSON cache reason was lost");
+
+  const invalidSchemaPath = join(temp, "invalid-schema.json");
+  await writeFile(invalidSchemaPath, JSON.stringify({ models: "not-an-array" }));
+  const invalidSchema = loadProductConfig(invalidSchemaPath);
+  assert(invalidSchema.source === "builtin-fallback" && invalidSchema.fallbackReason === "invalid-schema", "invalid schema cache reason was lost");
+
+  const noValidModelsPath = join(temp, "no-valid-models.json");
+  await writeFile(noValidModelsPath, JSON.stringify({ models: [null, { id: "" }] }));
+  const noValidModels = loadProductConfig(noValidModelsPath);
+  assert(
+    noValidModels.source === "builtin-fallback" && noValidModels.fallbackReason === "no-valid-models",
+    "non-empty cache without a valid model did not use its explicit fallback reason",
+  );
+  assert(noValidModels.diagnostics.length > 0, "invalid cache row diagnostics were discarded");
+
+  const emptyPath = join(temp, "empty.json");
+  await writeFile(emptyPath, JSON.stringify({ models: [] }));
+  const empty = loadProductConfig(emptyPath);
+  assert(empty.source === "desktop-cache", "valid empty cache was mislabeled as fallback");
+  assert(empty.fallbackReason === undefined, "valid empty cache acquired a fallback reason");
+  assert(buildOmpModels(empty, "all").length === 0, "valid empty cache was widened with builtin models");
+} finally {
+  await rm(temp, { recursive: true, force: true });
+}
 
 assert(clampModelMaxTokens("deepseek-v4.1-flash", 128_000) === FLASH_MAX_TOKENS, "catalog cap was not enforced");
 assert(clampModelMaxTokens("deepseek-v4.1-flash", 1_024) === 1_024, "small valid budget was raised");

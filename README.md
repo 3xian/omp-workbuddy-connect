@@ -2,13 +2,13 @@
 
 > **Development status — not release-ready**
 >
-> M0、M1 与 M2 3.1–3.5 已完成；M2 3.6–3.10 以及 M3–M5 尚未完成，因此本分支不可发布。
+> M0、M1 与 M2 已完成；M3–M5 尚未完成，因此本分支不可发布。
 > 权威实施进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
 > 下文描述当前开发分支行为；尚未通过的里程碑能力会明确标注。
 
 ## 当前开发分支
 
-WorkBuddy AI 国际版 provider for OMP。当前认证与基础模型契约已迁移到 OMP，完整 M2 scope 切换安全与后续 Gateway/UI/release gate 仍在开发。
+WorkBuddy AI 国际版 provider for OMP。当前认证、模型目录契约和 scope 切换安全已迁移到 OMP；Gateway/UI/release gate 仍在开发。
 
 移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
@@ -36,9 +36,9 @@ pi -e /path/to/pi-workbuddy-connect
 
 ## 模型与推理档
 
-默认 scope 为 `free`。只有有效 Desktop 产品目录中带明确零 multiplier credits 证据的模型会显示；`0`、`0.0`、`x0`、`x0.00` 等规范零值会归一为免费证据，非零、缺失或格式错误均不是免费。内置清单仅作为目录 fallback，不构成免费证据，因此 fallback 来源的 `free` 可以为空。
+默认 scope 为 `free`。只有有效 Desktop 产品目录中带明确零 multiplier credits 证据的模型会显示；`0`、`0.0`、`x0`、`x0.00` 等规范零值会归一为免费证据，非零、缺失或格式错误均不是免费。有效缓存（包括 `models: []`）是权威结果，不会被内置列表扩宽。内置清单仅作为整个目录不可用或无任何有效行时的 fallback，不构成免费证据，因此 fallback 来源的 `free` 可以为空。
 
-每个模型的 reasoning、图片能力和推理档来自产品配置 `~/.workbuddy-ai/cache/acc-product-config-v3.json`。缓存不可用时，`all` scope 可使用当前内置目录：
+每个模型的 reasoning、图片能力和推理档来自产品配置 `~/.workbuddy-ai/cache/acc-product-config-v3.json`。Widget 显示精确来源 `desktop-cache` 或 `builtin-fallback`；fallback 同时显示缺失、不可读、JSON 无效、结构无效或无有效模型的原因。缓存不可用时，`all` scope 可使用当前内置目录：
 
 | 模型 | 上下文 / 有效输出上限 | OMP canonical effort |
 | --- | --- | --- |
@@ -46,31 +46,31 @@ pi -e /path/to/pi-workbuddy-connect
 | Hy4 preview | 1M / 64k | high |
 | Hy3 | 192k / 64k | low · high |
 
-推理配置使用 OMP canonical `thinking: { mode: "effort", efforts, requiresEffort }`。未声明可信 `supportedEfforts` 或 off 能力时，只保留 `reasoning` capability，不自动扩展 effort；`canDisableThinking=false` 会禁止 off。对于允许关闭的模型，OMP 18.2.6 在没有 Gateway-specific disable 证据时会把关闭请求限制到最低受支持 effort；WorkBuddy 的真实关闭编码仍须在 3.10 通过 live 请求确认，插件不会预设未经验证的 `none` 或其他 wire 值。
+推理配置使用 OMP canonical `thinking: { mode: "effort", efforts, requiresEffort }`。未声明可信 `supportedEfforts` 或 off 能力时，只保留 `reasoning` capability，不自动扩展 effort；`canDisableThinking=false` 会禁止 off。对于允许关闭的模型，OMP 18.2.6 在没有 Gateway-specific disable 证据时会把关闭请求限制到最低受支持 effort；WorkBuddy 的真实关闭编码仍须在 M3/M5 的 Gateway 与 live gate 确认，插件不会预设未经验证的 `none` 或其他 wire 值。
 
 ## 设置
 
 pi 没有 DSH 那种插件配置卡片，等价入口有两处：
 
-- **侧栏 widget** — 账号、token 过期时间、各积分包余量，以及当前模型列表。
+- **侧栏 widget** — 账号、token 过期时间、目录来源与 fallback 原因、各积分包余量，以及当前模型列表（空范围会明确显示）。
 - **`/workbuddy`** — 弹出选择菜单：
 
   ```
   刷新积分与账号
-  列出全部模型（含付费）   ← 切换范围，scope 存 ~/.pi/agent/.workbuddy-settings.json
+  列出全部模型（含付费）   ← 切换范围，scope 存 ~/.omp/agent/.workbuddy-settings.json
   断开登录
   ```
 
   也接受参数：`/workbuddy free` · `/workbuddy all`。断开认证请使用宿主命令 `/logout workbuddy`。
 
-切换范围会立即重注册 provider；空目录清理与 retained model 阻断仍属于未完成的 3.7/3.8，当前不可视为完整 scope 安全保证。
+切换范围会先注销旧 Provider overlay，再注册新目录、保存非敏感 scope，最后提交内存与 Widget 状态。注册或设置写入失败会恢复旧目录且不报告成功；空目录会清除旧模型。当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
 
 ## 环境变量
 
 | 变量 | 作用 |
 | --- | --- |
 | `WORKBUDDYAI_PRODUCT_CONFIG` | 指定产品配置 JSON 路径 |
-| `PI_CODING_AGENT_DIR` | OMP agent 目录，当前仅影响非敏感设置文件位置 |
+| `PI_CODING_AGENT_DIR` | 覆盖 OMP agent 目录；非敏感 scope 设置文件随宿主目录规则存放 |
 
 ## 自检
 
@@ -93,16 +93,18 @@ npx --yes bun@1.3.14 extensions/workbuddy.ts --self-check
 ## 测试
 
 ```bash
-node test/model-catalog.test.mts
+npx --yes bun@1.3.14 test/model-catalog.test.mts
 npx --yes bun@1.3.14 test/model-transport.test.mts
+npx --yes bun@1.3.14 test/settings.test.mts
 npx --yes bun@1.3.14 test/auth.test.mts
 npx --yes bun@1.3.14 test/provider.test.mts
 npx --yes bun@1.3.14 test/scope.test.mts
 npx --yes bun@1.3.14 test/session-start.test.mts
+npx --yes bun@1.3.14 test/contract/model-scope-lifecycle.test.mts
 npx --yes bun@1.3.14 test/contract/persisted-credential-restart.test.mts
 npx --yes bun@1.3.14 test/contract/request-identity-binding.test.mts
 npx --yes bun@1.3.14 test/contract/task-runtime-contract.test.mts
-npx tsc -p tsconfig.json
+npx tsc --noEmit
 ```
 
 ## License

@@ -35,10 +35,19 @@ export interface ModelDiagnostic {
   message: string;
 }
 
+export type ProductConfigSource = "desktop-cache" | "builtin-fallback";
+export type ProductConfigFallbackReason =
+  | "missing"
+  | "unreadable"
+  | "invalid-json"
+  | "invalid-schema"
+  | "no-valid-models";
+
 export interface ProductConfig {
-  source: "cache" | "builtin";
+  source: ProductConfigSource;
   models: ProductModel[];
   diagnostics: ModelDiagnostic[];
+  fallbackReason?: ProductConfigFallbackReason;
 }
 
 // Gateway evidence: larger requests to this model enter a reasoning loop.
@@ -158,15 +167,19 @@ function parseProductModel(
   };
 }
 
-export function parseProductConfig(text: string): ProductConfig | undefined {
+type ParsedProductDocument =
+  | { config: ProductConfig; declaredModelCount: number }
+  | { fallbackReason: "invalid-json" | "invalid-schema" };
+
+function parseProductDocument(text: string): ParsedProductDocument {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
   } catch {
-    return undefined;
+    return { fallbackReason: "invalid-json" };
   }
   const document = asRecord(parsed);
-  if (!document || !Array.isArray(document.models)) return undefined;
+  if (!document || !Array.isArray(document.models)) return { fallbackReason: "invalid-schema" };
 
   const models: ProductModel[] = [];
   const diagnostics: ModelDiagnostic[] = [];
@@ -187,20 +200,45 @@ export function parseProductConfig(text: string): ProductConfig | undefined {
     ids.add(result.model.id);
     models.push(result.model);
   }
-  return { source: "cache", models, diagnostics };
+  return {
+    config: { source: "desktop-cache", models, diagnostics },
+    declaredModelCount: document.models.length,
+  };
+}
+
+export function parseProductConfig(text: string): ProductConfig | undefined {
+  const result = parseProductDocument(text);
+  return "config" in result ? result.config : undefined;
+}
+
+function builtinFallback(
+  fallbackReason: ProductConfigFallbackReason,
+  diagnostics: ModelDiagnostic[] = [],
+): ProductConfig {
+  return { source: "builtin-fallback", fallbackReason, models: BUILTIN_MODELS, diagnostics };
 }
 
 export function loadProductConfig(path = productConfigPath()): ProductConfig {
+  let text: string;
   try {
-    const parsed = parseProductConfig(readFileSync(path, "utf8"));
-    if (parsed?.models.length) return parsed;
-    if (parsed) return { source: "builtin", models: BUILTIN_MODELS, diagnostics: parsed.diagnostics };
-  } catch { /* missing/unreadable cache → builtin */ }
-  return { source: "builtin", models: BUILTIN_MODELS, diagnostics: [] };
+    text = readFileSync(path, "utf8");
+  } catch (error) {
+    const code = typeof error === "object" && error !== null && "code" in error
+      ? error.code
+      : undefined;
+    return builtinFallback(code === "ENOENT" ? "missing" : "unreadable");
+  }
+
+  const parsed = parseProductDocument(text);
+  if ("fallbackReason" in parsed) return builtinFallback(parsed.fallbackReason);
+  if (parsed.declaredModelCount > 0 && parsed.config.models.length === 0) {
+    return builtinFallback("no-valid-models", parsed.config.diagnostics);
+  }
+  return parsed.config;
 }
 
 export function freeModelIds(config: ProductConfig): readonly string[] {
-  if (config.source !== "cache") return [];
+  if (config.source !== "desktop-cache") return [];
   return config.models.filter((model) => creditsAreFree(model.credits)).map((model) => model.id);
 }
 

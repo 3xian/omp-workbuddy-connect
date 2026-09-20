@@ -122,7 +122,7 @@ M4 将现有 `POST /v2/billing/meter/get-user-resource` 适配为一个 WorkBudd
 
 ### D9 — 目录和 UI 是不同状态边界
 
-Scope 更新构建新目录与 ID Set，提交 Provider/selector 状态后持久化和更新 UI；注册或写设置失败不虚报切换成功，并避免保存新 scope 却继续展示旧目录。空模型数组的真实替换语义在 M0/M2 验证。当前模型被移除时明确要求重选，并在用户选择范围内模型前阻断 retained Model object 的后续 WorkBuddy transport；绝不自动换付费或任意 fallback。
+Scope 更新先构建候选目录与 ID Set，再按外部 Provider 注销/注册 → 持久化设置 → 提交内存目录、selector/请求 ID 和 UI 状态的顺序执行；注册或写设置失败必须重注册旧 Provider，且不得提交或虚报新 scope。空模型数组的真实替换语义在 M2 通过真实 `ModelRegistry` 验证。当前模型被移除时明确要求重选，并在用户选择范围内模型前阻断 retained Model object 的后续 WorkBuddy transport；绝不自动换付费或任意 fallback。
 `stateGeneration` 是仅针对异步展示的内存计数，logout/account switch/scope/session teardown 递增；完成后比对 generation、当前模型和活动会话再应用结果。模型离开 WorkBuddy 时同步清理，迟到响应不能重显。使用 `session_start/turn_start`，接受下一 turn 更新限制；无 UI 时所有交互调用跳过，认证/注册/hooks 始终可用。
 
 设置只保存 scope 等非敏感值，使用宿主 getAgentDir 等实际公开目录规则，默认 `~/.omp/agent` 并尊重 `PI_CODING_AGENT_DIR`，不引入新环境变量。
