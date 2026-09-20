@@ -1,18 +1,21 @@
-// WorkBuddy AI 国际版。登录走插件 OAuth 弹窗，桌面凭据仅作回退。推理档读产品配置。
+// WorkBuddy AI international provider for OMP.
 import { readFileSync } from "node:fs";
-import { readFile, writeFile, unlink } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { OAuthCredentials, OAuthLoginCallbacks } from "@oh-my-pi/pi-ai"
-import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
+import {
+  createWorkBuddyProvider,
+  type WorkBuddyAccountAccess,
+  type WorkBuddyProviderController,
+} from "../src/provider.ts";
+
+type Cred = WorkBuddyAccountAccess & { expiresAtMs?: number; nickname?: string };
 
 const PROVIDER = "workbuddy";
 const GLOBAL_BASE = "https://www.workbuddy.ai";
 const CLIENT_UA = "CLI/2.63.2 CodeBuddy/2.63.2";
-const AUTH_ENV = "WORKBUDDY_AUTH_FILE";
-const AUTH_FILE = "workbuddy-desktop-ai.info";
 const PRODUCT_CONFIG_ENV = "WORKBUDDYAI_PRODUCT_CONFIG";
-const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 const COMPAT = {
   supportsDeveloperRole: false,
@@ -24,15 +27,7 @@ type Effort = (typeof EFFORTS)[number];
 type Scope = "free" | "all";
 
 
-type Cred = {
-  accessToken: string;
-  refreshToken: string;
-  expiresAtMs: number;
-  domain: string;
-  uid: string;
-  enterpriseId?: string;
-  nickname?: string;
-};
+
 
 type ProductModel = {
   id: string;
@@ -214,177 +209,6 @@ export function buildPiModels(config: ProductConfig, scope: Scope) {
   });
 }
 
-function desktopCandidates(): string[] {
-  const env = process.env[AUTH_ENV]?.trim();
-  if (env) return [env];
-  const home = homedir();
-  const rel = ["CodeBuddyExtension", "Data", "Public", "auth", AUTH_FILE] as const;
-  if (process.platform === "darwin") return [join(home, "Library", "Application Support", ...rel)];
-  if (process.platform === "win32") {
-    return [join(home, "AppData", "Local", ...rel), join(home, "AppData", "Roaming", ...rel)];
-  }
-  return [join(home, ".config", ...rel)];
-}
-
-function ownPath(): string {
-  return join(process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent"), ".workbuddy-auth.json");
-}
-
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value !== "" ? value : undefined;
-}
-
-function expiryToMs(value: number): number {
-  if (value <= 0) return 0;
-  return value > 1e12 ? value : value * 1000;
-}
-
-export function parseWorkBuddyAuth(text: string): Cred | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
-  const document = parsed as Record<string, unknown>;
-  const nested = typeof document.auth === "object" && document.auth !== null;
-  const auth = (nested ? document.auth : document) as Record<string, unknown>;
-  const identity = (
-    nested && typeof document.account === "object" && document.account !== null
-      ? document.account
-      : document
-  ) as Record<string, unknown>;
-  const accessToken = typeof auth.accessToken === "string" ? auth.accessToken : "";
-  if (accessToken === "") return undefined;
-  const enterpriseId = optionalString(identity.enterpriseId);
-  const nickname = optionalString(identity.nickname);
-  return {
-    accessToken,
-    refreshToken: typeof auth.refreshToken === "string" ? auth.refreshToken : "",
-    expiresAtMs: typeof auth.expiresAt === "number" ? expiryToMs(auth.expiresAt) : 0,
-    domain: optionalString(auth.domain) ?? "",
-    uid: optionalString(identity.uid) ?? "",
-    ...(enterpriseId ? { enterpriseId } : {}),
-    ...(nickname ? { nickname } : {}),
-  };
-}
-
-function parseOwn(text: string): Cred | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
-  const document = parsed as Record<string, unknown>;
-  if (document.version !== 1 || typeof document.credential !== "object" || document.credential === null) {
-    return undefined;
-  }
-  const stored = document.credential as Record<string, unknown>;
-  const accessToken = typeof stored.accessToken === "string" ? stored.accessToken : "";
-  if (accessToken === "") return undefined;
-  const enterpriseId = optionalString(stored.enterpriseId);
-  const nickname = optionalString(stored.nickname);
-  return {
-    accessToken,
-    refreshToken: typeof stored.refreshToken === "string" ? stored.refreshToken : "",
-    expiresAtMs: typeof stored.expiresAtMs === "number" ? stored.expiresAtMs : 0,
-    domain: optionalString(stored.domain) ?? "",
-    uid: optionalString(stored.uid) ?? "",
-    ...(enterpriseId ? { enterpriseId } : {}),
-    ...(nickname ? { nickname } : {}),
-  };
-}
-
-async function readText(path: string): Promise<string | undefined> {
-  try {
-    return await readFile(path, "utf8");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw error;
-  }
-}
-
-async function current(): Promise<Cred | undefined> {
-  const own = await readText(ownPath()).then((text) => (text ? parseOwn(text) : undefined));
-  let desktop: Cred | undefined;
-  for (const path of desktopCandidates()) {
-    const text = await readText(path);
-    if (!text) continue;
-    desktop = parseWorkBuddyAuth(text);
-    if (desktop) break;
-  }
-  if (!desktop) return own;
-  if (!own) return desktop;
-  return own.expiresAtMs > desktop.expiresAtMs ? own : desktop;
-}
-
-async function saveOwn(cred: Cred): Promise<void> {
-  await writeFile(ownPath(), JSON.stringify({ version: 1, credential: cred }), { mode: 0o600 });
-}
-
-async function refreshAccess(cred: Cred): Promise<Cred> {
-  const response = await fetch(`${GLOBAL_BASE}/v2/plugin/auth/token/refresh`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json, text/plain, */*",
-      "X-Requested-With": "XMLHttpRequest",
-      Origin: GLOBAL_BASE,
-      Referer: `${GLOBAL_BASE}/`,
-      "User-Agent": CLIENT_UA,
-      "X-Refresh-Token": cred.refreshToken,
-      "X-Auth-Refresh-Source": "workbuddy",
-      ...(cred.enterpriseId ? { "X-Enterprise-Id": cred.enterpriseId } : {}),
-    },
-    signal: AbortSignal.timeout(30_000),
-  });
-  const envelope = (await response.json()) as { code?: number; msg?: string; data?: Record<string, unknown> };
-  const data = envelope.data ?? {};
-  const accessToken = typeof data.accessToken === "string" ? data.accessToken : "";
-  if (!response.ok || envelope.code !== 0 || accessToken === "") {
-    throw new Error(envelope.msg || "workbuddy token refresh failed; sign in again in WorkBuddy AI");
-  }
-  return {
-    ...cred,
-    accessToken,
-    refreshToken: typeof data.refreshToken === "string" && data.refreshToken !== "" ? data.refreshToken : cred.refreshToken,
-    expiresAtMs: typeof data.expiresIn === "number" && data.expiresIn > 0
-      ? Date.now() + data.expiresIn * 1000
-      : cred.expiresAtMs,
-    domain: typeof data.domain === "string" && data.domain !== "" ? data.domain : cred.domain,
-  };
-}
-
-let inflight: Promise<Cred> | undefined;
-
-async function resolveCred(): Promise<Cred> {
-  const cred = await current();
-  if (!cred) {
-    throw new Error(
-      "workbuddy: 未登录。设置 → WorkBuddy AI → Connect 弹出登录页，或登录桌面应用 / 设 WORKBUDDY_AUTH_FILE",
-    );
-  }
-  if (cred.expiresAtMs > 0 && Date.now() + REFRESH_MARGIN_MS < cred.expiresAtMs) return cred;
-  if (cred.refreshToken === "") {
-    if (cred.expiresAtMs > Date.now() + 30_000) return cred;
-    throw new Error("workbuddy: access token expired; sign in again in WorkBuddy AI");
-  }
-  inflight ??= (async () => {
-    try {
-      const next = await refreshAccess(cred);
-      await saveOwn(next);
-      return next;
-    } catch (error) {
-      if (cred.expiresAtMs > Date.now() + 30_000) return cred;
-      throw error;
-    }
-  })().finally(() => {
-    inflight = undefined;
-  });
-  return inflight;
-}
 
 
 function stripAssistantReasoning(messages: unknown[]): void {
@@ -549,8 +373,8 @@ export function widgetLines(input: {
     lines.push("设置  /workbuddy");
     return lines;
   }
-  lines.push(`账号  已登录  ${input.cred.nickname || input.cred.uid}`);
-  lines.push(`令牌  ${fmtExpiry(input.cred.expiresAtMs)} 过期（自动续期）`);
+  lines.push(`账号  已登录  ${input.cred.nickname || input.cred.email || input.cred.uid}`);
+  lines.push(`令牌  ${fmtExpiry(input.cred.expiresAtMs ?? 0)} 过期（由 OMP 自动续期）`);
   if (input.credits) {
     lines.push(`积分  合计 ${input.credits.total}`);
     for (const pack of input.credits.packs) {
@@ -616,6 +440,7 @@ type PaintCtx = { ui: Ui; model?: { provider?: string } };
 /** Paints the card and returns the lines drawn, or undefined when hidden. */
 async function paint(
   ctx: PaintCtx,
+  provider: WorkBuddyProviderController,
   notify = false,
   extra: { scope: Scope; models: { name: string }[] } = { scope: "free", models: [] },
   force = false,
@@ -630,10 +455,9 @@ async function paint(
   let credits: { total: number; packs: Pack[] } | undefined;
   let error: string | undefined;
   try {
-    cred = await resolveCred();
+    cred = await provider.resolveCredential();
     credits = await fetchCredits(cred);
   } catch (caught) {
-    cred = await current();
     error = caught instanceof Error ? caught.message : String(caught);
   }
   const lines = widgetLines({ cred, credits, error, ...extra });
@@ -648,154 +472,22 @@ async function paint(
   return lines;
 }
 
-const PLUGIN_AUTH_HEADERS = {
-  Accept: "application/json, text/plain, */*",
-  "Content-Type": "application/json",
-  Origin: GLOBAL_BASE,
-  Referer: `${GLOBAL_BASE}/`,
-  "User-Agent": CLIENT_UA,
-  "X-Requested-With": "XMLHttpRequest",
-  "X-Product": "SaaS",
-  "X-No-Authorization": "true",
-  "X-No-User-Id": "1",
-  "X-No-Enterprise-Id": "1",
-  "X-No-Department-Info": "1",
-};
-
-export function jwtPayload(token: string): Record<string, unknown> {
-  const part = token.split(".")[1];
-  if (!part) return {};
-  try {
-    const padded = part.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
-    const parsed: unknown = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {};
-  } catch {
-    return {};
-  }
-}
-
-export function credFromPluginToken(
-  data: Record<string, unknown>,
-  accessToken: string,
-  now = Date.now(),
-): Cred {
-  const jwt = jwtPayload(accessToken);
-  const uid = optionalString(data.uid)
-    ?? optionalString(jwt.uid)
-    ?? optionalString(jwt.sub)
-    ?? optionalString(jwt.email)
-    ?? "";
-  const enterpriseId = optionalString(data.enterpriseId) ?? optionalString(data.enterprise_id);
-  const nickname = optionalString(data.nickname) ?? optionalString(jwt.email) ?? optionalString(jwt.name);
-  return {
-    accessToken,
-    refreshToken: optionalString(data.refreshToken) ?? "",
-    expiresAtMs: typeof data.expiresIn === "number" && data.expiresIn > 0 ? now + data.expiresIn * 1000 : 0,
-    domain: optionalString(data.domain) ?? "www.workbuddy.ai",
-    uid,
-    ...(enterpriseId ? { enterpriseId } : {}),
-    ...(nickname ? { nickname } : {}),
-  };
-}
-
-async function startPluginLogin(): Promise<{ state: string; authUrl: string }> {
-  const nonce = crypto.randomUUID().replaceAll("-", "");
-  const response = await fetch(`${GLOBAL_BASE}/v2/plugin/auth/state?platform=CLI&nonce=${nonce}`, {
-    method: "POST",
-    headers: PLUGIN_AUTH_HEADERS,
-    body: JSON.stringify({ nonce }),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const envelope = unwrap(await response.json());
-  const data = unwrap(envelope.data);
-  const state = typeof data.state === "string" ? data.state : "";
-  const authUrl = typeof data.authUrl === "string" ? data.authUrl : "";
-  if (!response.ok || envelope.code !== 0 || state === "" || authUrl === "") {
-    throw new Error(typeof envelope.msg === "string" && envelope.msg !== "" ? envelope.msg : "workbuddy login start failed");
-  }
-  return { state, authUrl };
-}
-
-async function pollPluginToken(state: string): Promise<Cred> {
-  const deadline = Date.now() + 15 * 60 * 1000;
-  while (Date.now() < deadline) {
-    const response = await fetch(`${GLOBAL_BASE}/v2/plugin/auth/token?state=${encodeURIComponent(state)}`, {
-      headers: PLUGIN_AUTH_HEADERS,
-      signal: AbortSignal.timeout(30_000),
-    });
-    const envelope = unwrap(await response.json());
-    if (envelope.code === 11217) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      continue;
-    }
-    const data = unwrap(envelope.data);
-    const accessToken = typeof data.accessToken === "string" ? data.accessToken : "";
-    if (!response.ok || envelope.code !== 0 || accessToken === "") {
-      throw new Error(typeof envelope.msg === "string" && envelope.msg !== "" ? envelope.msg : "workbuddy login failed");
-    }
-    return credFromPluginToken(data, accessToken);
-  }
-  throw new Error("workbuddy login timed out");
-}
-
-async function loginWorkBuddy(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
-  callbacks.onProgress?.("正在打开 WorkBuddy 登录页…");
-  const { state, authUrl } = await startPluginLogin();
-  callbacks.onAuth({ url: authUrl });
-  callbacks.onProgress?.("请在弹出的页面完成登录，完成后会自动继续");
-  const cred = await pollPluginToken(state);
-  await saveOwn(cred);
-  return {
-    access: cred.accessToken,
-    refresh: cred.refreshToken,
-    expires: cred.expiresAtMs,
-
-    accountId: cred.uid,
-    orgId: cred.enterpriseId,
-  };
-}
-
-async function refreshWorkBuddyOAuth(credentials: OAuthCredentials): Promise<OAuthCredentials> {
-  const prev = await current();
-  const next = await refreshAccess({
-    accessToken: credentials.access,
-    refreshToken: credentials.refresh,
-    expiresAtMs: credentials.expires ?? 0,
-    domain: prev?.domain ?? "www.workbuddy.ai",
-    uid: prev?.uid ?? "",
-    ...(prev?.enterpriseId ? { enterpriseId: prev.enterpriseId } : {}),
-    ...(prev?.nickname ? { nickname: prev.nickname } : {}),
-  });
-  await saveOwn(next);
-  return { access: next.accessToken, refresh: next.refreshToken, expires: next.expiresAtMs };
-}
 
 export default async function (pi: ExtensionAPI) {
+  const provider = createWorkBuddyProvider();
   let scope = loadSettings().scope;
   let models = buildPiModels(loadProductConfig(), scope);
   let ids = new Set(models.map((model) => model.id));
   /** Last painted card lines for this session, reused on model switch. */
   let card: string[] | undefined;
   const extra = () => ({ scope, models });
-  const oauth = {
-    name: "WorkBuddy AI",
-    login: loginWorkBuddy,
-    refreshToken: refreshWorkBuddyOAuth,
-    getApiKey: (credentials: OAuthCredentials) => credentials.access,
-  };
+
 
   function apply(next?: Scope) {
     if (next) scope = next;
     models = buildPiModels(loadProductConfig(), scope);
     ids = new Set(models.map((model) => model.id));
-    pi.registerProvider(PROVIDER, {
-      baseUrl: `${GLOBAL_BASE}/v2`,
-      api: "openai-completions",
-      oauth,
-      models,
-    });
+    pi.registerProvider(PROVIDER, provider.config(models));
   }
 
   apply();
@@ -808,8 +500,9 @@ export default async function (pi: ExtensionAPI) {
   });
 
   pi.on("session_start", (_event, ctx) => {
+    provider.bindContext(ctx);
     // Never block session startup on the optional account/credits card.
-    void paint(ctx, false, extra())
+    void paint(ctx, provider, false, extra())
       .then((lines) => { card = lines; })
       .catch(() => undefined);
   });
@@ -823,7 +516,7 @@ export default async function (pi: ExtensionAPI) {
       return;
     }
     if (card) ctx.ui.setWidget("workbuddy", card);
-    void paint(ctx, false, extra()).then((lines) => { card = lines; }).catch(() => undefined);
+    void paint(ctx, provider, false, extra()).then((lines) => { card = lines; }).catch(() => undefined);
   });
 
   pi.registerCommand("workbuddy", {
@@ -833,12 +526,11 @@ export default async function (pi: ExtensionAPI) {
       if (cmd === "free" || cmd === "all") {
         await saveSettings(cmd);
         apply(cmd);
-        await paint(ctx, true, extra(), true);
+        await paint(ctx, provider, true, extra(), true);
         return;
       }
       if (cmd === "logout" || cmd === "disconnect") {
-        await unlink(ownPath()).catch(() => undefined);
-        await paint(ctx, true, extra(), true);
+        ctx.ui.notify("请使用 /logout workbuddy 删除 OMP 保存的 WorkBuddy 凭据", "info");
         return;
       }
       const pick = await ctx.ui.select("WorkBuddy 设置", [
@@ -854,19 +546,14 @@ export default async function (pi: ExtensionAPI) {
         await saveSettings("free");
         apply("free");
       } else if (pick === "断开登录") {
-        await unlink(ownPath()).catch(() => undefined);
+        ctx.ui.notify("请使用 /logout workbuddy 删除 OMP 保存的 WorkBuddy 凭据", "info");
       }
-      await paint(ctx, true, extra(), true);
+      await paint(ctx, provider, true, extra(), true);
     },
   });
 }
 
 if (process.argv.includes("--self-check")) {
-  const nested = parseWorkBuddyAuth(JSON.stringify({
-    auth: { accessToken: "a", refreshToken: "r", expiresAt: 2000, domain: "www.workbuddy.ai" },
-    account: { uid: "u1", nickname: "n" },
-  }));
-  if (nested?.uid !== "u1" || nested.expiresAtMs !== 2_000_000) throw new Error("parse nested");
   const payload = prepareChatPayload({
     model: "hy3",
     messages: [{ role: "developer", content: "sys" }, { role: "user", content: "hi" }],
@@ -930,23 +617,14 @@ if (process.argv.includes("--self-check")) {
   const lines = widgetLines({
     cred: {
       accessToken: "a",
-      refreshToken: "r",
       expiresAtMs: Date.UTC(2027, 8, 12, 1, 30, 0),
-      domain: "www.workbuddy.ai",
       uid: "u",
+      enterpriseId: "e",
       nickname: "user@example.com",
     },
     credits,
   });
   if (!lines.some((line) => line.includes("user@example.com"))) throw new Error("account");
   if (!lines.some((line) => line.includes("合计 349"))) throw new Error("total");
-  const token = `x.${Buffer.from(JSON.stringify({ email: "a@b.c", sub: "u9" })).toString("base64url")}.y`;
-  const fromTok = credFromPluginToken(
-    { refreshToken: "r", expiresIn: 10, domain: "www.workbuddy.ai", enterpriseId: "e1" },
-    token,
-    1000,
-  );
-  if (fromTok.uid !== "u9" || fromTok.nickname !== "a@b.c" || fromTok.expiresAtMs !== 11_000) throw new Error("plugin token");
-  if (fromTok.enterpriseId !== "e1") throw new Error("enterprise");
   console.log("ok");
 }

@@ -2,12 +2,10 @@
 
 > **Development status — not release-ready**
 >
-> `feat/omp-port` has passed the M0 host-contract gate. M1–M5 production
-> implementation and live WorkBuddy validation are still incomplete, so this
-> branch is not release-ready. See
-> `openspec/changes/adapt-workbuddy-international-omp/tasks.md` for the
-> authoritative implementation status. Do not use the legacy Pi installation
-> or credential instructions below as current OMP instructions.
+> M0 已通过；M1 任务 2.1–2.6（认证映射、宿主刷新、请求身份绑定和单账号
+> fail-closed）已完成。M1 2.7–2.11 及 M2–M5 仍未完成，因此本分支尚不可发布。
+> 权威进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
+> 下文仍含尚未完成 M2–M4 迁移的上游行为说明，不代表当前发布契约。
 
 ## Legacy upstream behavior
 
@@ -37,7 +35,7 @@ pi -e /path/to/pi-workbuddy-connect
 /login workbuddy
 ```
 
-凭据按优先级解析：环境变量 `WORKBUDDY_AUTH_FILE` → pi 自存的 `~/.pi/agent/.workbuddy-auth.json` → 桌面 App 的 `workbuddy-desktop-ai.info`（macOS / Windows / Linux）。access token 过期前 5 分钟自动续期。
+正式凭据仅由 OMP AuthStorage 持久化和刷新。`.workbuddy-auth.json`、Desktop credential 与 `WORKBUDDY_AUTH_FILE` 不参与登录或请求回退；使用 `/login workbuddy` 登录。
 
 ## 模型与推理档
 
@@ -64,7 +62,7 @@ pi 没有 DSH 那种插件配置卡片，等价入口有两处：
   断开登录
   ```
 
-  也接受参数：`/workbuddy free` · `/workbuddy all` · `/workbuddy logout`。
+  也接受参数：`/workbuddy free` · `/workbuddy all`。断开认证请使用宿主命令 `/logout workbuddy`。
 
 切换范围后 provider 立即重新注册模型，无需 `/reload`。
 
@@ -72,9 +70,8 @@ pi 没有 DSH 那种插件配置卡片，等价入口有两处：
 
 | 变量 | 作用 |
 | --- | --- |
-| `WORKBUDDY_AUTH_FILE` | 指定凭据文件路径，优先于所有其他来源 |
 | `WORKBUDDYAI_PRODUCT_CONFIG` | 指定产品配置 JSON 路径 |
-| `PI_CODING_AGENT_DIR` | pi agent 目录，影响自存凭据与设置文件位置 |
+| `PI_CODING_AGENT_DIR` | OMP agent 目录，当前仅影响非敏感设置文件位置 |
 
 ## 自检
 
@@ -82,7 +79,7 @@ pi 没有 DSH 那种插件配置卡片，等价入口有两处：
 node --experimental-strip-types extensions/workbuddy.ts --self-check
 ```
 
-覆盖认证解析、payload 规整、推理档映射、积分解析与 widget 渲染。
+覆盖 payload 规整、推理档映射、积分解析与 widget 渲染；认证边界由下列独立测试覆盖。
 
 ## 与上游的差异
 
@@ -97,8 +94,13 @@ node --experimental-strip-types extensions/workbuddy.ts --self-check
 ## 测试
 
 ```bash
-node --experimental-strip-types test/scope.test.mts   # 断言 hook 不污染其他 provider 的请求
-npx tsc -p tsconfig.json                              # 类型检查
+node --experimental-strip-types test/auth.test.mts
+node --experimental-strip-types test/provider.test.mts
+node --experimental-strip-types test/scope.test.mts
+npx --yes bun@1.3.14 test/session-start.test.mts
+npx --yes bun@1.3.14 test/contract/request-identity-binding.test.mts
+npx --yes bun@1.3.14 test/contract/task-runtime-contract.test.mts
+npx tsc -p tsconfig.json
 ```
 
 ## License
