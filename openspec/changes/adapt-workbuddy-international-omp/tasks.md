@@ -43,12 +43,12 @@
 
 ## 4. M3 — 最小 Gateway 兼容与工具闭环
 
-- [ ] 4.1 为 reasoning replay、tool_choice、token clamp、unsupported fields 逐项建立 `gateway-compatibility-evidence.md`，记录删除后失败案例、脱敏响应、适用模型/版本及最小修正；删除没有可复现必要性证据的 transform。（GATE-01）
-- [ ] 4.2 提取 `src/payload.ts`，移除宿主已处理的 stream/role/standard effort/max_tokens 重复处理；默认删除自动 system prompt，仅在真实缺 system 失败证据成立时最小保留，验证用户 prompt semantics 不被任意改变。（GATE-02）
-- [ ] 4.3 保留 before_provider_request 并按当前模型 ID Set 识别；迁移 `test/scope.test.mts` 形成非匹配请求完全不变回归，单独记同名跨 Provider 限制，不声称绝对隔离。（GATE-03）
-- [ ] 4.4 对证据要求的 reasoning cleanup 保留永久回归，验证普通消息、assistant tool calls、tool_call_id 和 tool results 关联完整，真实下一轮能使用工具结果。（GATE-04）
-- [ ] 4.5 验证 auto/named tool_choice 的 WorkBuddy 规整、arguments streaming、单工具、连续工具、多工具及支持时 parallel tools，完成工具执行→结果回送→下一轮回答，而非只验证参数拼接。（GATE-05）
-- [ ] 4.6 用宿主原生 openai-completions 验证 text/reasoning/tool deltas、usage、DONE、HTTP error、Abort、Retry；证明无插件 SSE/tool parser、双重重试或自定义 Chat HTTP 路径。（GATE-06）
+- [x] 4.1 为 reasoning replay、tool_choice、token clamp、unsupported fields 逐项建立 `gateway-compatibility-evidence.md`，记录删除后失败案例、脱敏响应、适用模型/版本及最小修正；删除没有可复现必要性证据的 transform。（GATE-01）
+- [x] 4.2 提取 `src/payload.ts`，移除宿主已处理的 stream/role/standard effort/max_tokens 重复处理；默认删除自动 system prompt，仅在真实缺 system 失败证据成立时最小保留，验证用户 prompt semantics 不被任意改变。（GATE-02）
+- [x] 4.3 保留 before_provider_request 并按当前模型 ID Set 识别；迁移 `test/scope.test.mts` 形成非匹配请求完全不变回归，单独记同名跨 Provider 限制，不声称绝对隔离。（GATE-03）
+- [x] 4.4 对证据要求的 reasoning cleanup 保留永久回归，验证普通消息、assistant tool calls、tool_call_id 和 tool results 关联完整，真实下一轮能使用工具结果。（GATE-04）
+- [x] 4.5 验证 auto/named tool_choice 的 WorkBuddy 规整、arguments streaming、单工具、连续工具、多工具及支持时 parallel tools，完成工具执行→结果回送→下一轮回答，而非只验证参数拼接。（GATE-05）
+- [x] 4.6 用宿主原生 openai-completions 验证 text/reasoning/tool deltas、usage、DONE、HTTP error、Abort、Retry；证明无插件 SSE/tool parser、双重重试或自定义 Chat HTTP 路径。（GATE-06）
 - [ ] 4.7 汇总普通对话、reasoning history、named/sequential/multi 工具、参数流、abort/error/retry 和隔离证据，所有 patch 均关联服务端 case 后才通过 M3。（GATE-01–06）
 
 ## 5. M4 — Commands、Credits 与可选 UI

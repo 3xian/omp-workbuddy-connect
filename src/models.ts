@@ -5,10 +5,8 @@ import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 
 const PRODUCT_CONFIG_ENV = "WORKBUDDYAI_PRODUCT_CONFIG";
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } as const;
-// These flags describe the shared WorkBuddy OpenAI-compatible gateway dialect.
-// `thinking` controls per-model efforts and mandatory reasoning; no unverified off wire value is asserted.
+// Only verified WorkBuddy wire facts belong here; generic OpenAI compatibility stays host-owned.
 const COMPAT = {
-  supportsDeveloperRole: false,
   supportsReasoningEffort: true,
   maxTokensField: "max_tokens" as const,
 };

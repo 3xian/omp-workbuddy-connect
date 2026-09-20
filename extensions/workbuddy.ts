@@ -7,13 +7,17 @@ import {
 } from "../src/provider.ts";
 import {
   buildOmpModels,
-  clampModelMaxTokens,
   FLASH_MAX_TOKENS,
   loadProductConfig,
   type ModelScope as Scope,
   type ProductConfigFallbackReason,
   type ProductConfigSource,
 } from "../src/models.ts";
+import {
+  asProviderPayload,
+  isCurrentWorkBuddyPayload,
+  payloadModelId,
+} from "../src/payload.ts";
 import { loadSettings, saveSettings } from "../src/settings.ts";
 
 type Cred = WorkBuddyBillingAccess & { expiresAtMs?: number; nickname?: string };
@@ -25,100 +29,6 @@ const CLIENT_UA = "CLI/2.63.2 CodeBuddy/2.63.2";
 
 
 
-function stripAssistantReasoning(messages: unknown[]): void {
-  for (const item of messages) {
-    if (typeof item !== "object" || item === null || Array.isArray(item)) continue;
-    const msg = item as Record<string, unknown>;
-    if (msg.role !== "assistant") continue;
-    delete msg.reasoning;
-    delete msg.thinking;
-    delete msg.reasoning_content;
-    if (!Array.isArray(msg.content)) continue;
-    msg.content = msg.content.filter((part) => {
-      if (typeof part !== "object" || part === null) return true;
-      const type = (part as { type?: string }).type;
-      return type !== "reasoning" && type !== "thinking";
-    });
-    if (Array.isArray(msg.content) && msg.content.length === 0) msg.content = "";
-  }
-}
-
-export function prepareChatPayload(payload: Record<string, unknown>): Record<string, unknown> {
-  payload.stream = true;
-  const messages = payload.messages;
-  if (Array.isArray(messages)) {
-    for (const message of messages) {
-      if (typeof message === "object" && message !== null && !Array.isArray(message)
-        && (message as Record<string, unknown>).role === "developer") {
-        (message as Record<string, unknown>).role = "system";
-      }
-    }
-    if (messages.length > 0 && (messages[0] as { role?: string } | undefined)?.role !== "system") {
-      messages.unshift({ role: "system", content: "You are a helpful assistant." });
-    }
-    stripAssistantReasoning(messages);
-  }
-  if (payload.model === "deepseek-v4.1-flash") {
-    const current = Number(payload.max_tokens);
-    payload.max_tokens = Number.isFinite(current) && current > 0
-      ? clampModelMaxTokens(payload.model, current)
-      : FLASH_MAX_TOKENS;
-  }
-  if ("tool_choice" in payload) {
-    const choice = payload.tool_choice;
-    if (typeof choice === "string") {
-      if (choice.trim().toLowerCase() === "none") {
-        delete payload.tool_choice;
-        delete payload.tools;
-        delete payload.functions;
-      }
-    } else if (typeof choice === "object" && choice !== null && !Array.isArray(choice)) {
-      const wrapped = choice as Record<string, unknown>;
-      const type = typeof wrapped.type === "string" ? wrapped.type.trim().toLowerCase() : "";
-      if (type === "none") {
-        delete payload.tool_choice;
-        delete payload.tools;
-        delete payload.functions;
-      } else if (type === "auto" || type === "required") {
-        payload.tool_choice = type;
-      } else if (type === "function") {
-        const fn = typeof wrapped.function === "object" && wrapped.function !== null
-          ? (wrapped.function as Record<string, unknown>)
-          : undefined;
-        const name = (typeof fn?.name === "string" ? fn.name : typeof wrapped.name === "string" ? wrapped.name : "").trim();
-        payload.tool_choice = name || "auto";
-      } else {
-        delete payload.tool_choice;
-      }
-    } else {
-      delete payload.tool_choice;
-    }
-  }
-  // ponytail: never inject reasoning_effort — upstream sends a bare request when no
-  // level is chosen, so "Default" must stay Default instead of silently becoming high.
-  return payload;
-}
-
-/** `before_provider_request` carries no provider, so payloads are scoped by model id.
- *  Without this the hook rewrites every other provider's request (developer role,
- *  tool_choice, stream). */
-export function isWorkBuddyModel(modelId: unknown, ids: ReadonlySet<string>): boolean {
-  return typeof modelId === "string" && ids.has(modelId);
-}
-
-function asObject(payload: unknown): Record<string, unknown> | undefined {
-  const value = typeof payload === "string"
-    ? (() => {
-      try {
-        return JSON.parse(payload) as unknown;
-      } catch {
-        return undefined;
-      }
-    })()
-    : payload;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  return value as Record<string, unknown>;
-}
 
 
 type Pack = { name: string; remain: number; size: number };
@@ -455,13 +365,14 @@ export default async function (pi: ExtensionAPI) {
   installProvider(models);
 
   pi.on("before_provider_request", (event) => {
-    const payload = asObject(event.payload);
-    if (!payload || typeof payload.model !== "string") return;
-    const modelId = payload.model;
+    const payload = asProviderPayload(event.payload);
+    if (!payload) return;
+    const modelId = payloadModelId(payload);
+    if (modelId === undefined) return;
     if (transitioning && (knownIds.has(modelId) || pendingIds.has(modelId))) {
       throw new Error(`WorkBuddy model "${modelId}" is unavailable while its scope is changing`);
     }
-    if (activeIds.has(modelId)) return prepareChatPayload(payload);
+    if (isCurrentWorkBuddyPayload(payload, activeIds)) return event.payload;
     if (knownIds.has(modelId)) {
       throw new Error(
         `WorkBuddy model "${modelId}" is outside the active "${scope}" scope; select an available model`,
@@ -536,38 +447,29 @@ export default async function (pi: ExtensionAPI) {
 }
 
 if (process.argv.includes("--self-check")) {
-  const payload = prepareChatPayload({
+  const nativePayload = {
     model: "hy3",
-    messages: [{ role: "developer", content: "sys" }, { role: "user", content: "hi" }],
+    messages: [{ role: "user", content: "hi" }],
     tool_choice: { type: "function", function: { name: "foo" } },
-  });
-  if (payload.stream !== true) throw new Error("stream");
-  if ((payload.messages as { role: string }[])[0].role !== "system") throw new Error("system");
-  if (payload.tool_choice !== "foo") throw new Error("tool_choice");
-  if (payload.reasoning_effort !== undefined) throw new Error("no injected effort");
-  const kept = prepareChatPayload({ messages: [], reasoning_effort: "max" });
-  if (kept.reasoning_effort !== "max") throw new Error("explicit effort preserved");
+    reasoning_effort: "high",
+    max_tokens: 1_024,
+  };
+  const before = JSON.stringify(nativePayload);
+  const payload = asProviderPayload(nativePayload);
+  if (payload !== nativePayload) throw new Error("payload identity");
+  const ours = new Set(["hy3", "deepseek-v4.1-flash"]);
+  if (!isCurrentWorkBuddyPayload(payload, ours)) throw new Error("scope: own model accepted");
+  if (JSON.stringify(nativePayload) !== before) throw new Error("native payload mutated");
+  const foreign = asProviderPayload({ model: "grok-4.6" });
+  if (!foreign || isCurrentWorkBuddyPayload(foreign, ours)) throw new Error("scope: foreign model must be rejected");
+  if (asProviderPayload("{") !== undefined || asProviderPayload([]) !== undefined) throw new Error("invalid payload accepted");
   if (!showsWorkBuddyCard("workbuddy")) throw new Error("card: own provider shown");
   if (showsWorkBuddyCard("GROKCPA")) throw new Error("card: foreign provider hidden");
   if (showsWorkBuddyCard(undefined) || showsWorkBuddyCard(null) || showsWorkBuddyCard(42)) throw new Error("card: unknown provider hidden");
   if (!showsWorkBuddyCard("GROKCPA", true)) throw new Error("card: explicit command overrides");
-  const ours = new Set(["hy3", "deepseek-v4.1-flash"]);
-  if (!isWorkBuddyModel("hy3", ours)) throw new Error("scope: own model accepted");
-  if (isWorkBuddyModel("grok-4.6", ours)) throw new Error("scope: foreign model must be rejected");
-  if (isWorkBuddyModel(undefined, ours) || isWorkBuddyModel(42, ours)) throw new Error("scope: non-string rejected");
-  const prepended = prepareChatPayload({ messages: [{ role: "user", content: "hi" }] });
-  if ((prepended.messages as { role: string }[])[0].role !== "system") throw new Error("prepend");
   const flash = buildOmpModels(loadProductConfig("/definitely/missing/workbuddy-product-config.json"), "all")
     .find((model) => model.id === "deepseek-v4.1-flash");
-  if (flash?.maxTokens !== FLASH_MAX_TOKENS) throw new Error("flash cap");
-  const looped = prepareChatPayload({
-    model: "deepseek-v4.1-flash",
-    max_tokens: 128_000,
-    messages: [{ role: "assistant", content: "done", reasoning: "OK.\nLet me write.", thinking: "Go." }],
-  });
-  const assistant = (looped.messages as Record<string, unknown>[])[1];
-  if (assistant.reasoning !== undefined || assistant.thinking !== undefined) throw new Error("reasoning replay");
-  if (looped.max_tokens !== FLASH_MAX_TOKENS) throw new Error("flash payload cap");
+  if (flash?.maxTokens !== FLASH_MAX_TOKENS) throw new Error("flash catalog cap");
 
   const credits = parseCredits({
     code: 0,

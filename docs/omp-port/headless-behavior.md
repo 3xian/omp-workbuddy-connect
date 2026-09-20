@@ -23,7 +23,7 @@ Both used an in-memory SessionManager, isolated AuthStorage/model-cache paths, n
 | `ctx.ui.setWidget()` / `setStatus()` safe without a UI | Yes | Yes |
 | `turn_start` emitted | Yes | Yes |
 | `before_provider_request` executed | Yes | Yes |
-| WorkBuddy payload transformation set `stream: true` | Yes | Yes |
+| WorkBuddy hook preserved the host-native payload unchanged | Yes | Yes |
 | `ctx.abort` and `ctx.shutdown` exposed as functions | Yes | Yes |
 | `session_shutdown` after `dispose()` | Exactly once | Exactly once |
 
@@ -41,7 +41,7 @@ Observed results:
 | Required terminal tool | Real Task `yield` executed; result was `\"task-probe-ok\"` |
 | Extension binding | Three Task sessions produced three distinct factory instances |
 | Headless state | All three `session_start` events reported `ctx.hasUI === false` |
-| Payload hook | Both dispatched requests reached the observer after WorkBuddy transformation with `model=hy3`, `stream=true` |
+| Payload hook | Both dispatched requests reached the observer with `model=hy3`; synthetic transport `stream=false` was preserved rather than overwritten by the extension |
 | Cancellation | A provider request was held open, caller AbortSignal aborted it, and `runSubprocess` returned `aborted=true`, exit code 1 |
 | Shutdown | All three sessions emitted `session_shutdown` with `keepAlive=false` |
 | Ambiguous stored accounts | Two stored OAuth rows were rejected by the request resolver before the synthetic transport; added transport attempts: 0 |
@@ -59,4 +59,4 @@ The probe uses temporary AuthStorage/model-cache/config paths and missing Deskto
 
 ## Evidence limit
 
-This proves actual SDK headless lifecycle and actual WorkBuddy payload-hook execution in parent, child-shaped, and actual Task executor sessions. The Task transport was synthetic and authentication was isolated host storage, so it does not prove authenticated WorkBuddy Chat, Gateway streaming, or live tool execution. Those remain M5 release gates.
+This proves actual SDK headless lifecycle and actual no-op WorkBuddy payload-hook execution in parent, child-shaped, and actual Task executor sessions. The Task transport was synthetic and authentication was isolated host storage, so it does not prove authenticated WorkBuddy Chat, Gateway streaming, or live tool execution. Those remain M5 release gates.

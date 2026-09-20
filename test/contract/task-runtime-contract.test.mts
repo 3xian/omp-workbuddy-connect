@@ -221,7 +221,7 @@ try {
   const shutdowns = events.filter((event) => event.event === "session_shutdown");
   assert(starts.length === 3 && starts.every((event) => event.hasUI === false), "Task sessions were not headless");
   assert(starts.every((event) => event.provider === "workbuddy" && event.model === "hy3"), "role model mismatch");
-  assert(hooks.length === 2 && hooks.every((event) => event.model === "hy3" && event.stream === true), "hook output mismatch");
+  assert(hooks.length === 2 && hooks.every((event) => event.model === "hy3" && event.stream === false), "hook changed host payload");
   assert(new Set(factories.map((event) => event.instance)).size === 3, "extension factories were not independent");
   assert(shutdowns.length === 3, `expected 3 shutdowns, saw ${shutdowns.length}`);
 

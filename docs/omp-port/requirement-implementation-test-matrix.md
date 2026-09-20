@@ -32,12 +32,12 @@ M1 live exit evidence (redacted):
 | AUTH-07 | single-account guard | 0/1/2 rows and active ignored for count | `listOAuthAccounts` at getApiKey/resolver boundaries | production retained-model zero-transport; A→B retained/fresh-child resolver; synthetic Task host/runtime guard harness | distinct A→B; retained session plus explicit Hy3 fresh Task completed under B; final enabled count zero | M1 PASS |
 | AUTH-08 | provider-scoped logout | generation invalidation and late-result discard | public `AuthStorage.remove('workbuddy')` | real AuthStorage delete, failed-delete error with prior auth restored, successful-delete old resolver fail-closed, pending Billing discard, model-switch status clear, Desktop fixture unchanged | zero enabled credentials after logout; next request failed before transport | M1 PASS |
 | AUTH-09 | `src/workbuddy-api.ts`, provider lifecycle | host `LoginCancelledError`/Abort classification, refresh-request abort, malformed envelope/data, polling Retry-After, and one-shot 429 matrix | login controller signal, refresh ownership signal, `session_shutdown` abort | request/delay/polling-429 waits cancel; late success discarded; malformed JSON/schema and reject/timeout/network/5xx/one-shot-429 classified without generic retry | cancellation/error branches intentionally exercised by isolated protocol harness, not destructive live account actions | M1 PASS |
-| GATE-01 | `src/payload.ts`, evidence log | one regression per retained delta | real payload hook contract | unpatched/patched fixture requests | gateway failure/success pair | M3 PLANNED / NOT RUN |
-| GATE-02 | `src/payload.ts` | no prompt injection/native fields | host-generated payload inspection | ordinary conversation semantics | live no-system case | M3 PLANNED / NOT RUN |
-| GATE-03 | payload ID scope | `test/scope.test.mts` migration | before-provider hook result | matching/nonmatching requests; cumulative known-ID collision documented | same-ID limitation observation; investigate Provider-bound `resolveHeaders` scope guard and leave hook for compat transforms | M3 PARTIAL: non-matching isolation only; final NOT RUN |
-| GATE-04 | reasoning cleanup | content/tool/result association | OMP history types | next-turn tool result reuse | live reasoning + tool history | M3 PLANNED / NOT RUN |
-| GATE-05 | native tool loop | named/auto argument fixtures | OMP tool delta parser | single/sequential/multi/parallel tools | live tool loop | M3 PLANNED / NOT RUN |
-| GATE-06 | native `openai-completions` | no custom parser/transport | stream/error/abort/retry contract | local protocol server matrix | live streaming/error | M3 PLANNED / NOT RUN |
+| GATE-01 | `src/payload.ts`, `gateway-compatibility-evidence.md` | every former transform classified; zero retained M3 transforms | real payload hook contract | unmodified native payload fixtures | no Gateway credential; failure/success pairs not run | M3 local decision PASS; live gate BLOCKED |
+| GATE-02 | `src/payload.ts` no-op boundary | `payload.test.mts`: no prompt/role/field mutation | host-generated stream/effort/max/tool fields | native payload identity and semantics | live no-system case not run | M3 local PASS; live gate BLOCKED |
+| GATE-03 | current model-ID set | `scope.test.mts`: active identity plus byte-equivalent foreign request | real `before_provider_request` result | isolated product config and actual extension hook | same-ID cross-provider limitation documented | M3 local PASS; limitation retained |
+| GATE-04 | no cleanup retained without evidence | `tool-loop.test.mts`: reasoning/content/tool/result history | real OMP Agent history and replay | next-turn correlated result reuse and final answer | live reasoning + tool history not run | M3 conditional local PASS; live gate BLOCKED |
+| GATE-05 | native tool metadata and loop | named/auto, fragmented arguments, sequential/multi fixtures | real OMP Agent/tool delta parser | four correlated calls; same-turn shared tools overlap; final answer | live Gateway tool loop not run | M3 local PASS; live gate BLOCKED |
+| GATE-06 | native `openai-completions` | reasoning/text/usage/DONE/400/abort/503 cases | real OMP stream/error/abort/retry implementation | injected Fetch boundary, no plugin parser/client/retry | live streaming/error not run | M3 local PASS; live gate BLOCKED |
 | UX-01 | `src/ui.ts`, command state | available/unavailable/not-queried render; no stale last-good | command registration | command output after success→failure | live account/credits/plan | M4 PLANNED / NOT RUN |
 | UX-02 | command orchestration | free/all/logout transitions | command/UI API contract | credential unchanged/deleted cases | live commands | M4 PLANNED / NOT RUN |
 | UX-03 | WorkBuddy UsageProvider | credits parser and genuine-zero cases | normalized schema; `retainLastGoodOnFailure=false`; `X-User-Id` | slow/5xx/timeout nonblocking and unavailable | live Billing | M4 PLANNED / NOT RUN; ADR accepted |
@@ -75,6 +75,13 @@ M1 live exit evidence (redacted):
 - MODEL-06: `docs/omp-port/adr-dynamic-models.md`; exact `desktop-cache` / `builtin-fallback` source and five fallback reasons are exercised.
 - MODEL-07/UX-07: `src/settings.ts` and `test/contract/model-scope-lifecycle.test.mts`; real `ModelRegistry` covers non-empty in-place replacement, empty cleanup, rollback, retained-model pretransport failure, restart, and unchanged AuthStorage credential. `test/settings.test.mts` covers atomic failure-byte preservation and temporary cleanup.
 - Gate record: `docs/omp-port/m2-gate.md`. It distinguishes local real-cache inspection/OMP contracts from later live Gateway Chat, Vision, effort, selector, and pricing gates.
+
+## M3 evidence index
+
+- GATE-01–04: `src/payload.ts`, the actual hook in `extensions/workbuddy.ts`, `test/payload.test.mts`, `test/scope.test.mts`, and `docs/omp-port/gateway-compatibility-evidence.md`.
+- GATE-04/05: `test/tool-loop.test.mts` drives the real OMP `Agent` through reasoning plus single, sequential, streamed-argument, same-turn parallel tool calls, correlated results, and a final answer.
+- GATE-06: `test/native-transport.test.mts` drives the real OMP `openai-completions` implementation through successful and failure paths.
+- Live WorkBuddy evidence is unavailable because AuthStorage contains no WorkBuddy credential. Task 4.7 and the M3 gate remain blocked; local fixtures are not represented as Gateway proof.
 
 ## Coverage check
 
