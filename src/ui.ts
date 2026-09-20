@@ -36,6 +36,18 @@ function accountKey(account: OAuthAccountSummary): string {
   return `${account.credentialId}:${account.accountId ?? ""}:${account.orgId ?? ""}`;
 }
 
+function redactIdentity(value: string | undefined): string {
+  if (!value) return "不可用";
+  const at = value.indexOf("@");
+  if (at > 0) {
+    const local = value.slice(0, at);
+    const domain = value.slice(at + 1);
+    return `${local.slice(0, 2)}***@${domain}`;
+  }
+  if (value.length <= 8) return `${value.slice(0, 2)}…`;
+  return `${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
 export class WorkBuddyUiController {
   #stateGeneration = 0;
   #abort = new AbortController();
@@ -181,7 +193,7 @@ export class WorkBuddyUiController {
     const lines = [
       `WorkBuddy AI · 国际版 · ${view.scope === "all" ? "全部模型" : "仅免费模型"}`,
       `登录  ${account ? "已登录" : accounts.length > 1 ? `不可用（${accounts.length} 个账号）` : "未登录"}`,
-      `账号  ${account?.email || account?.accountId || "不可用"}`,
+      `账号  ${redactIdentity(account?.email || account?.accountId)}`,
       `范围  ${view.scope}`,
       `模型数  ${view.models.length}`,
       `目录  ${view.source}${fallback}`,

@@ -1,6 +1,6 @@
 # ADR: WorkBuddy Request Identity Binding
 
-Status: Accepted — M0 and M1 gates passed; full Task tool/reasoning/release E2E remains M5
+Status: Accepted — M0–M5 gates passed; Task, headless, tool/reasoning, and release E2E evidence is archived in `release-evidence.md`
 
 Verified host: OMP 18.2.6 at `78b753124d11f8dd3ae73e2524125890ff7c977e`
 

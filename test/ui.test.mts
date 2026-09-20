@@ -47,14 +47,15 @@ const authStorage = await AuthStorage.create(join(temp, "auth.db"), {
 const registry = new ModelRegistry(authStorage, join(temp, "models.yml"), {
   cacheDbPath: join(temp, "models.db"),
 });
-const credential = (accountId: string) => ({
+const credential = (accountId: string, email?: string) => ({
   type: "oauth" as const,
   access: `access-${accountId}`,
   refresh: `refresh-${accountId}`,
   expires: Date.now() + 60 * 60 * 1000,
   accountId,
+  ...(email ? { email } : {}),
 });
-await authStorage.set("workbuddy", credential("account-a"));
+await authStorage.set("workbuddy", credential("account-a", "employee@example.com"));
 
 const handlers: Record<string, Function[]> = {};
 let command: ((args: unknown, ctx: any) => Promise<void>) | undefined;
@@ -82,14 +83,14 @@ const ctx: any = {
   ui,
 };
 
-function billingResponse(account: string, remaining: number): Response {
+function billingResponse(remaining: number): Response {
   return Response.json({
     code: 0,
     data: {
       Response: {
         Data: {
           Accounts: [{
-            PackageName: `${account} plan`,
+            PackageName: "Free Plan Subscription",
             CycleCapacitySize: 100,
             CycleCapacityRemain: remaining,
           }],
@@ -119,6 +120,8 @@ try {
   assert(startResult === undefined, "session_start awaited optional Billing");
   await waitForCalls(1);
   assert(widgets.at(-1)?.some((line) => line === "积分  查询中"), "startup did not expose the pending state");
+  assert(widgets.at(-1)?.some((line) => line === "账号  em***@example.com"), "email identity was not rendered redacted");
+  assert(!widgets.at(-1)?.some((line) => line.includes("employee@example.com")), "email identity leaked into the Widget");
 
   await authStorage.remove("workbuddy");
   await authStorage.set("workbuddy", credential("account-b"));
@@ -126,17 +129,18 @@ try {
   await waitForCalls(2);
   assert(pending[0]?.account === "account-a" && pending[1]?.account === "account-b", "account switch used the wrong host identity");
   const widgetsBeforeLateA = widgets.length;
-  pending[0]!.resolve(billingResponse("account-a", 99));
+  pending[0]!.resolve(billingResponse(99));
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert(widgets.length === widgetsBeforeLateA, "late account A result repainted account B UI");
-  pending[1]!.resolve(billingResponse("account-b", 8));
+  pending[1]!.resolve(billingResponse(8));
   await new Promise((resolve) => setTimeout(resolve, 5));
-  assert(widgets.at(-1)?.some((line) => line === "账号  account-b"), "account B identity was not rendered");
+  assert(widgets.at(-1)?.some((line) => line === "账号  acco…nt-b"), "account B identity was not rendered redacted");
+  assert(!widgets.at(-1)?.some((line) => line.includes("account-b")), "account B identity leaked into the Widget");
   assert(widgets.at(-1)?.some((line) => line === "积分  合计 8"), "account B credits were not rendered");
 
   const statusPromise = command("", ctx);
   await waitForCalls(3);
-  pending[2]!.resolve(billingResponse("account-b", 7));
+  pending[2]!.resolve(billingResponse(7));
   await statusPromise;
   const statusLines = widgets.at(-1) ?? [];
   for (const field of ["登录  ", "账号  ", "积分  ", "套餐  ", "范围  ", "模型数  ", "目录  ", "Provider  "]) {
@@ -148,10 +152,10 @@ try {
   await waitForCalls(4);
   const scopeChange = command("free", ctx);
   await waitForCalls(5);
-  pending[3]!.resolve(billingResponse("account-b", 66));
+  pending[3]!.resolve(billingResponse(66));
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert(!widgets.at(-1)?.some((line) => line === "积分  合计 66"), "old-scope result repainted the new scope");
-  pending[4]!.resolve(billingResponse("account-b", 5));
+  pending[4]!.resolve(billingResponse(5));
   await Promise.all([staleScopeRefresh, scopeChange]);
   assert(widgets.at(-1)?.some((line) => line === "范围  free"), "free command did not update scope display");
   assert(widgets.at(-1)?.some((line) => line === "模型数  0"), "free command did not display the empty scope");
@@ -160,7 +164,7 @@ try {
   await turnStart({}, ctx);
   await waitForCalls(6);
   await turnStart({}, { ...ctx, model: { provider: "openai", id: "gpt" } });
-  pending[5]!.resolve(billingResponse("account-b", 6));
+  pending[5]!.resolve(billingResponse(6));
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "late result restored UI after leaving WorkBuddy");
 

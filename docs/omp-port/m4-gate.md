@@ -74,4 +74,4 @@ npx openspec validate adapt-workbuddy-international-omp --strict
 
 These repository tests are executable `.test.mts` scripts rather than `bun:test` declarations; Bun's summary therefore reports zero formal test cases. The nineteen explicit `OK:` contracts and process exit status are the acceptance signal.
 
-M4 validates the management protocol and lifecycle locally against OMP 18.2.6. A real WorkBuddy Billing capture and the complete authenticated release matrix remain M5 evidence; this gate does not fabricate those results or mark M5 complete.
+M4 validated the management protocol and lifecycle locally against OMP 18.2.6 without fabricating the then-pending live results. The subsequent authenticated Billing and complete release matrix passed at M5 and are archived in `release-evidence.md`.

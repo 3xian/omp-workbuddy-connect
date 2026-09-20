@@ -206,10 +206,22 @@ export async function startPluginLogin(
   const data = envelopeData(envelope, response);
   const state = typeof data.state === "string" ? data.state.trim() : "";
   const authUrl = typeof data.authUrl === "string" ? data.authUrl.trim() : "";
-  if (state === "" || authUrl === "") {
+  let parsedAuthUrl: URL | undefined;
+  try {
+    parsedAuthUrl = new URL(authUrl);
+  } catch {
+    // Rejected by the common incomplete-data branch below.
+  }
+  if (
+    state === ""
+    || !parsedAuthUrl
+    || parsedAuthUrl.origin !== WORKBUDDY_ORIGIN
+    || parsedAuthUrl.username !== ""
+    || parsedAuthUrl.password !== ""
+  ) {
     throw new WorkBuddyOAuthError(
       "invalid_response",
-      "WorkBuddy login start returned incomplete data",
+      "WorkBuddy login start returned incomplete or untrusted data",
     );
   }
   throwIfCancelled(options.signal);

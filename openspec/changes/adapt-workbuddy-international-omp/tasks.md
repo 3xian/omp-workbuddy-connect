@@ -63,12 +63,12 @@
 
 ## 6. M5 — Agent、四层验收与发布证据
 
-- [ ] 6.1 完成真实 main model 的 chat/thinking/tool/streaming/refresh 场景，保存官方宿主与 Gateway 的请求身份和结果脱敏证据。（REL-01）
-- [ ] 6.2 配置 task role 为 WorkBuddy 并执行 subagent，验证加载、OAuth、identity、payload hook、Streaming、tool calling、结果返回和 B 登录后无 A 身份；实际 headless 验证加载/认证/模型/请求/工具不依赖 TUI。（REL-01、AUTH-07）
-- [ ] 6.3 执行 unit/真实类型 contract/真实 OMP integration/WorkBuddy Live E2E 四层验证，确认 V2 §13 十二类永久回归全部存在且行为通过，Mock/fixture/临时目录不读取真实凭据并正确释放资源。（REL-03）
-- [ ] 6.4 执行完整 Release Matrix：install/type/fresh login/first identity/restart/expired access/invalid refresh/missing accountId/optional-org no-enterprise/A→B/logout/至少三模型/thinking/真实图片/read-grep-bash/sequential-multi/main/subagent/headless/free-all-empty/Billing success-5xx-timeout-slow/isolation/logging；逐例记录结果，必需项不许以 N/A 或 Mock 代替。（REL-02）
-- [ ] 6.5 审查源码与实际日志、错误、网络、文件和诊断附件，确认 Token/Authorization 不入日志、仓库、项目或第三方，identity 输出脱敏，网络只到功能所需官方国际端点，Desktop 数据未改变。（REL-04）
-- [ ] 6.6 保存 `release-evidence.md`：OMP version/commit、extension version/commit、Node/Bun runtime、日期、账号类型、模型 IDs、矩阵结果、known limitations、脱敏证据；补齐 Requirement→Implementation→Test 实际定位，未运行/失败不得标通过。（REL-05）
-- [ ] 6.7 真实冒烟及矩阵通过后完成入口 composition root/模块边界收尾，删除失去用途的旧认证与兼容代码、临时探针和脚本；验证没有生产占位实现、额外 CredentialStore/Transport 框架或被误加载的 helper。（HOST-02、AUTH-01；D11）
-- [ ] 6.8 更新 README/安装与迁移/目录/环境变量/命令/版本发布说明，明确单账号不容错配、Widget 延迟、缓存来源三项限制及 request-bound Provider 隔离行为和 ADR 实际选择；检查旧 Pi 安装/旧凭据优先级宣传已移除，包版本不因功能名 v1 倒退。（REL-06）
-- [ ] 6.9 按 V2 §19 全部条件核签 v1：OMP 零修改、正式安装、AuthStorage 唯一来源、OAuth/refresh/identity/restart、目录/Streaming/thinking/声明 Vision/工具、main/subagent/headless、credits/free-all/logout/isolation/秘密保护均有证据；任一未通过保持发布阻断。（REL-01–06、HOST-05）
+- [x] 6.1 完成真实 main model 的 chat/thinking/tool/streaming/refresh 场景，保存官方宿主与 Gateway 的请求身份和结果脱敏证据。（REL-01）
+- [x] 6.2 配置 task role 为 WorkBuddy 并执行 subagent，验证加载、OAuth、identity、payload hook、Streaming、tool calling、结果返回和 B 登录后无 A 身份；实际 headless 验证加载/认证/模型/请求/工具不依赖 TUI。（REL-01、AUTH-07）
+- [x] 6.3 执行 unit/真实类型 contract/真实 OMP integration/WorkBuddy Live E2E 四层验证，确认 V2 §13 十二类永久回归全部存在且行为通过，Mock/fixture/临时目录不读取真实凭据并正确释放资源。（REL-03）
+- [x] 6.4 执行完整 Release Matrix：install/type/fresh login/first identity/restart/expired access/invalid refresh/missing accountId/optional-org no-enterprise/A→B/logout/至少三模型/thinking/真实图片/read-grep-bash/sequential-multi/main/subagent/headless/free-all-empty/Billing success-5xx-timeout-slow/isolation/logging；逐例记录结果，必需项不许以 N/A 或 Mock 代替。（REL-02）
+- [x] 6.5 审查源码与实际日志、错误、网络、文件和诊断附件，确认 Token/Authorization 不入日志、仓库、项目或第三方，identity 输出脱敏，网络只到功能所需官方国际端点，Desktop 数据未改变。（REL-04）
+- [x] 6.6 保存 `release-evidence.md`：OMP version/commit、extension version/commit、Node/Bun runtime、日期、账号类型、模型 IDs、矩阵结果、known limitations、脱敏证据；补齐 Requirement→Implementation→Test 实际定位，未运行/失败不得标通过。（REL-05）
+- [x] 6.7 真实冒烟及矩阵通过后完成入口 composition root/模块边界收尾，删除失去用途的旧认证与兼容代码、临时探针和脚本；验证没有生产占位实现、额外 CredentialStore/Transport 框架或被误加载的 helper。（HOST-02、AUTH-01；D11）
+- [x] 6.8 更新 README/安装与迁移/目录/环境变量/命令/版本发布说明，明确单账号不容错配、Widget 延迟、缓存来源三项限制及 request-bound Provider 隔离行为和 ADR 实际选择；检查旧 Pi 安装/旧凭据优先级宣传已移除，包版本不因功能名 v1 倒退。（REL-06）
+- [x] 6.9 按 V2 §19 全部条件核签 v1：OMP 零修改、正式安装、AuthStorage 唯一来源、OAuth/refresh/identity/restart、目录/Streaming/thinking/声明 Vision/工具、main/subagent/headless、credits/free-all/logout/isolation/秘密保护均有证据；任一未通过保持发布阻断。（REL-01–06、HOST-05）

@@ -15,6 +15,10 @@
       "./extensions"
     ]
   },
+  "scripts": {
+    "test": "bun test/run-all.mts",
+    "typecheck": "tsc --noEmit"
+  },
   "peerDependencies": {
     "@oh-my-pi/pi-ai": "18.2.6",
     "@oh-my-pi/pi-coding-agent": "18.2.6"

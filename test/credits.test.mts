@@ -5,7 +5,7 @@ import { AuthStorage } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { createWorkBuddyProvider } from "../src/provider.ts";
-import { parseWorkBuddyCredits } from "../src/credits.ts";
+import { parseWorkBuddyCredits, summarizeWorkBuddyUsage } from "../src/credits.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -85,6 +85,12 @@ try {
     code: 0,
     data: { Response: { Data: { Accounts: [] } } },
   }) === undefined, "empty package list was presented as genuine zero without live evidence");
+  assert(summarizeWorkBuddyUsage({
+    provider: "workbuddy",
+    fetchedAt: Date.now(),
+    limits: [],
+    metadata: { totalRemaining: 0, totalLimit: 0, plans: [] },
+  }) === undefined, "empty normalized usage report was presented as genuine zero");
 
   let reports = await authStorage.fetchUsageReports();
   assert(reports?.length === 1, "successful Billing response did not produce one report");
@@ -108,6 +114,13 @@ try {
   await authStorage.invalidateUsageCache("workbuddy");
   reports = await authStorage.fetchUsageReports();
   assert(reports?.[0]?.metadata?.totalRemaining === 0, "genuine zero credits were not preserved");
+  const zeroSummary = summarizeWorkBuddyUsage(reports[0]!);
+  assert(
+    zeroSummary?.totalRemaining === 0
+      && zeroSummary.totalLimit === 10
+      && zeroSummary.packs[0]?.remaining === 0,
+    "normalized genuine-zero package was rejected or altered",
+  );
 
   mode = "slow";
   await authStorage.invalidateUsageCache("workbuddy");

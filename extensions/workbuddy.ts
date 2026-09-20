@@ -1,13 +1,11 @@
 // WorkBuddy AI international provider for OMP.
 import type { ExtensionAPI, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
-import { parseWorkBuddyCredits } from "../src/credits.ts";
 import {
   createWorkBuddyProvider,
   WORKBUDDY_PROVIDER,
 } from "../src/provider.ts";
 import {
   buildOmpModels,
-  FLASH_MAX_TOKENS,
   loadProductConfig,
   type ModelScope as Scope,
 } from "../src/models.ts";
@@ -17,8 +15,6 @@ import {
 } from "../src/payload.ts";
 import { loadSettings, saveSettings } from "../src/settings.ts";
 import { WorkBuddyUiController } from "../src/ui.ts";
-
-
 
 export default async function (pi: ExtensionAPI) {
   const provider = createWorkBuddyProvider();
@@ -192,42 +188,3 @@ export default async function (pi: ExtensionAPI) {
   });
 }
 
-if (process.argv.includes("--self-check")) {
-  const nativePayload = {
-    model: "hy3",
-    messages: [{ role: "user", content: "hi" }],
-    tool_choice: { type: "function", function: { name: "foo" } },
-    reasoning_effort: "high",
-    max_tokens: 1_024,
-  };
-  const before = JSON.stringify(nativePayload);
-  const payload = asProviderPayload(nativePayload);
-  if (payload !== nativePayload) throw new Error("payload identity");
-  if (JSON.stringify(nativePayload) !== before) throw new Error("native payload mutated");
-  const compatible = normalizeNamedToolChoice(payload);
-  if (compatible.tool_choice !== "foo") throw new Error("named tool choice compatibility");
-  if (JSON.stringify(nativePayload) !== before) throw new Error("named tool choice mutated native payload");
-  const stringChoice = { ...nativePayload, tool_choice: "auto" };
-  if (normalizeNamedToolChoice(stringChoice) !== stringChoice) throw new Error("string tool choice identity");
-  if (asProviderPayload("{") !== undefined || asProviderPayload([]) !== undefined) throw new Error("invalid payload accepted");
-  if (WORKBUDDY_PROVIDER !== "workbuddy") throw new Error("provider identity");
-  const flash = buildOmpModels(loadProductConfig("/definitely/missing/workbuddy-product-config.json"), "all")
-    .find((model) => model.id === "deepseek-v4.1-flash");
-  if (flash?.maxTokens !== FLASH_MAX_TOKENS) throw new Error("flash catalog cap");
-
-  const credits = parseWorkBuddyCredits({
-    code: 0,
-    data: {
-      Response: {
-        Data: {
-          Accounts: [
-            { PackageName: "Bonus Pack", CycleCapacitySize: 250, CycleCapacityRemain: 249 },
-            { PackageName: "Free Plan Subscription", CycleCapacitySize: 100, CycleCapacityRemain: 100 },
-          ],
-        },
-      },
-    },
-  });
-  if (credits?.totalRemaining !== 349 || credits.packs.length !== 2) throw new Error("credits");
-  console.log("ok");
-}

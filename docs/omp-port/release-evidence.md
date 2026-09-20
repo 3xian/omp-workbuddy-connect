@@ -1,0 +1,109 @@
+# WorkBuddy OMP v1 Release Evidence
+
+Status: **PASS — v1 functional release gate**
+
+This report contains redacted outcomes only. OAuth tokens, refresh tokens, Authorization values, account identifiers, organization identifiers, OAuth state values, and raw request bodies are intentionally omitted.
+
+## Candidate and environment
+
+| Field | Value |
+|---|---|
+| Test date | 2026-09-21 (UTC+08:00) |
+| Host | macOS Darwin arm64 |
+| OMP | `18.2.6` |
+| Frozen OMP source commit | `78b753124d11f8dd3ae73e2524125890ff7c977e` |
+| Extension manifest version | `1.1.5` |
+| Extension base commit | `5ce20af5ee2822690ea2fa08ecbec41c11788346` |
+| Candidate state | Base commit plus the M5 working-tree changes named in this report; no release commit or tag was created by this acceptance run |
+| Node | `v26.9.0` |
+| Bun | `1.3.14` |
+| Account type | WorkBuddy international free subscription; identity redacted |
+| Isolated profile | Dedicated M5 profile; removed after acceptance |
+| Tested model IDs | `workbuddy/hy3`, `workbuddy/hy4-preview-f`, `workbuddy/deepseek-v4.1-flash` |
+
+The extension was installed through the official host command, not only loaded by an SDK fixture:
+
+```text
+omp --profile <isolated> install . --json
+name=omp-workbuddy-connect, version=1.1.5, enabled=true
+```
+
+## Release Matrix
+
+| Domain / case | Result | Execution evidence | Implementation / durable evidence |
+|---|---|---|---|
+| Install / OMP 18.2.6 load | PASS | Official `omp install . --json` enabled `./extensions` in an isolated profile; interactive and print sessions loaded it | `package.json`; `extensions/workbuddy.ts` |
+| Type / zero errors | PASS | `npx tsc --noEmit`, exit 0 | `tsconfig.json`; all production and test modules |
+| Login / fresh OAuth | PASS | Official international login page opened; one host OAuth row was persisted; no token was printed or copied | `src/auth.ts`; `src/workbuddy-api.ts`; OAuth protocol regression |
+| Auth / first request identity | PASS | First Hy3 request streamed successfully with the sole host credential; identity values redacted | `src/provider.ts`; request-identity regression |
+| Restart / credential recovery | PASS | Interactive OMP process stopped, restarted on the same isolated profile, and returned `RESTART_AUTH_OK` without login | persisted-credential restart regression |
+| Refresh / expired access | PASS | Expiry was forced through public `AuthStorage`; the next real Hy3 request returned `REFRESH_LIVE_OK`; the persisted expiry became future-dated | `refreshWorkBuddyOAuth`; request-identity regression |
+| Failure / invalid refresh | PASS | An isolated real host row was expired with an invalid refresh value; actual headless invocation failed before Chat and stored no successful replacement | OAuth protocol regression; fail-closed provider checks |
+| Identity / missing accountId | PASS | accountId was removed from an isolated host row; actual headless model resolution returned no WorkBuddy model and made no Chat request | `validateStoredCredential`; provider regression |
+| Identity / optional org / no-enterprise | PASS | The live international account has no enterprise identity; login, refresh, and streamed Chat passed on the no-enterprise path | `X-No-Enterprise-Id` request-bound resolver; M1 redacted live evidence |
+| Switch / A → B | PASS | Prior live gate deleted A, authorized a distinct B, and used B from a retained main session and fresh Task session; both identities remain redacted | `requireBoundAccess`; `docs/omp-port/requirement-implementation-test-matrix.md` |
+| Logout / credential invalid | PASS | `/workbuddy logout` left zero WorkBuddy OAuth rows; subsequent real headless invocation failed before transport | provider logout regression |
+| Chat / three real models | PASS | Hy3, Hy4 preview, and Deepseek-V4.1-Flash each returned their unique live marker | model catalog and native transport regressions |
+| Thinking / supported effort | PASS | Hy3 headless high effort emitted a streamed thinking block and result; Hy4 high and Deepseek high completed real requests | canonical `thinking` metadata; model-transport regression |
+| Vision / real image | PASS | Hy3 received a generated 2×2 red PNG and returned `IMAGE_LIVE_OK:red` | model `input: [text,image]`; model-transport regression |
+| Tools / read, grep, bash | PASS | Real main Hy3 invoked each OMP tool and consumed its result; markers and package data matched | M3 tool-loop regression |
+| Tools / sequential and multi | PASS | Real main Hy3 performed read followed by bash only after the first result; a separate turn issued independent read+bash calls in one turn | tool-loop regression covers named, sequential, parallel, correlation, and final answer |
+| Agent / main | PASS | Interactive Chat, thinking, streaming, Billing, and tools completed | extension composition root |
+| Agent / Task role | PASS | `modelRoles.task=workbuddy/hy3`; actual Task agent used read and yielded `TASK_LIVE_OK:omp-workbuddy-connect` after three model requests | actual Task runtime contract regression |
+| Runtime / headless | PASS | `omp -p` loaded OAuth, model, payload hook, streaming, thinking, read tool, result, and clean exit without TUI | headless/UI regression |
+| Scope / free | PASS | Live command projected exactly the three cache rows with explicit zero multipliers | `freeModelIds`; model-scope lifecycle regression |
+| Scope / all | PASS | Live command re-registered 22 valid cache rows and kept Chat/UI operational | scope transaction implementation and regression |
+| Scope / empty free | PASS | Real OMP registry integration clears stale rows for authoritative empty free scope and blocks retained model transport | model-scope lifecycle regression |
+| Billing / success | PASS | Official Billing returned a nonzero total and two plan names; exact values omitted from evidence | `createWorkBuddyUsageProvider`; credits regression |
+| Billing / 5xx | PASS (controlled fault) | Production UsageProvider through real AuthStorage returned unavailable and did not retain last-good data when its HTTP boundary received 5xx | credits regression |
+| Billing / timeout / slow | PASS (controlled fault) | Production UsageProvider timed out promptly; delayed startup remained non-blocking; stale completion could not repaint | credits, session-start, and UI regressions |
+| Isolation / other provider | PASS | Real OMP hooks and catalog tests preserve foreign provider rows and same-ID payloads exactly; WorkBuddy resolver/header logic is provider-bound | provider, scope, and before-provider-request regressions |
+| Logging / no credential leakage | PASS | Production source and runtime output were inspected; no token, refresh value, or Authorization value is emitted. Extension Widget identity is masked, and committed evidence contains no raw identity or OAuth state | `redactIdentity`; source/file/network audit below |
+
+Controlled HTTP faults are deterministic executions of the production UsageProvider through OMP AuthStorage; they are not claims that the official service happened to fail during the live positive Billing call. The positive OAuth, Chat, Refresh, Vision, Tools, Credits, main, Task, and headless paths above all used the official service.
+
+## Four verification layers
+
+| Layer | Coverage | Result |
+|---|---|---|
+| Unit | auth mapping, OAuth protocol, payload, model catalog, transport parsing, settings, credits, UI state | PASS |
+| OMP contract | ProviderConfig/OAuth callbacks, model modifier, request hook, provider logout, request-bound identity | PASS |
+| OMP integration | official extension loading, registry replacement, persisted restart, scope lifecycle, actual Task executor, headless lifecycle | PASS |
+| WorkBuddy Live E2E | OAuth, Chat, refresh, three models, thinking, image, read/grep/bash, sequential/multi tools, Billing, main, Task role, headless, free/all, logout | PASS |
+
+`test/run-all.mts` sequentially executed 19 permanent regression scripts and reported `OK: 19 permanent regression scripts passed`. The scripts collectively retain all twelve V2 §13 behavior classes: isolation, cancellation, identity fail-closed, refresh, account switch, restart, dynamic scope, payload compatibility, streamed tool association, Credits failure semantics, UI stale-result suppression, and headless/Task lifecycle. Fixtures use temporary AuthStorage/config paths and are removed in `finally`; they do not read the live profile or Desktop credentials.
+
+## Security, file, and network inspection
+
+- Production URLs are derived only from `https://www.workbuddy.ai`: plugin state/token/refresh, Chat base `/v2`, and Billing `/v2/billing/meter/get-user-resource`.
+- The server-returned browser authorization URL is rejected unless its parsed origin is exactly `https://www.workbuddy.ai` and it contains no URL credentials.
+- No loopback proxy, custom Chat transport, global fetch interception, secondary credential store, or third-party upload exists.
+- Tokens are passed only through OMP OAuth callbacks and request headers. Errors describe missing fields/status classes, never values. Login diagnostics expose response/claim key names only.
+- Project scans found no `.env`, auth database, credential file, token dump, or runtime log artifact.
+- The only Desktop path read by production is model metadata at `~/.workbuddy-ai/cache/acc-product-config-v3.json`; no Desktop credential path exists in production code.
+- The Desktop product metadata SHA-256 was identical before and after logout: `f8805736077d73549ef88f6615b7e246a6548b311f1b526c0c673ea020e89027`.
+- `/workbuddy logout` removed only OMP's WorkBuddy credential. The isolated profile ended with zero WorkBuddy rows.
+- OMP's local interactive login confirmation prints the authenticated account identity to that user, and its login dialog displays the short-lived OAuth state URL. The extension does not duplicate either value into its own diagnostics; its Widget masks identity. Raw terminal capture is therefore not committed, and this report retains only redacted outcomes.
+
+## Requirement → implementation → evidence
+
+| Requirement | Implementation | Evidence |
+|---|---|---|
+| REL-01 runtime parity | `extensions/workbuddy.ts`, `src/provider.ts`, `src/payload.ts` | main, Task role, headless live rows above; Task/headless regressions |
+| REL-02 complete matrix | M0–M4 production modules plus M5 candidate | every Release Matrix row above |
+| REL-03 four layers | `test/run-all.mts`, 19 permanent scripts | four-layer table and successful runner output |
+| REL-04 privacy/endpoints | `src/workbuddy-api.ts`, `src/auth.ts`, `src/ui.ts`, host AuthStorage-only provider | source/log/file/network audit and unchanged Desktop checksum |
+| REL-05 reproducibility | this report; frozen baseline and ADR documents | exact versions, commits, date, account type, model IDs, matrix, limitations |
+| REL-06 honest limits | `README.md`, ADRs, this report | installation, migration, cache/scope, single-account and UI timing disclosures |
+
+Detailed AUTH/MODEL/GATE/UX mappings remain in `docs/omp-port/requirement-implementation-test-matrix.md`; M5 changes update its REL rows rather than duplicating all earlier evidence here.
+
+## Known limitations
+
+1. Officially verified only on OMP `18.2.6` and WorkBuddy international `https://www.workbuddy.ai`.
+2. Exactly one stored WorkBuddy account is supported. Zero/multiple rows, missing identity, or identity mismatch fail closed; no credential rotation is attempted.
+3. Widget/status may update on the next `turn_start` after model selection.
+4. Dynamic model metadata comes from the Desktop product cache. Builtin fallback supports `all` only; it is not free evidence.
+5. v1 does not import Desktop credentials, add a custom Provider transport, use an online dynamic-catalog endpoint, or provide immediate model-selector UI refresh.
+6. OMP 18.2.6 exposes aggregate usage refresh. The Widget filters to WorkBuddy after the host fetch, but another configured provider may also refresh when its cache expires.
+7. The tested candidate has a precise base commit plus local M5 changes but no release commit/tag; create that immutable commit before publishing an external artifact.

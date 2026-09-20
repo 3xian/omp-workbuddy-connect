@@ -1,28 +1,26 @@
 # OMP WorkBuddy Connect
 
-> **Development status — not release-ready**
+> **v1 release gate passed for OMP 18.2.6**
 >
-> M0–M4 已完成；M5 发布验收尚未完成，因此本分支不可发布。
-> 权威实施进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
-> 下文描述当前开发分支行为；尚未通过的里程碑能力会明确标注。
+> M0–M5 已完成。正式验收环境、逐项 Release Matrix 与脱敏证据见
+> `docs/omp-port/release-evidence.md`；兼容范围仅限本文明确列出的宿主版本与国际版端点。
 
-## 当前开发分支
+## 当前版本
 
-WorkBuddy AI 国际版 provider for OMP。当前认证、模型目录契约、scope 切换安全、最小 Gateway 兼容和非阻塞管理面已迁移到 OMP；release gate 仍在开发。
+WorkBuddy AI 国际版 provider for OMP。认证、模型目录、scope、Gateway 兼容、工具、Credits 与可选管理面均通过 v1 验收。
 
 移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
-## 开发加载
+## 安装
 
-当前分支尚未发布，不应使用上游仓库的 `pi install` 命令冒充本实现。开发时由 OMP 18.2.6 显式加载本地入口；独立 profile 可隔离日常凭据和会话：
+要求 OMP `18.2.6`。当前包未发布到 npm registry；从可信源码 checkout 使用 OMP 正式安装命令：
 
 ```bash
-omp --profile workbuddy-m3-live \
-  --no-extensions \
-  --extension /absolute/path/to/omp-workbuddy-connect/extensions/workbuddy.ts
+omp --profile workbuddy install /absolute/path/to/omp-workbuddy-connect
+omp --profile workbuddy --model workbuddy/hy3
 ```
 
-`--no-extensions` 仅关闭环境中的自动发现，不会禁用显式 `--extension`。启动后执行 `/login workbuddy`；如果 `free` 范围为空，登录后执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。
+`omp install` 按 `package.json` 的 `omp.extensions` 加载入口。`--profile workbuddy` 可选，但推荐用于隔离凭据、设置和会话。启动后执行 `/login workbuddy`；如果 `free` 范围为空，执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。
 
 ## 登录
 
@@ -46,7 +44,7 @@ omp --profile workbuddy-m3-live \
 | Hy4 preview | 1M / 64k | high |
 | Hy3 | 192k / 64k | low · high |
 
-推理配置使用 OMP canonical `thinking: { mode: "effort", efforts, requiresEffort }`。未声明可信 `supportedEfforts` 或 off 能力时，只保留 `reasoning` capability，不自动扩展 effort；`canDisableThinking=false` 会禁止 off。对于允许关闭的模型，OMP 18.2.6 在没有 Gateway-specific disable 证据时会把关闭请求限制到最低受支持 effort；WorkBuddy 的真实关闭编码仍须在 M5 live gate 确认，插件不会预设未经验证的 `none` 或其他 wire 值。
+推理配置使用 OMP canonical `thinking: { mode: "effort", efforts, requiresEffort }`。未声明可信 `supportedEfforts` 或 off 能力时，只保留 `reasoning` capability，不自动扩展 effort；`canDisableThinking=false` 会禁止 off。发布验收覆盖声明支持的高推理档，插件不会预设未经产品目录证明的 `none` 或其他 wire 值。
 
 ## 设置
 
@@ -58,7 +56,7 @@ omp --profile workbuddy-m3-live \
 - **`/workbuddy all`** — 切到当前插件可识别的全部模型。
 - **`/workbuddy logout`** — 失效异步 UI、删除 OMP WorkBuddy credential，并清除 Widget/status。
 
-scope 存于 `~/.omp/agent/.workbuddy-settings.json`（或 `PI_CODING_AGENT_DIR`）。模型切换依赖 `session_start` / `turn_start`，因此 Widget 允许到下一次 turn 才反映新模型；这不影响认证或请求路由。Headless 模式不会调用 select/notify/widget/status。
+scope 存于 OMP agent 目录的 `.workbuddy-settings.json`；默认目录与 profile 均由 OMP 决定，`PI_CODING_AGENT_DIR` 可覆盖。模型切换依赖 `session_start` / `turn_start`，因此 Widget 允许到下一次 turn 才反映新模型；这不影响认证或请求路由。Headless 模式不会调用 select/notify/widget/status。
 
 非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除 OMP 18.2.6 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存与 Widget 状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
 
@@ -69,13 +67,14 @@ scope 存于 `~/.omp/agent/.workbuddy-settings.json`（或 `PI_CODING_AGENT_DIR`
 | `WORKBUDDYAI_PRODUCT_CONFIG` | 指定产品配置 JSON 路径 |
 | `PI_CODING_AGENT_DIR` | 覆盖 OMP agent 目录；非敏感 scope 设置文件随宿主目录规则存放 |
 
-## 自检
+## 验证
 
 ```bash
-npx --yes bun@1.3.14 extensions/workbuddy.ts --self-check
+npm test
+npm run typecheck
 ```
 
-覆盖最小 payload compatibility boundary、请求预算限制与严格积分解析；模型、认证和 UI 生命周期边界由下列独立测试覆盖。
+`npm test` 顺序执行 19 个永久回归脚本，避免全局 fetch、AuthStorage 与 runtime fixture 并发互扰。真实 OAuth、Chat、Refresh、Vision、Tools、Credits、main、Task role 与 headless 的发布证据不由 Mock 替代，记录于 `docs/omp-port/release-evidence.md`。
 
 ## 与上游的差异
 
@@ -88,29 +87,22 @@ npx --yes bun@1.3.14 extensions/workbuddy.ts --self-check
 - WorkBuddy Gateway 的 `tool_choice` 只接受字符串；插件仅把 OMP 原生 named-choice 对象复制为函数名字符串。该差异来自隔离 live gate 的可复现 `400` / code `11101`，其他 tool/prompt/history 字段不改写。
 - 不按模型名称猜测 reasoning effort，也不为缺少可信能力信息的模型生成全档默认。
 
-## 测试
+## 迁移
 
-```bash
-npx --yes bun@1.3.14 test/payload.test.mts
-npx --yes bun@1.3.14 test/tool-loop.test.mts
-npx --yes bun@1.3.14 test/native-transport.test.mts
-npx --yes bun@1.3.14 test/model-catalog.test.mts
-npx --yes bun@1.3.14 test/model-transport.test.mts
-npx --yes bun@1.3.14 test/settings.test.mts
-npx --yes bun@1.3.14 test/auth.test.mts
-npx --yes bun@1.3.14 test/provider.test.mts
-npx --yes bun@1.3.14 test/scope.test.mts
-npx --yes bun@1.3.14 test/session-start.test.mts
-npx --yes bun@1.3.14 test/credits.test.mts
-npx --yes bun@1.3.14 test/ui.test.mts
-npx --yes bun@1.3.14 test/contract/model-scope-lifecycle.test.mts
-npx --yes bun@1.3.14 test/contract/before-provider-request-runtime.test.mts
-npx --yes bun@1.3.14 test/contract/persisted-credential-restart.test.mts
-npx --yes bun@1.3.14 test/contract/request-identity-binding.test.mts
-npx --yes bun@1.3.14 test/contract/task-runtime-contract.test.mts
-npx --yes bun@1.3.14 test/contract/provider-logout.test.mts
-npx tsc --noEmit
-```
+- 不复用旧 Pi/Fork、DSH 或 Desktop credential；安装后必须执行 `/login workbuddy`。
+- `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源。
+- 旧 scope 设置不会导入；用 `/workbuddy free` 或 `/workbuddy all` 明确选择。
+- 包版本保持 `1.1.5`；“v1”是功能发布定义，不会把 manifest 版本倒退到 `1.0.0`。
+
+## v1 限制
+
+- 仅验证官方 OMP `18.2.6` 与 WorkBuddy 国际版 `https://www.workbuddy.ai`。
+- 仅支持一个已存储 WorkBuddy Account；零个或多个账号、缺失身份或身份错配均在 transport 前拒绝。
+- Widget/status 可能到下一次 `turn_start` 才反映模型切换。
+- 模型目录只读 `~/.workbuddy-ai/cache/acc-product-config-v3.json` 的产品元数据；不读取 Desktop credential。缓存失效时 `all` 使用内置 fallback，`free` 不把 fallback 或缺少 multiplier 的模型猜成免费。
+- WorkBuddy 身份 Header 在请求边界从 OMP AuthStorage 原子解析；同 ID 的其他 Provider 不经过 WorkBuddy payload 或身份逻辑。
+- v1 不包含多账号轮换、Desktop credential import、自定义 Chat transport、在线动态目录端点或即时 model-select UI。
+- OMP 18.2.6 的 Usage API 是跨 Provider 聚合刷新；Widget 只展示 WorkBuddy 报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
 
 ## License
 

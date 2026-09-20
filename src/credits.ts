@@ -147,6 +147,7 @@ export function summarizeWorkBuddyUsage(report: UsageReport): WorkBuddyCredits |
       ...(used !== undefined ? { used } : {}),
     });
   }
+  if (packs.length === 0) return undefined;
   return { totalRemaining, ...(totalLimit !== undefined ? { totalLimit } : {}), plans, packs };
 }
 
