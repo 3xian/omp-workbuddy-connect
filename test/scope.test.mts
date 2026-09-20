@@ -56,20 +56,35 @@ try {
     provider_specific_field: { keep: true },
   };
   const foreignBefore = JSON.stringify(foreign);
-  assert(hook({ type: "before_provider_request", payload: foreign }) === undefined, "foreign payload was replaced");
+  const foreignCtx = { model: { provider: "foreign", id: "grok-4.6" } };
+  assert(hook({ type: "before_provider_request", payload: foreign }, foreignCtx) === undefined, "foreign payload was replaced");
   assert(JSON.stringify(foreign) === foreignBefore, "foreign payload fields were changed");
 
   const active = { ...foreign, model: "contract-active" };
   const activeBefore = JSON.stringify(active);
-  const activeResult = hook({ type: "before_provider_request", payload: active });
+  const workBuddyCtx = { model: { provider: "workbuddy", id: "contract-active" } };
+  const activeResult = hook({ type: "before_provider_request", payload: active }, workBuddyCtx);
   assert(activeResult !== active, "active named WorkBuddy payload was not copied for compatibility");
   assert(activeResult.tool_choice === "bash", "active named tool choice was not encoded as a Gateway string");
   assert(JSON.stringify(active) === activeBefore, "active WorkBuddy host payload was mutated");
 
-  const activeAuto = { ...foreign, model: "contract-active", tool_choice: "auto" };
-  assert(hook({ type: "before_provider_request", payload: activeAuto }) === activeAuto, "compatible active payload identity changed");
+  const sameIdForeignResult = hook({ type: "before_provider_request", payload: active }, {
+    model: { provider: "foreign", id: "contract-active" },
+  });
+  assert(sameIdForeignResult === undefined, "foreign provider with a WorkBuddy ID was rewritten");
+  assert(JSON.stringify(active) === activeBefore, "same-ID foreign payload was mutated");
 
-  console.log("OK: hook isolates foreign payloads and applies only the evidenced WorkBuddy named-choice delta");
+  const historicalSameId = { ...active, model: "historical-workbuddy-id" };
+  const historicalBefore = JSON.stringify(historicalSameId);
+  assert(hook({ type: "before_provider_request", payload: historicalSameId }, {
+    model: { provider: "foreign", id: "historical-workbuddy-id" },
+  }) === undefined, "historical same-ID foreign payload was rejected or rewritten");
+  assert(JSON.stringify(historicalSameId) === historicalBefore, "historical same-ID foreign payload was mutated");
+
+  const activeAuto = { ...foreign, model: "contract-active", tool_choice: "auto" };
+  assert(hook({ type: "before_provider_request", payload: activeAuto }, workBuddyCtx) === activeAuto, "compatible active payload identity changed");
+
+  console.log("OK: request-bound provider identity isolates same-ID foreign payloads and applies only the WorkBuddy named-choice delta");
 } finally {
   if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = previousAgentDir;

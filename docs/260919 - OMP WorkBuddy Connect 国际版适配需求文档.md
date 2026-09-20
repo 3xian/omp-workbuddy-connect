@@ -9,7 +9,7 @@
 **上游项目**：`icekale/pi-workbuddy-connect`  
 **目标服务**：WorkBuddy AI 国际版  
 **目标服务域名**：`https://www.workbuddy.ai`  
-**文档状态**：开发需求基线（Requirement Revision 1.3）
+**文档状态**：开发需求基线（Requirement Revision 1.4）  
 **版本目标**：v1.0
 
 
@@ -26,6 +26,8 @@ Revision 1.1 已同步三项收紧：nickname 不再别名映射为 OAuth email�
 Revision 1.2 根据 M3 证据审计把旧 payload patch 从“必须保留”改为 compatibility candidates：当前没有可复现 Gateway failure case，reasoning cleanup、tool choice rewrite、request-body token clamp、forced stream、developer rewrite、unsupported-field cleanup 与自动 system prompt 均不保留；未来只有脱敏服务端失败证据成立时才恢复最小差异。
 
 Revision 1.3 记录 M3 live gate：OMP 18.2.6 的原生 named `tool_choice` 对象在 `deepseek-v4.1-flash` 上触发 WorkBuddy Gateway HTTP 400/code `11101`，服务端字段要求字符串。恢复唯一最小差异：仅对活动 WorkBuddy 模型把 named 对象复制转换为函数名字符串；同一 forced-read 场景复验通过。其余候选仍删除。
+
+Revision 1.4 修正请求边界：OMP 18.2.6 会把本次 provider request 的精确 Model 作为 `before_provider_request` 的 `ctx.model`，故 payload compatibility 以 `ctx.model.provider === "workbuddy"` 过滤，不再依赖 ID Set。Hook 异常会被宿主记录后吞没，活动 scope、切换期和 retained Model 的 fail-closed 阻断因此迁移到 WorkBuddy-bound `resolveHeaders`。
 
 ---
 
@@ -709,7 +711,7 @@ OMP 18.2.6 Extension API 支持 Provider request payload hook，而内置 OpenAI
 
 ### 19.2 Tool Choice Normalization
 
-隔离 M3 live gate 证明 WorkBuddy Gateway 的 `tool_choice` 字段只接受字符串：OMP 原生 named 对象在 `deepseek-v4.1-flash` 上返回脱敏 HTTP 400/code `11101`。插件因此仅对活动 WorkBuddy payload 进行 copy-on-write，把 `{type:"function", function:{name}}` 转为函数名字符串；`auto` 等字符串值、tools、arguments streaming、工具结果关联及其他字段仍由 OMP 原生 Agent/transport 负责。同一 `/force:read` 场景在修正后完成一次 `Read` 和最终回答。
+隔离 M3 live gate 证明 WorkBuddy Gateway 的 `tool_choice` 字段只接受字符串：OMP 原生 named 对象在 `deepseek-v4.1-flash` 上返回脱敏 HTTP 400/code `11101`。插件因此仅在 request-bound `ctx.model.provider` 为 WorkBuddy 时进行 copy-on-write，把 `{type:"function", function:{name}}` 转为函数名字符串；`auto` 等字符串值、tools、arguments streaming、工具结果关联及其他字段仍由 OMP 原生 Agent/transport 负责。加固后的 request-bound 路由在隔离 profile 中再次完成 `/force:read`、真实 `Read package.json` 与最终 `DEEP_NAMED_TOOL_OK`。
 
 ### 19.3 Model-specific Max Tokens
 
@@ -722,29 +724,19 @@ forced `stream=true`、developer/system rewrite、标准 `reasoning_effort`/`max
 
 ---
 
-# 20. Hook 请求识别
+# 20. 请求边界识别与 Scope Guard
 
-OMP `before_provider_request` 当前没有可靠的 Provider ID 字段供插件直接过滤。
-
-现阶段允许继续沿用 upstream 插件：
+OMP 18.2.6 的 `before_provider_request` context 暴露本次请求的精确 Model。Payload compatibility 必须使用：
 
 ```text
-WorkBuddy Model ID Set
+ctx.model.provider === "workbuddy"
 ```
 
-识别请求。
+识别 WorkBuddy 请求，而不是使用 `payload.model` 或累计 ID Set。其他 Provider 即使使用当前或历史 WorkBuddy model ID，也必须保持 payload 完全不变。
 
-即：
+`before_provider_request` handler 抛错会被宿主记录后吞没，原 payload 继续发送，因此该 hook 不得承担 fail-closed 安全约束。活动 scope、切换期与 retained WorkBuddy Model 的阻断必须位于其 `resolveHeaders`：在已有 resolver、异步凭据解析与最终 Header 返回边界复核活动 ID 和 scope revision，失败时 WorkBuddy HTTP 请求数为零。
 
-```text
-payload.model ∈ currentWorkBuddyModelIds
-```
-
-才执行 WorkBuddy payload transformation。
-
-该方式存在不同 Provider 使用同名 Model ID 时的理论冲突。
-
-v1.0 将其列为 Known Limitation，不为解决此问题重新实现 custom transport。
+不为该隔离重新实现 custom transport。
 
 ---
 
@@ -1235,7 +1227,7 @@ OMP < 18.2.6
 - [ ] Token refresh 保留 account identity
 - [ ] `thinkingLevelMap` → OMP `thinking`
 - [ ] `buildPiModels()` → `buildOmpModels()`
-- [x] 保留 `before_provider_request` 作为最小 compatibility boundary 与 retained-model guard
+- [x] 保留 `before_provider_request` 作为最小 compatibility boundary；使用 request-bound Provider 身份过滤，把 retained-model/scope fail-closed guard 放到 WorkBuddy `resolveHeaders`
 - [x] 审核旧 Tool Choice transform；live Gateway code `11101` 证明 named 对象需转换为函数名字符串，已保留最小 copy-on-write 修正
 - [x] 审核旧 reasoning history cleanup；无 Gateway 证据，已删除
 - [ ] 删除 unsupported `refreshModels`
@@ -1475,9 +1467,9 @@ turn_start
 
 才更新。
 
-### L3. Payload Hook 按 Model ID 识别
+### L3. Request-bound Provider Isolation
 
-理论上不同 Provider 出现完全相同 Model ID 时可能误命中。
+Payload hook 使用请求绑定的 `ctx.model.provider`，活动 scope/切换期阻断使用 WorkBuddy `resolveHeaders`。当前与历史同 ID 的其他 Provider 不会被变换；hook 不承担 fail-closed 阻断。
 
 ### L4. Product Config Dependency
 

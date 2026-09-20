@@ -41,16 +41,21 @@ let resolvedIdentity: {
   orgId: "org-a",
 };
 let resolvedSession: string | undefined;
+let accessGate: Promise<void> | undefined;
+let markAccessStarted: (() => void) | undefined;
 const authStorage = {
   listOAuthAccounts() {
     return accounts;
   },
   async getOAuthAccess(_provider: string, sessionId?: string) {
     resolvedSession = sessionId;
+    markAccessStarted?.();
+    await accessGate;
     return resolvedIdentity;
   },
 };
 const controller = createWorkBuddyProvider();
+controller.setModelAccess(new Set(["hy3"]), false);
 const config = controller.config([]);
 assert(config.baseUrl === "https://www.workbuddy.ai/v2", "provider routing was not fixed to international API");
 assert(config.api === "openai-completions", "provider did not use host Chat transport");
@@ -89,6 +94,45 @@ const headers = await projectedWorkBuddy.resolveHeaders();
 assert(previousResolverCalls === 1, "existing resolver was not composed exactly once");
 assert(headers?.["X-Existing"] === "preserved", "existing resolver headers were lost");
 assert(headers?.["X-User-Id"] === "account-a" && headers["X-Enterprise-Id"] === "org-a", "request identity headers mismatch");
+const resolverCallsBeforeScopeChecks = previousResolverCalls;
+controller.setModelAccess(new Set(["hy3"]), true);
+let transitionRejected = false;
+try {
+  await projectedWorkBuddy.resolveHeaders();
+} catch (error) {
+  transitionRejected = error instanceof Error && error.message.includes("scope is changing");
+}
+assert(transitionRejected, "scope transition did not fail closed at the resolver");
+assert(previousResolverCalls === resolverCallsBeforeScopeChecks, "scope transition reached the previous resolver");
+
+controller.setModelAccess(new Set(), false);
+let removedModelRejected = false;
+try {
+  await projectedWorkBuddy.resolveHeaders();
+} catch (error) {
+  removedModelRejected = error instanceof Error && error.message.includes("outside the active scope");
+}
+assert(removedModelRejected, "removed model did not fail closed at the resolver");
+assert(previousResolverCalls === resolverCallsBeforeScopeChecks, "removed model reached the previous resolver");
+controller.setModelAccess(new Set(["hy3"]), false);
+let releaseAccess!: () => void;
+accessGate = new Promise<void>((resolve) => { releaseAccess = resolve; });
+const accessStarted = new Promise<void>((resolve) => { markAccessStarted = resolve; });
+const inFlightResolution = projectedWorkBuddy.resolveHeaders();
+await accessStarted;
+controller.setModelAccess(new Set(["hy3"]), true);
+releaseAccess();
+let midFlightTransitionRejected = false;
+try {
+  await inFlightResolution;
+} catch (error) {
+  midFlightTransitionRejected = error instanceof Error && error.message.includes("scope is changing");
+}
+assert(midFlightTransitionRejected, "scope transition during credential resolution did not fail closed");
+accessGate = undefined;
+markAccessStarted = undefined;
+controller.setModelAccess(new Set(["hy3"]), false);
+
 
 accounts = [{ position: 0, credentialId: 21, accountId: "account-b", orgId: "org-b", active: true }];
 resolvedIdentity = {
@@ -109,6 +153,7 @@ assert(
 assert(resolvedSession === "session-b", `resolver used stale session ${resolvedSession}`);
 
 const childController = createWorkBuddyProvider();
+childController.setModelAccess(new Set(["hy3"]), false);
 childController.bindContext({
   modelRegistry: { authStorage },
   sessionManager: { getSessionId: () => "subagent-b" },

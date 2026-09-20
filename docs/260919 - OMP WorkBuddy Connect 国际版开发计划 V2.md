@@ -1345,23 +1345,13 @@ Provider Adapter 不应改变用户 prompt semantics。
 before_provider_request
 ```
 
-但只处理 WorkBuddy 请求。
-
-v1 可以继续：
+但只处理 request-bound context 明确属于 WorkBuddy 的请求：
 
 ```text
-payload.model ∈ currentWorkBuddyModelIds
+ctx.model.provider === "workbuddy"
 ```
 
-进行识别。
-
-Known Limitation：
-
-```text
-不同 Provider 同名 Model ID 理论冲突
-```
-
-不为此重新实现 custom transport。
+不得使用 `payload.model` 或累计 ID Set 推断 Provider。OMP 18.2.6 handler 异常会被记录后吞没，故 hook 只承担有证据的 wire compatibility；活动 scope、切换期和 retained-model fail-closed guard 必须位于 WorkBuddy-bound `resolveHeaders`，在 transport 前阻断。不得为此重写 custom transport。
 
 ---
 
@@ -2393,15 +2383,15 @@ no credential leakage
 
 ---
 
-### L3. Payload Hook Model-ID Filtering
+### L3. Request-bound Provider Isolation
 
-不同 Provider 存在完全同名 Model ID：
+OMP 18.2.6 的 hook context 绑定精确 request Model：
 
 ```text
-理论上可能误命中
+ctx.model.provider
 ```
 
-v1 不通过自定义 transport 解决。
+因此当前或历史同 ID 的其他 Provider 不会误命中。Scope/transition 安全约束位于 WorkBuddy `resolveHeaders`；hook 异常不能作为 fail-closed 机制。
 
 ---
 

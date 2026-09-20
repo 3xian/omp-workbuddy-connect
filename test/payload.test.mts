@@ -1,8 +1,6 @@
 import {
   asProviderPayload,
-  isCurrentWorkBuddyPayload,
   normalizeNamedToolChoice,
-  payloadModelId,
 } from "../src/payload.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -26,9 +24,6 @@ const native = {
 const before = JSON.stringify(native);
 const parsed = asProviderPayload(native);
 assert(parsed === native, "object payload identity changed");
-assert(payloadModelId(parsed) === "contract-active", "payload model ID was not read");
-assert(isCurrentWorkBuddyPayload(parsed, new Set(["contract-active"])), "active payload was not recognized");
-assert(!isCurrentWorkBuddyPayload(parsed, new Set(["other"])), "foreign payload was classified as WorkBuddy");
 assert(JSON.stringify(native) === before, "payload parsing changed host-generated fields");
 const normalized = normalizeNamedToolChoice(native);
 assert(normalized !== native, "named tool choice did not create a compatibility copy");

@@ -41,7 +41,7 @@ Observed results:
 | Required terminal tool | Real Task `yield` executed; result was `\"task-probe-ok\"` |
 | Extension binding | Three Task sessions produced three distinct factory instances |
 | Headless state | All three `session_start` events reported `ctx.hasUI === false` |
-| Payload hook | Both dispatched requests reached the observer with `model=hy3`; synthetic transport `stream=false` was preserved rather than overwritten by the extension |
+| Payload hook | Both dispatched WorkBuddy requests reached the observer with `model=hy3`; synthetic transport `stream=false` was preserved because the request-bound hook only applies the evidenced named `tool_choice` encoding |
 | Cancellation | A provider request was held open, caller AbortSignal aborted it, and `runSubprocess` returned `aborted=true`, exit code 1 |
 | Shutdown | All three sessions emitted `session_shutdown` with `keepAlive=false` |
 | Ambiguous stored accounts | Two stored OAuth rows were rejected by the request resolver before the synthetic transport; added transport attempts: 0 |

@@ -15,9 +15,6 @@ export function asProviderPayload(payload: unknown): ProviderPayload | undefined
     : undefined;
 }
 
-export function payloadModelId(payload: ProviderPayload): string | undefined {
-  return typeof payload.model === "string" ? payload.model : undefined;
-}
 
 /**
  * WorkBuddy Gateway code 11101 rejects OpenAI's named-choice object because
@@ -34,11 +31,3 @@ export function normalizeNamedToolChoice(payload: ProviderPayload): ProviderPayl
   return { ...payload, tool_choice: name };
 }
 
-/** The OMP 18.2.6 hook has no provider identity, so matching is intentionally ID-only. */
-export function isCurrentWorkBuddyPayload(
-  payload: ProviderPayload,
-  activeIds: ReadonlySet<string>,
-): boolean {
-  const modelId = payloadModelId(payload);
-  return modelId !== undefined && activeIds.has(modelId);
-}

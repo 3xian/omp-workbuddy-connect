@@ -37,7 +37,7 @@ The retained evidence is this non-secret summary only. It contains no Token, cre
 5. `all → contract-paid → free` against a paid-only valid catalog yields an authoritative empty result.
 6. The empty transition calls `unregisterProvider` before `registerProvider({ models: [] })` and removes stale runtime rows.
 7. The removed current model produces a reselect warning; no automatic model selection occurs.
-8. A retained `contract-paid` object fails in the extension payload hook before the real OMP `openai-completions` transport invokes `fetch`; observed WorkBuddy Chat request count is zero.
+8. A retained `contract-paid` object fails in its WorkBuddy-bound `resolveHeaders` while the real OMP `openai-completions` transport is being constructed; neither the previous resolver nor `fetch` is reached, and the observed WorkBuddy Chat request count is zero.
 9. Restart reloads persisted `free` and keeps the paid-only free projection empty.
 10. The isolated OMP credential row is semantically identical before scope changes, after failures, after successful empty transition, and after restart.
 
@@ -73,8 +73,8 @@ OK: M2 synthetic metadata, transactional scope, retained-model guard, restart, a
 
 ## Evidence boundary
 
-The local OMP AuthStorage contained no enabled WorkBuddy credential for a new live validation session. No new live Gateway Chat was attempted for this gate. Therefore this record does **not** claim live requests across three models, live Vision, live supported-effort/off encoding, live pricing, or interactive selector behavior. Those remain explicit M3/M5 gates in the requirement matrix; the M2 pass is based on real Desktop catalog metadata, real OMP registration/transport contracts, isolated credential invariants, and zero-request negative proof.
+The local OMP AuthStorage contained no enabled WorkBuddy credential for a new live validation session. No new live Gateway Chat was attempted for this gate. Therefore this record does **not** claim live requests across three models, live Vision, live supported-effort/off encoding, live pricing, or interactive selector behavior. Those remain explicit M5 gates in the requirement matrix; the M2 pass is based on real Desktop catalog metadata, real OMP registration/transport contracts, isolated credential invariants, and zero-request negative proof.
 
-### Known same-ID boundary
+### Post-M3 request-bound correction
 
-The retained-model guard uses a cumulative union of current and historical WorkBuddy model IDs because OMP 18.2.6 `before_provider_request` exposes the payload model ID but not its provider identity. A foreign Provider request that later uses the same ID as any known WorkBuddy model can therefore be rejected as out of scope. `test/scope.test.mts` proves only that non-matching IDs remain untouched; it does not prove absolute Provider isolation. M3 GATE-03 must investigate moving the active-scope/transition guard to the WorkBuddy `resolveHeaders` request boundary, where the model is already Provider-bound, leaving the payload hook responsible only for evidenced compatibility transforms. No custom transport is authorized as a workaround.
+The original M2 implementation placed the retained-model guard in `before_provider_request`. OMP 18.2.6 `ExtensionRunner` reports and swallows ordinary hook exceptions, so that placement could not fail closed in production; the old zero-HTTP test invoked the handler directly and therefore did not prove the host path. The guard now lives in WorkBuddy-bound `Model.resolveHeaders`, with transition/revision checks before the previous resolver, after asynchronous boundaries, and before identity headers return. `test/contract/model-scope-lifecycle.test.mts` exercises the real `streamSimple` path and observes zero `fetch` calls. `test/contract/before-provider-request-runtime.test.mts` separately proves exact request-model context and the host's swallowed-hook behavior. Same-ID foreign Provider requests are isolated by `ctx.model.provider`, not cumulative IDs.

@@ -28,16 +28,16 @@
 - **WHEN** 原生 transport 已正确生成 stream、role、reasoning_effort 和 max_tokens
 - **THEN** 插件保留其标准语义，仅实施有证据的 WorkBuddy 差异
 
-### Requirement: GATE-03 Payload hook isolation
-系统 SHALL 使用宿主发送前 payload hook，并仅对当前 WorkBuddy 模型 ID 集合中的请求执行变换；未匹配请求 SHALL 保持不变。v1 SHALL 明示同名跨 Provider model ID 无法仅靠该集合可靠区分的限制，不以自定义 transport 或全局拦截规避。
+### Requirement: GATE-03 Request-bound Provider isolation
+系统 SHALL 使用 `before_provider_request` 的 request-bound `ctx.model.provider` 识别 WorkBuddy 请求，payload hook 仅实施有证据的兼容变换。活动 scope 与切换期的 fail-closed 约束 SHALL 位于 WorkBuddy 模型自身的 `resolveHeaders` 请求边界，并在 transport 前阻断失效或切换中的 retained Model。不得依赖 payload model ID 集合、自定义 transport 或全局拦截实现隔离。
 
-#### Scenario: Nonmatching provider request
-- **WHEN** 其他 Provider 的 payload.model 不属于当前 WorkBuddy ID 集合
-- **THEN** 请求内容、消息、tools、tool_choice 和标准字段均不改变
+#### Scenario: Another provider uses the same model ID
+- **WHEN** 其他 Provider 使用当前或历史 WorkBuddy model ID
+- **THEN** `ctx.model.provider` 不是 `workbuddy`，请求内容、消息、tools、tool_choice 和标准字段均不改变
 
-#### Scenario: Same model ID used by another provider
-- **WHEN** 另一 Provider 使用与 WorkBuddy 完全相同的 model ID 且 hook 没有可靠 Provider 身份
-- **THEN** 文档和验收记录标注这一已知限制，不宣称已实现绝对 Provider 识别或通过自定义 transport 扩大范围
+#### Scenario: Retained WorkBuddy model leaves active scope
+- **WHEN** 已解析的 WorkBuddy Model 在 scope 切换中或已不属于活动集合
+- **THEN** 其 `resolveHeaders` 在既有 resolver、凭据解析和 HTTP transport 前 fail closed，WorkBuddy Chat 请求数为零
 
 ### Requirement: GATE-04 Reasoning cleanup preserves tool history
 有证据需要 reasoning replay 清理时，系统 SHALL 仅清理 Gateway 不接受的 assistant reasoning 表达，保留普通内容、assistant tool calls、tool_call_id、工具结果及关联，不破坏下一轮消息历史。

@@ -258,16 +258,12 @@ model.provider === "workbuddy"
  目标：保留必要兼容，不再重复实现宿主。
 
 
- 1. 保留 before_provider_request，按当前 WorkBuddy model ID 集合过滤。
- 2. 保留并分别验证：
-   - assistant reasoning 历史清理；
-   - tool_choice 转换；
-   - 特定模型 token clamp；
-   - 其他已有且有证据的字段清理。
- 3. 移除由 OMP 正确承担的标准转换。
- 4. 验证下一轮请求保留正确的 tool call ID、工具结果和消息关联。
- 5. 验证非 WorkBuddy 请求不变。
- 6. 将同名 model ID 冲突保留为已知限制，不改用自定义 transport。
+1. 保留 `before_provider_request`，按 request-bound `ctx.model.provider` 过滤 WorkBuddy wire compatibility。
+2. 每项旧变换分别收集删除后 Gateway 失败证据；仅保留有证据的最小差异。
+3. 移除由 OMP 正确承担的标准转换。
+4. 将活动 scope、切换期与 retained-model fail-closed guard 放在 WorkBuddy-bound `resolveHeaders`，不用 hook 异常阻断 transport。
+5. 验证下一轮请求保留正确的 tool call ID、工具结果和消息关联。
+6. 验证当前与历史同 ID 的非 WorkBuddy 请求完全不变，不改用自定义 transport。
 
 
  - 单工具、连续工具、多工具闭环通过；
@@ -341,7 +337,7 @@ model.provider === "workbuddy"
 
  - 删除不可达旧认证与兼容路径；
  - 更新 README、安装示例、目录和环境变量说明；
- - 明确单账号、Widget 延迟、同名 model ID、缓存依赖四项限制；
+ - 明确单账号、Widget 延迟、request-bound Provider 隔离、缓存依赖三项限制与一项边界行为；
  - 移除临时验证脚本；
  - 记录验收环境、模型、结果和已知限制。
 

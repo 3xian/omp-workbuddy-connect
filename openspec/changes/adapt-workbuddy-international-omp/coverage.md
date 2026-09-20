@@ -61,8 +61,8 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | 7.3 | 四类补丁仅作为保留候选 | GATE-01/04 | D7 | 4.1/4.4 |
 | 7.4 | 去除宿主已实现标准转换/解析 | GATE-02/06 | D7 | 4.2/4.6 |
 | 7.5 | 没证据不插入 system prompt | GATE-02 | D7 | 4.2 |
-| 7.6 | before_provider_request 与 ID Set；同名限制 | GATE-03 | D7 | 4.3 |
-| 7.7 | 非目标 payload 完全不变永久回归 | GATE-03；REL-03 | D7/D12 | 4.3 |
+| 7.6 | before_provider_request request-bound Provider 识别；scope guard 位于 resolver | GATE-03 | D7 | 4.3 |
+| 7.7 | 当前/历史同 ID 非目标 payload 完全不变永久回归 | GATE-03；REL-03 | D7/D12 | 4.3 |
 | 7.8 | 单/连续/多工具/支持时 parallel/arguments/auto/named/关联 | GATE-04/05 | D7 | 4.4/4.5 |
 | 7.9 | deltas/usage/DONE/HTTP Error/Abort/Retry，原生 transport | GATE-06 | D7 | 4.6 |
 | 7.10 | 完整 Gateway/tools/error/isolation gate | GATE-01–06 | D7/D12 | 4.7 |
@@ -94,7 +94,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | 17 | 六阶段各自完成定义 | HOST-05；REL-02 | D1/D12；Migration | 各阶段 gate，同上 |
 | 18 | M0 1–2 日，之后重估，不承诺总期 | HOST-05 | Migration | 1.10 |
 | 19 | 全部 v1 Release Definition | REL-02；HOST-05 | D12 | 6.9 |
-| 20 | 单账号不接受错配、UI 延迟、同名 hook、缓存来源 | AUTH-07；UX-05；GATE-03；MODEL-06；REL-06 | Risks | 2.6；4.3；5.7；6.8 |
+| 20 | 单账号不接受错配、UI 延迟、request-bound Provider 隔离、缓存来源 | AUTH-07；UX-05；GATE-03；MODEL-06；REL-06 | Risks | 2.6；4.3；5.7；6.8 |
 | 21 | v1.1 候选不入关键路径；动态/Usage 由 M0 决定 | HOST-04；REL-06 | Non-Goals；D6/D8 | 1.7/1.8；3.6/5.1；6.8 |
 | 22 | 十条长期原则 | HOST-02；AUTH-01/04/05；MODEL-01/05；UX-03；GATE-01/06；REL-03 | Goals/Non-Goals；D2–D12 | 2.2/2.5/2.8；3.5；4.1/4.6；5.2；6.3/6.9 |
 | 23 | 首个交付须一个真实模型完整认证及换号链 | HOST-05；AUTH-01–09 | Migration | 2.11 |
@@ -140,7 +140,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | Refresh 保留身份 | AUTH-03 | 2.3 |
 | Missing account identity 零请求；optional orgId 显式 no-enterprise | AUTH-05 | 2.5 |
 | modifier 非目标不变 | AUTH-06 | 2.4 |
-| payload 非目标不变 | GATE-03 | 4.3（现有 scope 测试） |
+| payload 非目标及当前/历史同 ID Provider 不变 | GATE-03 | 4.3（scope + ExtensionRunner contract） |
 | A logout+B login 无 A 身份 | AUTH-07 | 2.8 |
 | reasoning 清理不破坏工具消息 | GATE-04 | 4.4 |
 | free 不含已知付费 | MODEL-05 | 3.5 |
@@ -157,7 +157,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 3. **保留候选不是必留补丁**：GATE-01/02、4.1/4.2 要求失败 case；自动 system prompt 无证据删除。
 4. **目录 fallback 与免费 fallback 区分**：MODEL-05/06 允许缓存失效时有来源标记的内置目录，不允许有效目录空 free 被补足；未知价格始终非 free。
 5. **注册对象与 resolved Model 区分**：MODEL-01、D5 将完整字段语义放最终模型，buildOmpModels 输出以真实 ProviderModelConfig 为准，避免引入非法 provider/baseUrl 字段。
-6. **隔离与已知限制同时如实表达**：modifier 对所有非 WorkBuddy 不变；payload hook 对未匹配 ID 不变，同名 ID 风险按 V2 L3 保留，不声称彻底解决。
+6. **隔离分层**：modifier 对所有非 WorkBuddy 不变；payload hook 使用 request-bound `ctx.model.provider`，当前与历史同 ID 的其他 Provider 也不变；活动 scope/切换期 fail-closed 由 WorkBuddy `resolveHeaders` 承担。
 7. **ADR 不被偷换成延期或必做**：1.7/1.8 有选择证据，3.6/5.1 有选定路径实施及验收，未选路径无空壳实现。
 8. **M0 不被规划检查冒充完成**：已记录精确提交但尚有工作区差异、宿主实验待运行；coverage.md 不是六项 M0 交付中的运行证明。
 9. **工期与版本不混用**：M0 后重估；功能 v1 不把 manifest 1.1.5 自动降级。

@@ -167,8 +167,6 @@ try {
   assert(notifications.some((item) => item.type === "warning" && item.message.includes("重新选择模型")), "removed current model did not prompt reselection");
   assert(widgets.at(-1)?.some((line) => line === "模型  （当前范围为空）"), "empty scope was not explicit in the widget");
 
-  const hook = handlers.before_provider_request?.[0];
-  assert(hook, "extension did not register its request guard");
   let chatRequests = 0;
   const chatFetch: typeof fetch = async () => {
     chatRequests += 1;
@@ -177,16 +175,21 @@ try {
   const chatContext: Context = {
     messages: [{ role: "user", content: "must be blocked", timestamp: Date.now() }],
   };
-  const stream = streamSimple(retained as Model, chatContext, {
-    apiKey: "scope-access",
-    fetch: chatFetch,
-    onPayload: (payload) => hook({ type: "before_provider_request", payload }),
-  });
-  for await (const _event of stream) {
-    // Drain the real OMP transport; the extension hook must stop it before fetch.
+  let blockedError: unknown;
+  try {
+    const stream = streamSimple(retained as Model, chatContext, {
+      apiKey: "scope-access",
+      fetch: chatFetch,
+    });
+    for await (const _event of stream) {
+      // Drain the real OMP transport; Model.resolveHeaders must stop it before fetch.
+    }
+    const result = await stream.result();
+    if (result.stopReason === "error") blockedError = new Error(result.errorMessage);
+  } catch (error) {
+    blockedError = error;
   }
-  const blocked = await stream.result();
-  assert(blocked.stopReason === "error" && blocked.errorMessage?.includes("outside the active"), "retained model was not blocked before transport");
+  assert(blockedError instanceof Error && blockedError.message.includes("outside the active"), "retained model was not blocked by its resolver");
   assert(chatRequests === 0, `retained model reached WorkBuddy HTTP ${chatRequests} time(s)`);
   assert(JSON.stringify(authStorage.get("workbuddy")) === credentialBefore, "scope changes modified the OMP credential row");
 

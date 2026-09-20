@@ -66,6 +66,7 @@ export interface WorkBuddyBillingAccess {
 
 export interface WorkBuddyProviderController {
   bindContext(context: ExtensionContext): void;
+  setModelAccess(activeIds: ReadonlySet<string>, transitioning: boolean): void;
   config(models: ProviderModels): ProviderConfig;
   logout(): Promise<void>;
   shutdown(): void;
@@ -78,6 +79,24 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
   let authenticationEnabled = true;
   const lifecycleAbort = new AbortController();
   let authenticationAbort = new AbortController();
+  let modelAccess = {
+    activeIds: new Set<string>(),
+    transitioning: true,
+    revision: 0,
+  };
+
+  function requireModelAccess(modelId: string, expectedRevision?: number): number {
+    if (modelAccess.transitioning) {
+      throw new Error(`WorkBuddy model "${modelId}" is unavailable while its scope is changing`);
+    }
+    if (!modelAccess.activeIds.has(modelId)) {
+      throw new Error(`WorkBuddy model "${modelId}" is outside the active scope; select an available model`);
+    }
+    if (expectedRevision !== undefined && modelAccess.revision !== expectedRevision) {
+      throw new Error(`WorkBuddy model "${modelId}" scope changed during request`);
+    }
+    return modelAccess.revision;
+  }
 
   function combinedSignal(signal?: AbortSignal): AbortSignal {
     const signals = [lifecycleAbort.signal, authenticationAbort.signal];
@@ -112,7 +131,9 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
       return {
         ...model,
         resolveHeaders: async (signal?: AbortSignal) => {
+          const accessRevision = requireModelAccess(model.id);
           const preserved = await previous?.(signal);
+          requireModelAccess(model.id, accessRevision);
           const currentBinding = requireBinding();
           const requestSignal = combinedSignal(signal);
           const resolved = await currentBinding.authStorage.getOAuthAccess(
@@ -121,10 +142,12 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
             { signal: requestSignal },
           );
           requestSignal.throwIfAborted();
+          requireModelAccess(model.id, accessRevision);
           const latestBinding = requireBinding();
           if (latestBinding !== currentBinding) throw identityError("session changed during credential resolution");
           if (!resolved) throw identityError("no usable OAuth credential");
           const access = validateResolvedIdentity(resolved, latestBinding);
+          requireModelAccess(model.id, accessRevision);
           return {
             ...preserved,
             "X-User-Id": access.accountId!,
@@ -140,6 +163,13 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
       binding = {
         authStorage: context.modelRegistry.authStorage,
         sessionId: context.sessionManager.getSessionId(),
+      };
+    },
+    setModelAccess(activeIds, transitioning) {
+      modelAccess = {
+        activeIds: new Set(activeIds),
+        transitioning,
+        revision: modelAccess.revision + 1,
       };
     },
     config(models) {

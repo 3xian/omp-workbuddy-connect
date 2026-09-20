@@ -15,9 +15,7 @@ import {
 } from "../src/models.ts";
 import {
   asProviderPayload,
-  isCurrentWorkBuddyPayload,
   normalizeNamedToolChoice,
-  payloadModelId,
 } from "../src/payload.ts";
 import { loadSettings, saveSettings } from "../src/settings.ts";
 
@@ -237,9 +235,8 @@ export default async function (pi: ExtensionAPI) {
   let catalog = loadProductConfig();
   let models = buildOmpModels(catalog, scope);
   let activeIds = new Set(models.map((model) => model.id));
-  const knownIds = new Set(catalog.models.map((model) => model.id));
-  let pendingIds = new Set<string>();
   let transitioning = false;
+  provider.setModelAccess(activeIds, transitioning);
   let card: string[] | undefined;
   let uiGeneration = 0;
   let uiAbort = new AbortController();
@@ -282,10 +279,9 @@ export default async function (pi: ExtensionAPI) {
     const nextCatalog = loadProductConfig();
     const nextModels = buildOmpModels(nextCatalog, nextScope);
     const nextActiveIds = new Set(nextModels.map((model) => model.id));
-    const nextKnownIds = new Set(nextCatalog.models.map((model) => model.id));
     const previousModels = models;
-    pendingIds = nextKnownIds;
     transitioning = true;
+    provider.setModelAccess(activeIds, transitioning);
     try {
       try {
         installProvider(nextModels);
@@ -302,7 +298,6 @@ export default async function (pi: ExtensionAPI) {
       catalog = nextCatalog;
       models = nextModels;
       activeIds = nextActiveIds;
-      for (const id of nextKnownIds) knownIds.add(id);
       card = undefined;
       invalidateUi("WorkBuddy model scope changed");
 
@@ -317,8 +312,8 @@ export default async function (pi: ExtensionAPI) {
         );
       }
     } finally {
-      pendingIds = new Set();
       transitioning = false;
+      provider.setModelAccess(activeIds, transitioning);
     }
   }
 
@@ -365,20 +360,11 @@ export default async function (pi: ExtensionAPI) {
 
   installProvider(models);
 
-  pi.on("before_provider_request", (event) => {
+  pi.on("before_provider_request", (event, ctx) => {
+    if (ctx.model?.provider !== PROVIDER) return;
     const payload = asProviderPayload(event.payload);
     if (!payload) return;
-    const modelId = payloadModelId(payload);
-    if (modelId === undefined) return;
-    if (transitioning && (knownIds.has(modelId) || pendingIds.has(modelId))) {
-      throw new Error(`WorkBuddy model "${modelId}" is unavailable while its scope is changing`);
-    }
-    if (isCurrentWorkBuddyPayload(payload, activeIds)) return normalizeNamedToolChoice(payload);
-    if (knownIds.has(modelId)) {
-      throw new Error(
-        `WorkBuddy model "${modelId}" is outside the active "${scope}" scope; select an available model`,
-      );
-    }
+    return normalizeNamedToolChoice(payload);
   });
 
   pi.on("session_start", (_event, ctx) => {
@@ -458,14 +444,12 @@ if (process.argv.includes("--self-check")) {
   const before = JSON.stringify(nativePayload);
   const payload = asProviderPayload(nativePayload);
   if (payload !== nativePayload) throw new Error("payload identity");
-  const ours = new Set(["hy3", "deepseek-v4.1-flash"]);
-  if (!isCurrentWorkBuddyPayload(payload, ours)) throw new Error("scope: own model accepted");
   if (JSON.stringify(nativePayload) !== before) throw new Error("native payload mutated");
   const compatible = normalizeNamedToolChoice(payload);
   if (compatible.tool_choice !== "foo") throw new Error("named tool choice compatibility");
   if (JSON.stringify(nativePayload) !== before) throw new Error("named tool choice mutated native payload");
-  const foreign = asProviderPayload({ model: "grok-4.6" });
-  if (!foreign || isCurrentWorkBuddyPayload(foreign, ours)) throw new Error("scope: foreign model must be rejected");
+  const stringChoice = { ...nativePayload, tool_choice: "auto" };
+  if (normalizeNamedToolChoice(stringChoice) !== stringChoice) throw new Error("string tool choice identity");
   if (asProviderPayload("{") !== undefined || asProviderPayload([]) !== undefined) throw new Error("invalid payload accepted");
   if (!showsWorkBuddyCard("workbuddy")) throw new Error("card: own provider shown");
   if (showsWorkBuddyCard("GROKCPA")) throw new Error("card: foreign provider hidden");

@@ -62,7 +62,7 @@ v1 SHALL 通过 V2 的全部 Release Matrix：官方安装、零类型错误、f
 - **THEN** 能恢复准确环境、模型、账号类型和各场景结果，并定位失败而不暴露账户秘密
 
 ### Requirement: REL-06 Honest compatibility and limitations
-发布文档 SHALL 明示仅官方 OMP 18.2.6、仅国际版、单账号且不接受身份错配、Widget 可延迟到下一 turn、同名 model ID hook 限制，以及所选本地目录路径的缓存依赖和 model source。真正多账号、Desktop import、可靠 Provider interception 和即时 model-select UI SHALL 不进入 v1 关键路径；动态目录与 Usage 增强按 M0 ADR 的实际选择说明。
+发布文档 SHALL 明示仅官方 OMP 18.2.6、仅国际版、单账号且不接受身份错配、Widget 可延迟到下一 turn、request-bound Provider 隔离行为，以及所选本地目录路径的缓存依赖和 model source。真正多账号、Desktop import、自定义 Provider transport 和即时 model-select UI SHALL 不进入 v1 关键路径；动态目录与 Usage 增强按 M0 ADR 的实际选择说明。
 
 #### Scenario: User reads installation and migration instructions
 - **WHEN** 用户依据 README 安装或从旧 Pi/Fork 迁移

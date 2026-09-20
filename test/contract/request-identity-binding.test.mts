@@ -38,6 +38,7 @@ const registry = new ModelRegistry(authStorage, join(temp, "models.yml"), {
   cacheDbPath: join(temp, "models.db"),
 });
 const controller = createWorkBuddyProvider(refreshFetch);
+controller.setModelAccess(new Set(["hy3"]), false);
 await authStorage.set(WORKBUDDY_PROVIDER, {
   type: "oauth",
   access: "access-a1",

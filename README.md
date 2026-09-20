@@ -46,7 +46,7 @@ omp --profile workbuddy-m3-live \
 | Hy4 preview | 1M / 64k | high |
 | Hy3 | 192k / 64k | low · high |
 
-推理配置使用 OMP canonical `thinking: { mode: "effort", efforts, requiresEffort }`。未声明可信 `supportedEfforts` 或 off 能力时，只保留 `reasoning` capability，不自动扩展 effort；`canDisableThinking=false` 会禁止 off。对于允许关闭的模型，OMP 18.2.6 在没有 Gateway-specific disable 证据时会把关闭请求限制到最低受支持 effort；WorkBuddy 的真实关闭编码仍须在 M3/M5 的 Gateway 与 live gate 确认，插件不会预设未经验证的 `none` 或其他 wire 值。
+推理配置使用 OMP canonical `thinking: { mode: "effort", efforts, requiresEffort }`。未声明可信 `supportedEfforts` 或 off 能力时，只保留 `reasoning` capability，不自动扩展 effort；`canDisableThinking=false` 会禁止 off。对于允许关闭的模型，OMP 18.2.6 在没有 Gateway-specific disable 证据时会把关闭请求限制到最低受支持 effort；WorkBuddy 的真实关闭编码仍须在 M5 live gate 确认，插件不会预设未经验证的 `none` 或其他 wire 值。
 
 ## 设置
 
@@ -105,6 +105,7 @@ npx --yes bun@1.3.14 test/provider.test.mts
 npx --yes bun@1.3.14 test/scope.test.mts
 npx --yes bun@1.3.14 test/session-start.test.mts
 npx --yes bun@1.3.14 test/contract/model-scope-lifecycle.test.mts
+npx --yes bun@1.3.14 test/contract/before-provider-request-runtime.test.mts
 npx --yes bun@1.3.14 test/contract/persisted-credential-restart.test.mts
 npx --yes bun@1.3.14 test/contract/request-identity-binding.test.mts
 npx --yes bun@1.3.14 test/contract/task-runtime-contract.test.mts

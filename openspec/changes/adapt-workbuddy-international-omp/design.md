@@ -108,11 +108,11 @@ M0 调查了已有 upstream 实现、仓库资料、授权可访问的 Desktop �
 
 ### D7 — Gateway patch 必须逐项有证据
 
-`payload.ts` 从 OMP 原生 payload 出发，按当前 ID 集合过滤。建立 `docs/omp-port/gateway-compatibility-evidence.md`，每条记录：适用模型/版本、未变换失败案例、最小修复、脱敏服务端结果、回归场景。reasoning replay、named tool_choice、DeepSeek clamp、字段清理均是候选，不能仅凭旧代码注释无条件保留。
+`payload.ts` 从 OMP 原生 payload 出发；`before_provider_request` 使用 request-bound `ctx.model.provider`，仅对 WorkBuddy 请求实施有证据的兼容差异。建立 `docs/omp-port/gateway-compatibility-evidence.md`，每条记录：适用模型/版本、未变换失败案例、最小修复、脱敏服务端结果、回归场景。reasoning replay、named tool_choice、DeepSeek clamp、字段清理均是候选，不能仅凭旧代码注释无条件保留。
 
 移除宿主已正确完成的 stream=true、developer→system、标准 effort/max_tokens 和解析逻辑。默认不注入 system prompt；仅真实 Gateway 无 system 必失败时允许最小修正并记证据。reasoning 清理保留 tool_call_id、tool result association、assistant tool replay，完成下一轮而非仅测试 JSON 变换。
 
-Model ID 冲突按 V2 L3 接受：`before_provider_request` 只提供 model ID，因此累计 known-ID 阻断无法区分同 ID 的其他 Provider；非匹配 ID 请求必须完全不变，但不得把该回归描述为绝对 Provider 隔离。M3 应优先调查可获得 provider identity 的宿主 resolver/request boundary；没有公开边界前保持已记录限制，不因此自建 transport。
+OMP 18.2.6 将本次 provider request 的精确 Model 作为 hook `ctx.model`，因此同 ID 的其他 Provider 可可靠排除。Hook handler 异常会被宿主记录后吞没，不能承担 fail-closed 安全约束；活动 scope、切换期及 retained-model 阻断位于 WorkBuddy-bound `Model.resolveHeaders`，并在既有 resolver、凭据解析与 HTTP transport 前复核 revision。不得为隔离自建 transport。
 
 ### D8 — Credits / Usage ADR 与可选管理面
 
@@ -162,7 +162,7 @@ V2 §13 的十二类长期回归全部保留，不用“字段被转发”或源
 - [M0 与 M1 都涉及 OAuth] → M0 是隔离宿主契约实验，M1 是正式实现和完整真实链；M0 可复用现有协议作探针，但不能以实现未完成跳过宿主验证。
 - [在线目录/Usage 尚无实际端点/能力证据] → D6/D8 已定义调查、选择和对应任务；保持决策待实测而不是伪造 API。分支不改变安全和对外验收标准。
 - [空免费集合与 builtin fallback 容易冲突] → 目录 fallback 不等于免费 fallback；有效目录空免费必须保留，未知永不免费。
-- [同名 model ID hook 冲突] → 明确 L3 范围，不把非匹配测试扩大为绝对保证；不改 transport。
+- [宿主更改 request-bound hook context 或异常策略] → 固定 OMP 18.2.6，使用真实 `ExtensionRunner` 契约测试精确 `ctx.model` 与异常吞没行为；Provider 识别留在 hook context，fail-closed scope guard 留在 WorkBuddy resolver，不改 transport。
 - [不刷新 Widget 即时体验较弱] → 接受 L2，下一 turn 同步；generation 处理旧异步响应。
 - [真实账号或某模型暂不可用] → 相应 live gate 保持未完成，不以 Mock 或删验收范围代替。
 - [未提交用户修改与基线混淆] → 保存差异证据、不覆盖或代提交用户工作；M0 冻结后重估，不承诺总工期。
@@ -180,5 +180,5 @@ V2 §13 的十二类长期回归全部保留，不用“字段被转发”或源
 
 - V2 明确授权 M0 ADR 分支，因此此处规划决策机制与两条实施路径，而不是把尚未运行的架构实验宣称完成。
 - V2 §6.2 的完整模型语义落在 resolved Model；注册对象仍遵守真实 ProviderModelConfig，避免为字段列表引入编译错误。
-- V2 对隔离的强要求与 L3 同名限制同时保留：modifier 对全部非 WorkBuddy 严格隔离；payload hook 对非匹配 ID 严格隔离，同名风险明确列示。
+- V2 最初记录的同名 ID 风险已由 OMP 18.2.6 request-bound `ctx.model.provider` 与 WorkBuddy `resolveHeaders` 分层解决：modifier/resolver 对非 WorkBuddy 严格隔离，payload hook 只做有证据的 WorkBuddy wire 兼容。
 - OpenSpec 最初规划轮次只产生 planning artifacts；`coverage.md` 仅记录规划覆盖，不是 M0 Requirement → Implementation → Test 的实验通过证据。apply 阶段的完成状态以 `tasks.md` 为准。

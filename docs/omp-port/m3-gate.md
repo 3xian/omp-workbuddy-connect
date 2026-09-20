@@ -9,8 +9,9 @@ Status: **PASS**
 Tasks 4.1–4.7 are complete:
 
 - only one WorkBuddy-specific payload transform remains, backed by a redacted live Gateway failure;
-- `src/payload.ts` is otherwise a copy-on-write identification boundary;
-- the actual extension hook leaves nonmatching payloads unchanged and changes only an active model's named `tool_choice`;
+- `src/payload.ts` is otherwise a copy-on-write compatibility boundary;
+- the actual extension hook uses the request-bound `ctx.model.provider`, leaves current/historical same-ID foreign payloads unchanged, and changes only WorkBuddy named `tool_choice`;
+- active scope, transition, and retained-model fail-closed checks live in WorkBuddy `resolveHeaders`, before prior resolver/credential/HTTP work;
 - reasoning, ordinary content, tool calls, `tool_call_id`, and tool results survive the native Agent loop;
 - a synthetic standard-capability model completes named/auto, fragmented-argument, sequential and same-turn parallel tool calls through the real OMP Agent;
 - the real OMP `openai-completions` implementation owns reasoning/text/tool streaming, usage, `[DONE]`, HTTP diagnostics, abort, and Retry-After-aware retry;
@@ -22,7 +23,7 @@ Synthetic capability fixtures prove the OMP 18.2.6 host contract. The isolated l
 
 Reasoning cleanup, request-body token clamp, forced stream, developer/system rewrite, unsupported-field cleanup, and automatic system prompts remain deleted because no Gateway failure was observed. Native named forcing on `deepseek-v4.1-flash` produced a redacted HTTP 400/code `11101`: the Gateway could not unmarshal the OpenAI named-choice object into its string `tool_choice` field.
 
-The retained correction is deliberately narrow: for an active WorkBuddy model only, copy the payload and replace `{type:"function", function:{name}}` with `name`. Existing string choices and all other fields remain untouched. Repeating the same `/force:read` case after reload executed one `Read` call and returned `DEEP_NAMED_TOOL_OK`.
+The retained correction is deliberately narrow: when the request-bound Model provider is `workbuddy`, copy the payload and replace `{type:"function", function:{name}}` with `name`. Existing string choices and all other fields remain untouched. The hardened Provider-routed hook completed the isolated Deepseek `/force:read` case with one real `Read package.json` and `DEEP_NAMED_TOOL_OK`.
 
 No production `supportsDeveloperRole`, `supportsForcedToolChoice`, or `supportsNamedToolChoice` override was added. OMP generated the native named object; the plugin adapts only the evidenced Gateway wire difference.
 
@@ -31,20 +32,19 @@ No production `supportsDeveloperRole`, `supportsForcedToolChoice`, or `supportsN
 The following completed with exit code 0 after restoring test-owned environment variables and directory caches:
 
 ```text
-omp --version                                  -> omp/18.2.6
-npx bun test test                             -> 16 script files completed, 0 failures
-npx bun extensions/workbuddy.ts --self-check -> ok
-npx tsc --noEmit                              -> no diagnostics
+package.json peer/dev host pins                 -> OMP 18.2.6
+npx bun test test                              -> 17 script files completed, 0 failures
+npx bun extensions/workbuddy.ts --self-check  -> ok
+npx tsc --noEmit                               -> no diagnostics
 npx openspec validate adapt-workbuddy-international-omp --strict
                                                 -> valid
 ```
 
-The repository tests are executable `.test.mts` contract scripts rather than `bun:test` declarations, so Bun reports zero formal test cases; their sixteen explicit `OK:` contracts and process exit status are the acceptance signal. Plain `bun test test` succeeds without the previous cross-file environment leak.
+The repository tests are executable `.test.mts` contract scripts rather than `bun:test` declarations, so Bun reports zero formal test cases; their seventeen explicit `OK:` contracts and process exit status are the acceptance signal. Plain `bun test test` succeeds without cross-file environment leakage.
 
-## Known isolation boundary
+## Request-bound isolation
 
-OMP 18.2.6 does not expose provider identity to `before_provider_request`. Active matching uses current WorkBuddy IDs; stale-model protection uses cumulative historical WorkBuddy IDs. Therefore another provider using a current identical ID can be misidentified, and one using a historical identical ID can be rejected as outside scope. Moving the retained-model guard to WorkBuddy-bound `resolveHeaders` is deferred hardening. Absolute same-ID cross-provider isolation is not claimed.
-
+OMP 18.2.6 passes the exact request Model to `before_provider_request` as `ctx.model`. The hook now gates only on `ctx.model.provider === "workbuddy"`; current and historical same-ID foreign Providers are unchanged. The host catches ordinary hook exceptions and continues with the original payload, so the hook cannot enforce fail closed. WorkBuddy model `resolveHeaders` owns active-scope, transition, and revision checks and stops retained models before the previous resolver, credential resolution, or HTTP transport.
 
 ## Task 4.7 — live acceptance
 
@@ -67,5 +67,7 @@ The isolated run completed:
 7. `/logout workbuddy`, followed by AuthStorage inspection showing the sole row disabled as `deleted by user` and zero enabled WorkBuddy credentials.
 
 Fragmented tool arguments, exact correlation, generic non-2xx propagation, Retry-After handling, retry ownership, and SSE terminal behavior remain native OMP contract evidence. The live service was not intentionally damaged to manufacture 4xx/5xx behavior; the named-choice failure occurred naturally during the required case.
+
+After request-bound Provider routing and resolver-owned fail-closed scope checks were implemented, a fresh isolated login repeated the exact Deepseek forced named-tool path. OMP selected `workbuddy/deepseek-v4.1-flash`, executed one real `Read package.json`, returned `DEEP_NAMED_TOOL_OK`, and showed no code `11101` or HTTP 400. The account was logged out again and the isolated credential was removed.
 
 The evidence is redacted: no account ID, token, authorization value, OAuth state, or request ID is recorded.

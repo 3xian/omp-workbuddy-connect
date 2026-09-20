@@ -45,11 +45,11 @@
 
 - [x] 4.1 为 reasoning replay、tool_choice、token clamp、unsupported fields 逐项建立 `gateway-compatibility-evidence.md`，记录删除后失败案例、脱敏响应、适用模型/版本及最小修正；删除没有可复现必要性证据的 transform。（GATE-01）
 - [x] 4.2 提取 `src/payload.ts`，移除宿主已处理的 stream/role/standard effort/max_tokens 重复处理；默认删除自动 system prompt，仅在真实缺 system 失败证据成立时最小保留，验证用户 prompt semantics 不被任意改变。（GATE-02）
-- [x] 4.3 保留 before_provider_request 并按当前模型 ID Set 识别；迁移 `test/scope.test.mts` 形成非匹配请求完全不变回归，单独记同名跨 Provider 限制，不声称绝对隔离。（GATE-03）
+- [x] 4.3 保留 `before_provider_request`，使用 request-bound `ctx.model.provider` 仅对 WorkBuddy 实施有证据的 payload 兼容；把活动 scope/切换期阻断放到 WorkBuddy-bound `resolveHeaders`，验证当前与历史同 ID 的其他 Provider 完全不变、retained WorkBuddy 模型在 transport 前失败。（GATE-03）
 - [x] 4.4 对证据要求的 reasoning cleanup 保留永久回归，验证普通消息、assistant tool calls、tool_call_id 和 tool results 关联完整，真实下一轮能使用工具结果。（GATE-04）
 - [x] 4.5 验证 auto/named tool_choice 的 WorkBuddy 规整、arguments streaming、单工具、连续工具、多工具及支持时 parallel tools，完成工具执行→结果回送→下一轮回答，而非只验证参数拼接。（GATE-05）
 - [x] 4.6 用宿主原生 openai-completions 验证 text/reasoning/tool deltas、usage、DONE、HTTP error、Abort、Retry；证明无插件 SSE/tool parser、双重重试或自定义 Chat HTTP 路径。（GATE-06）
-- [x] 4.7 汇总普通对话、reasoning history、named/sequential/multi 工具、参数流、abort/error/retry 和隔离证据，所有 patch 均关联服务端 case 后才通过 M3。（GATE-01–06）
+- [x] 4.7 汇总普通对话、reasoning history、named/sequential/multi 工具、参数流、abort/error/retry 和 request-bound Provider 隔离证据；resolver/hook 边界加固后已在隔离 profile 重复 Deepseek forced named-tool 场景并登出，所有 patch 均关联服务端 case 后通过 M3。（GATE-01–06）
 
 ## 5. M4 — Commands、Credits 与可选 UI
 
@@ -70,5 +70,5 @@
 - [ ] 6.5 审查源码与实际日志、错误、网络、文件和诊断附件，确认 Token/Authorization 不入日志、仓库、项目或第三方，identity 输出脱敏，网络只到功能所需官方国际端点，Desktop 数据未改变。（REL-04）
 - [ ] 6.6 保存 `release-evidence.md`：OMP version/commit、extension version/commit、Node/Bun runtime、日期、账号类型、模型 IDs、矩阵结果、known limitations、脱敏证据；补齐 Requirement→Implementation→Test 实际定位，未运行/失败不得标通过。（REL-05）
 - [ ] 6.7 真实冒烟及矩阵通过后完成入口 composition root/模块边界收尾，删除失去用途的旧认证与兼容代码、临时探针和脚本；验证没有生产占位实现、额外 CredentialStore/Transport 框架或被误加载的 helper。（HOST-02、AUTH-01；D11）
-- [ ] 6.8 更新 README/安装与迁移/目录/环境变量/命令/版本发布说明，明确单账号不容错配、Widget 延迟、同名 ID、缓存来源四项限制和 ADR 实际选择；检查旧 Pi 安装/旧凭据优先级宣传已移除，包版本不因功能名 v1 倒退。（REL-06）
+- [ ] 6.8 更新 README/安装与迁移/目录/环境变量/命令/版本发布说明，明确单账号不容错配、Widget 延迟、缓存来源三项限制及 request-bound Provider 隔离行为和 ADR 实际选择；检查旧 Pi 安装/旧凭据优先级宣传已移除，包版本不因功能名 v1 倒退。（REL-06）
 - [ ] 6.9 按 V2 §19 全部条件核签 v1：OMP 零修改、正式安装、AuthStorage 唯一来源、OAuth/refresh/identity/restart、目录/Streaming/thinking/声明 Vision/工具、main/subagent/headless、credits/free-all/logout/isolation/秘密保护均有证据；任一未通过保持发布阻断。（REL-01–06、HOST-05）
