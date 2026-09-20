@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { AuthStorage, type AssistantMessage, type Context, type Model, type SimpleStreamOptions } from "@oh-my-pi/pi-ai";
@@ -14,7 +14,19 @@ const observerLog = join(temp, "observer.jsonl");
 process.env.WORKBUDDY_TASK_CONTRACT_LOG = observerLog;
 process.env.PI_CODING_AGENT_DIR = temp;
 process.env.WORKBUDDY_AUTH_FILE = join(temp, "missing-desktop-auth.json");
-process.env.WORKBUDDYAI_PRODUCT_CONFIG = join(temp, "missing-product-config.json");
+const productConfigPath = join(temp, "product-config.json");
+process.env.WORKBUDDYAI_PRODUCT_CONFIG = productConfigPath;
+await writeFile(productConfigPath, JSON.stringify({
+  models: [{
+    id: "hy3",
+    name: "Hy3",
+    credits: "x0.00",
+    maxInputTokens: 192_000,
+    maxOutputTokens: 64_000,
+    supportsReasoning: true,
+    reasoning: { supportedEfforts: ["low", "high"], canDisableThinking: false },
+  }],
+}));
 
 let mode: "yield" | "hang" = "yield";
 let transportCalls = 0;

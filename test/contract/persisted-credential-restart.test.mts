@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AuthStorage, type Model } from "@oh-my-pi/pi-ai";
@@ -10,7 +10,20 @@ const temp = await mkdtemp(join(tmpdir(), "workbuddy-persisted-restart-"));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 const previousProductConfig = process.env.WORKBUDDYAI_PRODUCT_CONFIG;
 process.env.PI_CODING_AGENT_DIR = temp;
-process.env.WORKBUDDYAI_PRODUCT_CONFIG = join(temp, "missing-product-config.json");
+const productConfigPath = join(temp, "product-config.json");
+process.env.WORKBUDDYAI_PRODUCT_CONFIG = productConfigPath;
+await writeFile(productConfigPath, JSON.stringify({
+  models: [{
+    id: "hy3",
+    name: "Hy3",
+    credits: "x0.00",
+    maxInputTokens: 192_000,
+    maxOutputTokens: 64_000,
+    supportsImages: true,
+    supportsReasoning: true,
+    reasoning: { supportedEfforts: ["low", "high"], canDisableThinking: false },
+  }],
+}));
 const authStorage = await AuthStorage.create(join(temp, "auth.db"));
 const registry = new ModelRegistry(authStorage, join(temp, "models.yml"), {
   cacheDbPath: join(temp, "models.db"),

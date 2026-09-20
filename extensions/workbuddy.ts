@@ -9,163 +9,26 @@ import {
   type WorkBuddyBillingAccess,
   type WorkBuddyProviderController,
 } from "../src/provider.ts";
+import {
+  buildOmpModels,
+  clampModelMaxTokens,
+  FLASH_MAX_TOKENS,
+  loadProductConfig,
+  type ModelScope as Scope,
+} from "../src/models.ts";
 
 type Cred = WorkBuddyBillingAccess & { expiresAtMs?: number; nickname?: string };
 
 const PROVIDER = "workbuddy";
 const GLOBAL_BASE = "https://www.workbuddy.ai";
 const CLIENT_UA = "CLI/2.63.2 CodeBuddy/2.63.2";
-const PRODUCT_CONFIG_ENV = "WORKBUDDYAI_PRODUCT_CONFIG";
-const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-const COMPAT = {
-  supportsDeveloperRole: false,
-  supportsReasoningEffort: true,
-  maxTokensField: "max_tokens" as const,
-};
-const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
-type Effort = (typeof EFFORTS)[number];
-type Scope = "free" | "all";
-
-
-
-
-type ProductModel = {
-  id: string;
-  name: string;
-  credits?: string;
-  contextWindow: number;
-  maxTokens: number;
-  supportsImages: boolean;
-  supportsReasoning: boolean;
-  supportedEfforts?: Effort[];
-  canDisableThinking: boolean;
-};
-
-type ProductConfig = { source: "cache" | "builtin"; models: ProductModel[] };
-
-const FREE_IDS = ["hy3", "deepseek-v4.1-flash", "hy4-preview-f"] as const;
-// ponytail: flash reasoning loops (OK/Let me write/Go) eat 128k max_tokens; 16k stops the stall. Raise if long answers get cut.
-const FLASH_MAX_TOKENS = 16_384;
-
-const BUILTIN_MODELS: ProductModel[] = [
-  {
-    id: "deepseek-v4.1-flash",
-    name: "Deepseek-V4.1-Flash",
-    credits: "x0.00",
-    contextWindow: 1_000_000,
-    maxTokens: 128_000,
-    supportsImages: true,
-    supportsReasoning: true,
-    supportedEfforts: ["low", "medium", "high", "xhigh", "max"],
-    canDisableThinking: false,
-  },
-  {
-    id: "hy4-preview-f",
-    name: "Hy4 preview",
-    credits: "x0.00",
-    contextWindow: 1_000_000,
-    maxTokens: 64_000,
-    supportsImages: true,
-    supportsReasoning: true,
-    supportedEfforts: ["high"],
-    canDisableThinking: false,
-  },
-  {
-    id: "hy3",
-    name: "Hy3",
-    credits: "x0.00",
-    contextWindow: 192_000,
-    maxTokens: 64_000,
-    supportsImages: true,
-    supportsReasoning: true,
-    supportedEfforts: ["low", "high"],
-    canDisableThinking: false,
-  },
-];
-
 function agentDir(): string {
   return process.env.PI_CODING_AGENT_DIR ?? join(homedir(), ".pi", "agent");
 }
 
-function productConfigPath(): string {
-  const override = process.env[PRODUCT_CONFIG_ENV]?.trim();
-  if (override) return override;
-  return join(homedir(), ".workbuddy-ai", "cache", "acc-product-config-v3.json");
-}
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : undefined;
-}
 
-function positiveNumber(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
-}
 
-export function creditsAreFree(credits: string | undefined): boolean {
-  if (credits === undefined) return false;
-  return /^x?0(?:\.0+)?$/u.test(credits.trim());
-}
-
-function parseEffort(value: unknown): Effort | undefined {
-  return typeof value === "string" && (EFFORTS as readonly string[]).includes(value)
-    ? value as Effort
-    : undefined;
-}
-
-function parseProductModel(value: unknown): ProductModel | undefined {
-  const row = asRecord(value);
-  if (!row) return undefined;
-  const id = typeof row.id === "string" ? row.id.trim() : "";
-  if (id === "") return undefined;
-  const reasoning = asRecord(row.reasoning);
-  const rawEfforts = reasoning?.supportedEfforts;
-  let supportedEfforts: Effort[] | undefined;
-  if (Array.isArray(rawEfforts)) {
-    const efforts = rawEfforts.map(parseEffort).filter((e): e is Effort => e !== undefined);
-    if (efforts.length > 0) supportedEfforts = efforts;
-  }
-  return {
-    id,
-    name: typeof row.name === "string" && row.name !== "" ? row.name : id,
-    ...(typeof row.credits === "string" && row.credits.trim() !== "" ? { credits: row.credits.trim() } : {}),
-    contextWindow: positiveNumber(row.maxInputTokens) ?? positiveNumber(row.maxAllowedSize) ?? 0,
-    maxTokens: positiveNumber(row.maxOutputTokens) ?? 0,
-    supportsImages: row.supportsImages === true && row.disabledMultimodal !== true,
-    supportsReasoning: row.supportsReasoning === true,
-    ...supportedEfforts ? { supportedEfforts } : {},
-    canDisableThinking: reasoning?.canDisableThinking === true,
-  };
-}
-
-export function parseProductConfig(text: string): ProductConfig | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-  const document = asRecord(parsed);
-  if (!document || !Array.isArray(document.models)) return undefined;
-  const models = document.models.map(parseProductModel).filter((m): m is ProductModel => m !== undefined);
-  if (models.length === 0) return undefined;
-  return { source: "cache", models };
-}
-
-export function loadProductConfig(path = productConfigPath()): ProductConfig {
-  try {
-    const parsed = parseProductConfig(readFileSync(path, "utf8"));
-    if (parsed) return parsed;
-  } catch { /* missing/unreadable cache → builtin */ }
-  return { source: "builtin", models: BUILTIN_MODELS };
-}
-
-export function freeModelIds(config: ProductConfig): readonly string[] {
-  if (config.source === "builtin") return FREE_IDS;
-  const free = config.models.filter((m) => creditsAreFree(m.credits)).map((m) => m.id);
-  return free.length > 0 ? free : FREE_IDS;
-}
 
 function settingsPath(): string {
   return join(agentDir(), ".workbuddy-settings.json");
@@ -183,31 +46,6 @@ async function saveSettings(scope: Scope): Promise<void> {
   await writeFile(settingsPath(), `${JSON.stringify({ scope }, null, 2)}\n`, { mode: 0o600 });
 }
 
-export function buildPiModels(config: ProductConfig, scope: Scope) {
-  const byId = new Map<string, ProductModel>();
-  if (config.source === "cache") {
-    for (const model of config.models) byId.set(model.id, model);
-  }
-  for (const model of BUILTIN_MODELS) {
-    if (!byId.has(model.id)) byId.set(model.id, model);
-  }
-  const free = new Set(freeModelIds(config));
-  const rows = [...byId.values()].filter((model) => scope === "all" || free.has(model.id));
-  return rows.flatMap((row) => {
-    if (row.contextWindow <= 0 || row.maxTokens <= 0) return [];
-    const credits = row.credits ?? "x?";
-    return [{
-      id: row.id,
-      name: `${row.name} · ${credits}`,
-      reasoning: row.supportsReasoning,
-      input: (row.supportsImages ? ["text", "image"] : ["text"]) as ("text" | "image")[],
-      cost: ZERO_COST,
-      contextWindow: row.contextWindow,
-      maxTokens: row.id === "deepseek-v4.1-flash" ? Math.min(row.maxTokens, FLASH_MAX_TOKENS) : row.maxTokens,
-      compat: COMPAT,
-    }];
-  });
-}
 
 
 
@@ -247,7 +85,7 @@ export function prepareChatPayload(payload: Record<string, unknown>): Record<str
   if (payload.model === "deepseek-v4.1-flash") {
     const current = Number(payload.max_tokens);
     payload.max_tokens = Number.isFinite(current) && current > 0
-      ? Math.min(current, FLASH_MAX_TOKENS)
+      ? clampModelMaxTokens(payload.model, current)
       : FLASH_MAX_TOKENS;
   }
   if ("tool_choice" in payload) {
@@ -486,7 +324,7 @@ async function paint(
 export default async function (pi: ExtensionAPI) {
   const provider = createWorkBuddyProvider();
   let scope = loadSettings().scope;
-  let models = buildPiModels(loadProductConfig(), scope);
+  let models = buildOmpModels(loadProductConfig(), scope);
   let ids = new Set(models.map((model) => model.id));
   let card: string[] | undefined;
   let uiGeneration = 0;
@@ -502,7 +340,7 @@ export default async function (pi: ExtensionAPI) {
 
   function apply(next?: Scope) {
     if (next) scope = next;
-    models = buildPiModels(loadProductConfig(), scope);
+    models = buildOmpModels(loadProductConfig(), scope);
     ids = new Set(models.map((model) => model.id));
     pi.registerProvider(PROVIDER, provider.config(models));
   }
@@ -633,9 +471,7 @@ if (process.argv.includes("--self-check")) {
   if (isWorkBuddyModel(undefined, ours) || isWorkBuddyModel(42, ours)) throw new Error("scope: non-string rejected");
   const prepended = prepareChatPayload({ messages: [{ role: "user", content: "hi" }] });
   if ((prepended.messages as { role: string }[])[0].role !== "system") throw new Error("prepend");
-  if (FREE_IDS.length !== 3) throw new Error("count");
-  if (!creditsAreFree("x0.00") || creditsAreFree("x1.00")) throw new Error("credits free");
-  const flash = buildPiModels({ source: "builtin", models: BUILTIN_MODELS }, "free")
+  const flash = buildOmpModels(loadProductConfig("/definitely/missing/workbuddy-product-config.json"), "all")
     .find((model) => model.id === "deepseek-v4.1-flash");
   if (flash?.maxTokens !== FLASH_MAX_TOKENS) throw new Error("flash cap");
   const looped = prepareChatPayload({
@@ -646,18 +482,7 @@ if (process.argv.includes("--self-check")) {
   const assistant = (looped.messages as Record<string, unknown>[])[1];
   if (assistant.reasoning !== undefined || assistant.thinking !== undefined) throw new Error("reasoning replay");
   if (looped.max_tokens !== FLASH_MAX_TOKENS) throw new Error("flash payload cap");
-  const fromCache = parseProductConfig(JSON.stringify({
-    models: [{
-      id: "deepseek-v4.1-flash",
-      name: "Deepseek-V4.1-Flash",
-      credits: "x0.00",
-      maxInputTokens: 1_000_000,
-      maxOutputTokens: 128_000,
-      supportsReasoning: true,
-      reasoning: { supportedEfforts: ["low", "medium", "high", "xhigh", "max"] },
-    }],
-  }));
-  if (!fromCache) throw new Error("parse config");
+
   const credits = parseCredits({
     code: 0,
     data: {

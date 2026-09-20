@@ -1,0 +1,112 @@
+import {
+  buildOmpModels,
+  clampModelMaxTokens,
+  creditsAreFree,
+  FLASH_MAX_TOKENS,
+  freeModelIds,
+  loadProductConfig,
+  parseProductConfig,
+} from "../src/models.ts";
+
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+const catalog = parseProductConfig(JSON.stringify({
+  models: [
+    {
+      id: "free-required",
+      name: "Free Required",
+      credits: "x0.00",
+      maxInputTokens: 200_000,
+      maxOutputTokens: 20_000,
+      supportsImages: true,
+      supportsReasoning: true,
+      reasoning: {
+        supportedEfforts: ["max", "invalid", "minimal", "high", "minimal"],
+        canDisableThinking: false,
+      },
+    },
+    {
+      id: "paid-optional",
+      credits: "x1.25",
+      maxInputTokens: 100_000,
+      maxOutputTokens: 8_000,
+      supportsReasoning: true,
+      reasoning: { supportedEfforts: ["max", "low"], canDisableThinking: true },
+    },
+    {
+      id: "unknown-reasoning",
+      maxInputTokens: 80_000,
+      maxOutputTokens: 4_000,
+      supportsReasoning: true,
+    },
+    null,
+    { id: "", maxInputTokens: 1, maxOutputTokens: 1 },
+    { id: "bad-context", maxInputTokens: 0, maxOutputTokens: 1 },
+    { id: "bad-output", maxInputTokens: 1, maxOutputTokens: 1.5 },
+    { id: "free-required", maxInputTokens: 1, maxOutputTokens: 1 },
+  ],
+}));
+const invalidOnly = parseProductConfig(JSON.stringify({
+  models: [{ maxInputTokens: 1, maxOutputTokens: 1 }, { id: "bad-budget", maxInputTokens: -1, maxOutputTokens: 0 }],
+}));
+assert(invalidOnly, "invalid-only catalog lost its diagnostics");
+assert(invalidOnly.models.length === 0, "invalid-only catalog registered a model");
+assert(invalidOnly.diagnostics.length === 3, `invalid-only diagnostics missing: ${JSON.stringify(invalidOnly.diagnostics)}`);
+
+assert(catalog, "mixed product catalog was rejected");
+assert(catalog.models.length === 3, `invalid catalog rows were registered: ${catalog.models.length}`);
+assert(
+  catalog.diagnostics.map((diagnostic) => diagnostic.code).join(",")
+    === "invalid-structure,missing-id,invalid-context-window,invalid-max-tokens,duplicate-id",
+  `invalid row diagnostics were incomplete: ${JSON.stringify(catalog.diagnostics)}`,
+);
+
+const all = buildOmpModels(catalog, "all");
+assert(all.length === 3, "all scope did not preserve the valid cache catalog");
+const required = all.find((model) => model.id === "free-required");
+assert(required, "free reasoning model disappeared");
+assert(required.thinking?.mode === "effort", "canonical effort metadata missing");
+assert(
+  required.thinking.efforts.join(",") === "minimal,high,max",
+  `unsupported or unordered efforts leaked: ${required.thinking.efforts.join(",")}`,
+);
+assert(required.thinking.requiresEffort === true, "non-disableable reasoning exposed off");
+assert(required.input.join(",") === "text,image", "vision capability was not emitted");
+assert(required.compat?.stripImageInput === false, "host vision stripping was not disabled");
+
+const optional = all.find((model) => model.id === "paid-optional");
+assert(optional?.thinking?.requiresEffort === false, "optional reasoning did not expose off");
+assert(optional.thinking.efforts.join(",") === "low,max", "optional model exposed unsupported efforts");
+const unknownReasoning = all.find((model) => model.id === "unknown-reasoning");
+assert(unknownReasoning?.reasoning === true, "reasoning capability was dropped");
+assert(unknownReasoning.thinking === undefined, "missing effort evidence defaulted to every effort");
+
+assert(creditsAreFree("x0.00") && creditsAreFree("0.0"), "explicit zero-credit evidence was rejected");
+assert(!creditsAreFree(undefined) && !creditsAreFree("x1.00"), "unknown or paid credits were treated as free");
+assert(freeModelIds(catalog).join(",") === "free-required", "free IDs did not use explicit cache evidence");
+assert(buildOmpModels(catalog, "free").map((model) => model.id).join(",") === "free-required", "free scope leaked paid or unknown models");
+assert(unknownReasoning.cost.input === 0, "host cost placeholder changed");
+assert(!buildOmpModels(catalog, "free").some((model) => model.id === unknownReasoning.id), "zero cost placeholder became free evidence");
+
+const paidAndUnknown = parseProductConfig(JSON.stringify({
+  models: [
+    { id: "paid", credits: "x2.00", maxInputTokens: 10, maxOutputTokens: 5 },
+    { id: "unknown", maxInputTokens: 10, maxOutputTokens: 5 },
+  ],
+}));
+assert(paidAndUnknown, "paid/unknown catalog was rejected");
+assert(buildOmpModels(paidAndUnknown, "free").length === 0, "empty free catalog was widened with fallbacks");
+assert(buildOmpModels(paidAndUnknown, "all").length === 2, "all scope did not mean the current cache catalog");
+
+const builtin = loadProductConfig("/definitely/missing/workbuddy-product-config.json");
+assert(builtin.source === "builtin", "missing cache did not select builtin catalog");
+assert(buildOmpModels(builtin, "free").length === 0, "builtin zero cost or stale credits claimed free status");
+assert(buildOmpModels(builtin, "all").length === 3, "builtin fallback catalog was unavailable in all scope");
+
+assert(clampModelMaxTokens("deepseek-v4.1-flash", 128_000) === FLASH_MAX_TOKENS, "catalog cap was not enforced");
+assert(clampModelMaxTokens("deepseek-v4.1-flash", 1_024) === 1_024, "small valid budget was raised");
+assert(clampModelMaxTokens("other", 128_000) === 128_000, "unrelated model budget was clamped");
+
+console.log("OK: model parsing, thinking, vision, budgets, and truthful free scope");
