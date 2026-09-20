@@ -16,10 +16,12 @@
     ]
   },
   "peerDependencies": {
-    "@oh-my-pi/pi-ai": "*",
-    "@oh-my-pi/pi-coding-agent": "*"
+    "@oh-my-pi/pi-ai": "18.2.6",
+    "@oh-my-pi/pi-coding-agent": "18.2.6"
   },
   "devDependencies": {
-    "typescript": "^7.0.2"
+    "@oh-my-pi/pi-ai": "18.2.6",
+    "@oh-my-pi/pi-coding-agent": "18.2.6",
+    "typescript": "7.0.2"
   }
 }

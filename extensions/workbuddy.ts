@@ -7,7 +7,6 @@ import type { OAuthCredentials, OAuthLoginCallbacks } from "@oh-my-pi/pi-ai"
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent"
 
 const PROVIDER = "workbuddy";
-const MARKER = "X-Pi-WorkBuddy";
 const GLOBAL_BASE = "https://www.workbuddy.ai";
 const CLIENT_UA = "CLI/2.63.2 CodeBuddy/2.63.2";
 const AUTH_ENV = "WORKBUDDY_AUTH_FILE";
@@ -24,20 +23,6 @@ const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
 type Effort = (typeof EFFORTS)[number];
 type Scope = "free" | "all";
 
-export function thinkingLevelMap(efforts: readonly string[], canDisable = false) {
-  return {
-    off: canDisable ? "off" : null,
-    minimal: null,
-    low: efforts.includes("low") ? "low" : null,
-    medium: efforts.includes("medium") ? "medium" : null,
-    high: efforts.includes("high") ? "high" : null,
-    xhigh: efforts.includes("xhigh") ? "xhigh" : null,
-    max: efforts.includes("max") ? "max" : null,
-  } as const;
-}
-
-const HIGH_ONLY = thinkingLevelMap(["high"]);
-const LOW_HIGH = thinkingLevelMap(["low", "high"]);
 
 type Cred = {
   accessToken: string;
@@ -215,15 +200,11 @@ export function buildPiModels(config: ProductConfig, scope: Scope) {
   const rows = [...byId.values()].filter((model) => scope === "all" || free.has(model.id));
   return rows.flatMap((row) => {
     if (row.contextWindow <= 0 || row.maxTokens <= 0) return [];
-    const efforts = row.supportsReasoning
-      ? (row.supportedEfforts?.length ? row.supportedEfforts : EFFORTS)
-      : [];
     const credits = row.credits ?? "x?";
     return [{
       id: row.id,
       name: `${row.name} · ${credits}`,
       reasoning: row.supportsReasoning,
-      thinkingLevelMap: thinkingLevelMap(efforts, row.canDisableThinking),
       input: (row.supportsImages ? ["text", "image"] : ["text"]) as ("text" | "image")[],
       cost: ZERO_COST,
       contextWindow: row.contextWindow,
@@ -405,20 +386,6 @@ async function resolveCred(): Promise<Cred> {
   return inflight;
 }
 
-function chatHeaders(cred: Cred): Record<string, string> {
-  return {
-    Accept: "application/json, text/plain, */*",
-    "X-Requested-With": "XMLHttpRequest",
-    Origin: GLOBAL_BASE,
-    Referer: `${GLOBAL_BASE}/`,
-    "User-Agent": CLIENT_UA,
-    Authorization: `Bearer ${cred.accessToken}`,
-    ...(cred.uid === "" ? { "X-No-User-Id": "1" } : { "X-User-Id": cred.uid }),
-    ...(cred.enterpriseId ? { "X-Enterprise-Id": cred.enterpriseId } : { "X-No-Enterprise-Id": "1" }),
-    ...(cred.domain === "" ? { "X-No-Department-Info": "1" } : { "X-Domain": cred.domain }),
-    "X-Product": "SaaS",
-  };
-}
 
 function stripAssistantReasoning(messages: unknown[]): void {
   for (const item of messages) {
@@ -515,9 +482,6 @@ function asObject(payload: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
-function hasMarker(headers: Record<string, string | null>): boolean {
-  return headers[MARKER] === "1" || headers[MARKER.toLowerCase()] === "1";
-}
 
 type Pack = { name: string; remain: number; size: number };
 
@@ -791,6 +755,7 @@ async function loginWorkBuddy(callbacks: OAuthLoginCallbacks): Promise<OAuthCred
     accountId: cred.uid,
     orgId: cred.enterpriseId,
   };
+}
 
 async function refreshWorkBuddyOAuth(credentials: OAuthCredentials): Promise<OAuthCredentials> {
   const prev = await current();
@@ -828,27 +793,13 @@ export default async function (pi: ExtensionAPI) {
     pi.registerProvider(PROVIDER, {
       baseUrl: `${GLOBAL_BASE}/v2`,
       api: "openai-completions",
-      headers: { [MARKER]: "1" },
       oauth,
       models,
-      async refreshModels() {
-        scope = loadSettings().scope;
-        models = buildPiModels(loadProductConfig(), scope);
-        ids = new Set(models.map((model) => model.id));
-        return models;
-      },
     });
   }
 
   apply();
 
-  pi.on("before_provider_headers", async (event) => {
-    if (!hasMarker(event.headers)) return;
-    const cred = await resolveCred();
-    event.headers[MARKER] = null;
-    event.headers[MARKER.toLowerCase()] = null;
-    for (const [key, value] of Object.entries(chatHeaders(cred))) event.headers[key] = value;
-  });
 
   pi.on("before_provider_request", (event) => {
     const payload = asObject(event.payload);
@@ -863,9 +814,8 @@ export default async function (pi: ExtensionAPI) {
       .catch(() => undefined);
   });
 
-  // setModel awaits this handler, so it must never block on network I/O:
-  // redraw from the cached card and refresh in the background.
-  pi.on("model_select", (_event, ctx) => {
+  // OMP refreshes model-dependent UI at the next turn; never block it on network I/O.
+  pi.on("turn_start", (_event, ctx) => {
     if (!showsWorkBuddyCard(ctx.model?.provider)) {
       card = undefined;
       ctx.ui.setWidget("workbuddy", undefined);
@@ -928,7 +878,6 @@ if (process.argv.includes("--self-check")) {
   if (payload.reasoning_effort !== undefined) throw new Error("no injected effort");
   const kept = prepareChatPayload({ messages: [], reasoning_effort: "max" });
   if (kept.reasoning_effort !== "max") throw new Error("explicit effort preserved");
-  if (LOW_HIGH.low !== "low" || HIGH_ONLY.low !== null || HIGH_ONLY.high !== "high") throw new Error("effort map");
   if (!showsWorkBuddyCard("workbuddy")) throw new Error("card: own provider shown");
   if (showsWorkBuddyCard("GROKCPA")) throw new Error("card: foreign provider hidden");
   if (showsWorkBuddyCard(undefined) || showsWorkBuddyCard(null) || showsWorkBuddyCard(42)) throw new Error("card: unknown provider hidden");
@@ -937,17 +886,13 @@ if (process.argv.includes("--self-check")) {
   if (!isWorkBuddyModel("hy3", ours)) throw new Error("scope: own model accepted");
   if (isWorkBuddyModel("grok-4.6", ours)) throw new Error("scope: foreign model must be rejected");
   if (isWorkBuddyModel(undefined, ours) || isWorkBuddyModel(42, ours)) throw new Error("scope: non-string rejected");
-  if (thinkingLevelMap(["high"], true).off !== "off") throw new Error("off");
   const prepended = prepareChatPayload({ messages: [{ role: "user", content: "hi" }] });
   if ((prepended.messages as { role: string }[])[0].role !== "system") throw new Error("prepend");
   if (FREE_IDS.length !== 3) throw new Error("count");
   if (!creditsAreFree("x0.00") || creditsAreFree("x1.00")) throw new Error("credits free");
   const flash = buildPiModels({ source: "builtin", models: BUILTIN_MODELS }, "free")
     .find((model) => model.id === "deepseek-v4.1-flash");
-  if (flash?.thinkingLevelMap.low !== "low" || flash.thinkingLevelMap.xhigh !== "xhigh" || flash.thinkingLevelMap.max !== "max") {
-    throw new Error("flash efforts");
-  }
-  if (flash.maxTokens !== FLASH_MAX_TOKENS) throw new Error("flash cap");
+  if (flash?.maxTokens !== FLASH_MAX_TOKENS) throw new Error("flash cap");
   const looped = prepareChatPayload({
     model: "deepseek-v4.1-flash",
     max_tokens: 128_000,
@@ -968,21 +913,6 @@ if (process.argv.includes("--self-check")) {
     }],
   }));
   if (!fromCache) throw new Error("parse config");
-  const cachedFlash = buildPiModels(fromCache, "free")[0];
-  if (cachedFlash.thinkingLevelMap.medium !== "medium" || cachedFlash.thinkingLevelMap.max !== "max") {
-    throw new Error("cache efforts");
-  }
-  const implied = parseProductConfig(JSON.stringify({
-    models: [{
-      id: "implied",
-      name: "Implied",
-      credits: "x0.00",
-      maxInputTokens: 1000,
-      maxOutputTokens: 100,
-      supportsReasoning: true,
-    }],
-  }));
-  if (buildPiModels(implied!, "free")[0].thinkingLevelMap.xhigh !== "xhigh") throw new Error("implied efforts");
   const credits = parseCredits({
     code: 0,
     data: {
