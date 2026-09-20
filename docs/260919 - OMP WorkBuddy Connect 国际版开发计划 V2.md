@@ -303,7 +303,10 @@ M0 不追求 WorkBuddy 功能完整，而追求：
 | `before_provider_request` | 使用 | 保留 |
 | OAuth `getApiKey()` | 使用 | Bearer 来源 |
 | OAuth `refreshToken()` | 使用 | Token lifecycle |
-| OAuth `modifyModels()` | 使用 | Identity header injection |
+| `Model.resolveHeaders()` | 使用候选 | request-boundary identity materialization |
+| `AuthStorage.getOAuthAccess()` | 使用候选 | 同一 OAuth selection 的 token/credentialId/identity |
+| `ExtensionAPI.setModel()` | fallback 候选 | resolver 无法证明原子性时验证 rebind |
+| OAuth `modifyModels()` | 使用 | WorkBuddy-only catalog projection / resolver installation |
 | `fetchDynamicModels()` | 架构评估 | M0 决策 |
 | `usage` / UsageProvider | 架构评估 | M0 决策 |
 
@@ -388,22 +391,27 @@ rotate
 
 ---
 
-## 4.5 验证 modifyModels()
+## 4.5 验证 Request Identity Binding
 
-必须验证：
+先保留 modifier 六项证据：
 
 1. modifier 输入是否为完整 catalog；
-2. registry rebuild 后是否重新执行；
+2. registry rebuild 后何时重新执行；
 3. credential 更新后何时重新应用；
 4. modifier 抛异常时 Registry 行为；
-5. Provider re-register 后已有 model reference 是否更新；
-6. subagent 是否使用重建后的 model。
+5. Provider re-register 后旧 model reference 是否 stale；
+6. probe-only child-shaped session 是否取得 fresh model。
 
-永久测试要求：
+再验证首选 request-boundary 路径：
 
-```text
-非 WorkBuddy Provider 不得发生任何变化
-```
+1. `modifyModels()` 能否为 WorkBuddy model 安装并组合 `resolveHeaders()`；
+2. `stream()` 是否在实际 transport 前执行 resolver；
+3. resolver 能否通过公开 `getOAuthAccess()` 获得 accountId/orgId/credentialId；
+4. normal、forced refresh、401 retry、logout A→B、abort 下，实际出站 Bearer 与身份是否同 generation；
+5. 失败时公开 `setModel(freshModel)` 能否覆盖 main/child/resume/task/headless；
+6. 仍失败时是否能以 reload/new-session 明确 fail closed。
+
+永久测试要求：非 WorkBuddy Provider 不得发生任何变化；身份非法或 stored credential 歧义时 WorkBuddy rows 消失，request boundary 仍独立拒绝。
 
 ---
 
@@ -690,7 +698,7 @@ Authorization: Bearer <access>
 
 ---
 
-# 5.7 Identity Headers
+# 5.7 Request-Boundary Identity Headers
 
 固定国际版 Provider Headers：
 
@@ -711,20 +719,18 @@ X-User-Id
 X-Enterprise-Id
 ```
 
-必须通过 credential-aware：
+`oauth.modifyModels()` 只负责为 WorkBuddy model 安装经过 M0 验证的 credential-aware identity binding。首选机制：
 
 ```text
-oauth.modifyModels()
-```
-
-写入 WorkBuddy models。
-
-对应：
-
-```text
+existing model.resolveHeaders
+        +
+AuthStorage.getOAuthAccess(provider, sessionId, { signal })
+        ↓
 accountId → X-User-Id
 orgId     → X-Enterprise-Id
 ```
+
+固定 Header resolver 与账号 resolver 必须组合；不得把账号信息长期写入静态 `model.headers`。由于 Bearer 与 identity 是两次解析，必须通过实际出站 normal/refresh/retry/A→B 验证明同 credential generation，不能仅证明 resolver 最终读到新账号。
 
 ---
 
@@ -792,54 +798,36 @@ identity missing
 
 # 5.10 Single Account Enforcement
 
-v1 只正式支持：
+v1 只正式支持一个 stored WorkBuddy OAuth credential；这不是单纯 README limitation。
+
+使用：
 
 ```text
-one effective WorkBuddy account
+listOAuthAccounts('workbuddy').length
 ```
 
-但这不是单纯 README limitation。
-
-M0 若能通过 OMP 公开 API 判断：
+判定：
 
 ```text
-存在多个 active WorkBuddy credential
+0 → unauthenticated
+1 → admissible
+>1 → reject before Chat
 ```
 
-则应：
+`active` 只表示某 session sticky 到哪一行，不用于计数。系统不得自动选择、轮换或删除凭据。
+
+仍必须通过 Account Switch Test：
 
 ```text
-明确拒绝模型调用
+A login/request
+→ A refresh/request
+→ A logout
+→ B login/request
+→ existing session B request
+→ spawned subagent B request
 ```
 
-如果宿主无法可靠检测，则至少必须通过 Account Switch Test 证明：
-
-```text
-A login
-→ A request
-
-A refresh
-→ A request
-
-A logout
-
-B login
-→ B request
-
-existing session
-→ B request
-
-spawn subagent
-→ B request
-```
-
-所有请求不得再携带：
-
-```text
-A user id
-A enterprise id
-A bearer
-```
+每次实际出站请求的 Bearer、user id、enterprise id 和 credential id 必须属于同一 generation，且迟到 A 结果不得恢复旧身份。
 
 ---
 

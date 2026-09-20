@@ -50,9 +50,11 @@ API Compatibility Matrix 至少包括：
 | Provider 顶层 `name` | 不使用；OAuth `name` 是不同字段，保留合法用途 | ProviderConfig 类型 |
 | `refreshModels`、`before_provider_headers`、`model_select`、Marker | 删除旧契约 | 编译和事件加载 |
 | `before_provider_request` | 保留；验证返回 payload 语义及 subagent 加载 | 真实请求和隔离测试 |
-| `getApiKey`、`refreshToken` | 认证唯一入口 | 缺身份零请求、刷新持久化 |
-| `modifyModels` | WorkBuddy-only 投影 | 完整目录、重建、凭据更新、异常、旧 model reference、subagent 六项实验 |
-| AuthStorage public access/delete | 从公开上下文取得，不臆造方法名 | 重复登录 replace/append/rotate、删除后不可用、重启 |
+| `getApiKey`、`refreshToken` | Bearer 与 refresh 的宿主入口 | 缺身份零请求、刷新持久化 |
+| `Model.resolveHeaders`、`AuthStorage.getOAuthAccess` | request-boundary identity 首选候选 | resolver 保留/执行、normal/refresh/retry/换号同 credential |
+| `ExtensionAPI.setModel` | request-boundary 方案失败时的 rebind 候选 | main/child/resume/task/headless 全路径 |
+| `modifyModels` | WorkBuddy-only catalog 投影及 resolver 安装点 | 完整目录、重建、异常 fallback、旧 model reference、resolver preservation |
+| AuthStorage public access/delete | 使用 `listOAuthAccounts`、`getOAuthAccess` 和 provider-scoped 删除 | stored credential 歧义、删除后不可用、重启 |
 | `fetchDynamicModels` | 走 D6 ADR | 官方在线端点及缓存/范围证据 |
 | `usage` / UsageProvider | 走 D8 ADR | account/credits/plan/identity 表达及生命周期 |
 | callback AbortSignal、shutdown、headless/role | 使用 18.2.6 实际公开能力 | 轮询取消和运行态加载 |
@@ -67,17 +69,20 @@ M0 交付拟存于 `docs/omp-port/`：`baseline-manifest.md`、`api-compatibilit
 
 登录拒绝缺失或无效 access/refresh/expiry/uid/enterpriseId；刷新以传入宿主 credential 为唯一输入，保留既有身份和明确 email，新的 Token/expiry 必须合法。刷新响应缺省 refresh 的保留行为只有得到官方协议证据后才能保留，不能以旧过期时间伪造成功；响应身份与旧身份矛盾视为失败。
 
-`getApiKey()` 在返回 access 前重验必要身份，不手动向 Chat 注入 Authorization。modifier 内校验用于诊断/投影，但因宿主可能捕获异常，绝不是唯一阻断点。缺 accountId/orgId 分别验证实际 Chat 请求计数为零。替代方案“Widget 警告后继续”违反 fail-closed，拒绝。
+`getApiKey()` 在返回 access 前重验必要身份，不手动向 Chat 注入 Authorization。request identity resolver 同样校验必要身份，并必须证明与宿主 Bearer 选择同一 credential generation。modifier 内校验用于隐藏非法/歧义的 WorkBuddy rows，但因宿主捕获 modifier 异常，绝不是唯一阻断点。缺 accountId/orgId 分别验证实际 Chat 请求计数为零。替代方案“Widget 警告后继续”违反 fail-closed，拒绝。
 
 ### D3 — 身份 generation 与单账号安全边界
 
-`Credential Generation` 表示宿主一次可用 credential 状态（Token、accountId、orgId）。它不是新增持久化 credential 字段，也不是 UI generation。单账号刷新保留身份；账号替换需要作废旧运行态、通过宿主公开路径刷新目录/已选 model 引用并确认 subagent 获取新投影。
+`Credential Generation` 表示宿主一次可用 credential 状态（Token、accountId、orgId 和 durable credential id）。它不是新增持久化字段，也不是 UI generation。单账号刷新必须保留身份；账号替换必须使后续 request-boundary Bearer 与身份解析共同切换到新 generation。
 
-`modifyModels(models, credentials)` 只映射 `model.provider === 'workbuddy'`，合并固定/账号 Headers，不修改其他行。固定 Header 包括 Accept、X-Requested-With、Origin=`https://www.workbuddy.ai`、Referer=`https://www.workbuddy.ai/`、User-Agent（以已验证协议为准）、X-Product=`SaaS`、X-Domain=`www.workbuddy.ai`。不保留 Marker 或缺身份时的 `X-No-User-Id/X-No-Enterprise-Id` Chat 降级。
+`modifyModels(models, credentials)` 只处理 `model.provider === 'workbuddy'`，保留其他行，并为 WorkBuddy 安装已验证的 credential-aware identity binding：组合模型既有 `resolveHeaders` 与基于 `AuthStorage.getOAuthAccess(provider, sessionId, { signal })` 的身份 resolver；不得用长期静态 `model.headers` 保存账号快照。固定 Header 包括 Accept、X-Requested-With、Origin=`https://www.workbuddy.ai`、Referer=`https://www.workbuddy.ai/`、User-Agent（以已验证协议为准）、X-Product=`SaaS`、X-Domain=`www.workbuddy.ai`。不保留 Marker 或缺身份时的 Chat 降级 Header。
+ExtensionAPI 注册入口本身不暴露 ModelRegistry；只有 ExtensionContext 提供公开 `modelRegistry`。M0 1.5 已证明实际 headless `session_start` 可在首个请求前捕获当前 session ID 与共享 registry/AuthStorage，未绑定必须 fail closed；actual Task executor 的独立扩展绑定由 1.6b 单独验收。
 
-M0 若公开 API 可枚举 active credential，接入明确多账号拒绝，不能自动删其他凭据。若无法可靠检测，记录限制，要求 A login/request → A refresh/request → logout → B login/request → existing session B request → spawned subagent B request；不能证明无 A 身份即 gate 失败。不得把“单账号已声明”当作接受身份错配的理由。
+`listOAuthAccounts('workbuddy')` 返回的 stored OAuth rows 是 v1 单账号判定依据：0 行未登录，1 行可继续，超过 1 行明确拒绝模型调用。`active` 仅表示指定 session 的 sticky row，不代表 stored credential 数量。不得自动选择、轮换或删除其他凭据。
 
-这里不假定 `getApiKey` 和 modifier 是同一 per-request callback，也不承诺仅靠一个内存计数器解决竞态。M0 必须验证旧 model 引用、并发 refresh 与 logout/换号的行为。如果公开 API 无法维持一致性，阻断 M0/M1 并提交具体限制，不暗中 patch OMP 或放宽规格。对已经发出的 A 请求不声称能追溯改写；验证 B 登录完成后新发出的请求及迟到 A 结果不会恢复 B 的认证状态。
+M0 1.5 已以真实本地出站请求验证 normal、forced refresh、401/retry、logout A→login B 与 abort 中 Authorization、X-User-Id、X-Enterprise-Id 和 durable credential id 同 generation。`getApiKey()` 与 `getOAuthAccess()` 虽是两次调用，但在单 stored account 不变量下，401 刷新只更新同一 durable row；保留的旧 Model 也会在下一请求动态解析 B。actual Task/subagent 生命周期仍由 1.6b 验证。
+
+`ExtensionAPI.setModel(freshModel)` 保留为 OMP 未来破坏 resolver preservation 时的公开 fallback，本次不采用。不能证明一致性时仍须 fail closed，不 patch OMP、不恢复全局 fetch hook、不放宽规格。对已经发出的 A 请求不声称能追溯改写；迟到 A 结果不得恢复 B 的认证状态。
 
 ### D4 — Logout 和 Billing 共享宿主生命周期
 

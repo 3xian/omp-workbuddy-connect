@@ -124,7 +124,7 @@ X-User-Id
 X-Enterprise-Id
 ```
 
-OMP 18.2.6 尚未向 Extension 暴露 per-request credential-aware header callback，因此不得宣称或依赖多账号自动轮换。若公开 API 能可靠检测多个 active WorkBuddy credential，模型调用必须明确拒绝且不得擅自删除凭据；若不能可靠检测，必须通过 A 账号调用与刷新、退出、B 账号登录、已有会话和新 subagent 的顺序换号验收证明无身份混用。任何 Bearer 与身份 Header 不一致或无法证明一致的情况都必须 fail closed，不得发送 Chat 请求。
+OMP 18.2.6 没有 upstream Pi 的 `before_provider_headers` event，但公开 `Model.resolveHeaders(signal)` 会在真实请求前解析 Header，`modifyModels()` 可以保留并组合该 resolver，`AuthStorage.getOAuthAccess()` 可返回一次 OAuth 选择的 access token、credentialId、accountId 和 orgId。v1 不依赖多账号轮换：`listOAuthAccounts('workbuddy')` 超过一个 stored OAuth credential 时必须明确拒绝且不得选择、轮换或删除。任何 Bearer 与身份 Header 不一致或无法证明一致的情况都必须 fail closed，不得发送 Chat 请求。
 
 ### 4.4 不重新实现 OpenAI Streaming Transport
 
@@ -481,7 +481,7 @@ X-Product = SaaS
 
 ---
 
-# 13. 动态账号 Headers
+# 13. Request-Boundary 账号 Headers
 
 WorkBuddy 请求必须携带：
 
@@ -490,35 +490,31 @@ X-User-Id
 X-Enterprise-Id
 ```
 
-OMP 18.2.6 没有 upstream Pi 的：
+OMP 18.2.6 没有 upstream Pi 的 `before_provider_headers`，不得恢复旧事件或全局 fetch 拦截。OMP Model 公开：
 
-```text
-before_provider_headers
+```ts
+resolveHeaders?: (signal?: AbortSignal) =>
+    Promise<Record<string, string> | undefined>
 ```
 
-因此不得继续保留原设计。
-
-应改用：
+`stream()` / `streamSimple()` 会在 provider dispatch 前 await 该 resolver。`oauth.modifyModels()` SHALL 只为 WorkBuddy model 安装经过验证的 credential-aware identity binding，优先组合 model 既有 resolver 与：
 
 ```text
-oauth.modifyModels()
+AuthStorage.getOAuthAccess(provider, sessionId, { signal })
 ```
 
-根据当前 OAuth Credential 为 WorkBuddy Model 注入：
+映射：
 
 ```text
-model.headers.X-User-Id
-model.headers.X-Enterprise-Id
+access.accountId → X-User-Id
+access.orgId     → X-Enterprise-Id
 ```
 
-对应关系：
+不得把账号身份长期快照到静态 `model.headers`。Provider 固定 Headers 可能已经由既有 `resolveHeaders` 表达，WorkBuddy resolver 必须组合而不是覆盖它。
 
-```text
-credentials.accountId → X-User-Id
-credentials.orgId     → X-Enterprise-Id
-```
+`getApiKey()` 产生 Bearer 与 `getOAuthAccess()` 产生 identity 是两次公开调用。M0 必须用真实出站请求证明 normal、forced refresh、401/retry、logout A→login B、abort 下 Bearer、两个身份 Header 和 durable credential ID 同 generation。单账号规则降低歧义，但不能替代竞态实验。
 
-OMP ModelRegistry 对 runtime Provider 支持 credential-aware model modifier，并保存 runtime model modifier 以便 registry rebuild 后重新应用。
+如果 request-boundary resolver 无法证明原子性，第二候选是公开 `ExtensionAPI.setModel(freshModel)`；若 main/child/resume/task/headless 仍不能安全 rebind，则 fail closed，并要求新会话或 reload。
 
 ---
 
@@ -526,32 +522,19 @@ OMP ModelRegistry 对 runtime Provider 支持 credential-aware model modifier，
 
 v1.0 必须在 README / Known Limitations 中注明：
 
-> WorkBuddy AI OAuth 当前正式支持单账号使用。
+> WorkBuddy AI OAuth 当前正式支持一个 stored OAuth credential。
 
-原因：
-
-```text
-OMP request-time token selection
-```
-
-与：
+`listOAuthAccounts('workbuddy')` 的行数用于判定：
 
 ```text
-modifyModels() 生成的 model.headers
+0 rows  → unauthenticated
+1 row   → admissible
+>1 rows → reject before Chat
 ```
 
-并非同一个 per-request callback。
+其中 `active` 仅表示指定 session sticky 到哪一行，不是 stored credential 数量。系统不得偷偷选择、轮换或自动删除凭据。
 
-当存在多个 WorkBuddy OAuth account 时，理论上可能出现：
-
-```text
-Authorization → Account B
-X-User-Id     → Account A
-```
-
-v1.0 不承诺该场景正确工作。
-
-不得为了支持多账号而修改 OMP。
+不得为了支持多账号而修改 OMP。即使只有一行，仍必须证明 request-boundary Bearer 与 identity 的同 generation 原子性。
 
 ---
 
@@ -1270,7 +1253,7 @@ OMP < 18.2.6
 - [ ] Authorization 改为 OMP OAuth/API key pipeline
 - [ ] uid → OAuth `accountId`
 - [ ] enterpriseId → OAuth `orgId`
-- [ ] 使用 `modifyModels()` 注入身份 Header
+- [ ] 使用 `modifyModels()` 为 WorkBuddy 安装经过验证的 request-boundary identity binding
 - [ ] Token refresh 保留 account identity
 - [ ] `thinkingLevelMap` → OMP `thinking`
 - [ ] `buildPiModels()` → `buildOmpModels()`

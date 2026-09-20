@@ -2,10 +2,10 @@
 
 > **Development status — not release-ready**
 >
-> `feat/omp-port` is an in-progress OMP-native port. M0 tasks 1.1–1.3
-> establish only the OMP 18.2.6 compile and extension-loading baseline.
-> AuthStorage ownership, identity headers, canonical model metadata,
-> headless/subagent behavior, and live WorkBuddy E2E are not yet validated.
+> `feat/omp-port` is an in-progress OMP-native port. See
+> `openspec/changes/adapt-workbuddy-international-omp/tasks.md` for the
+> authoritative implementation status. The port is not authenticated-runtime
+> ready and has not passed the M0 gate or live WorkBuddy E2E validation.
 > Do not use the legacy Pi installation or credential instructions below as
 > current OMP instructions.
 

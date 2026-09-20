@@ -33,11 +33,11 @@ The parent also completed the public `session.abort({ reason })` path before dis
 
 - Authentication is not UI-dependent. OAuth receives callbacks plus an AbortSignal from AuthStorage; the credential protocol does not require `ctx.ui`.
 - Optional UI work must branch on `ctx.hasUI`. Headless UI helpers are safe no-ops in this host version, but the extension must not use them as an authentication prerequisite.
-- Task/child sessions load a separately bound extension factory. Mutable extension-local state must not be assumed to be shared with the parent.
+- The probed child-shaped SDK session loaded a separately bound extension factory. This does not prove the actual Task executor path or that every Task role binds identically.
 - `session.dispose()` is the supported shutdown boundary and emits `session_shutdown`; extension-owned timers/resources must be released there.
 - `session.abort()` is the supported active-turn cancellation boundary. OAuth polling must additionally honor the signal supplied to `oauth.login()`.
 - In print/headless initialization, `ctx.shutdown()` is only a callback supplied by the host mode; its default is a no-op. It is not a substitute for `session.dispose()`.
 
 ## Evidence limit
 
-This proves actual SDK headless lifecycle and actual WorkBuddy payload-hook execution, not a live Task tool completion or authenticated WorkBuddy Chat response. Task executor source resolves a child model from the shared ModelRegistry and constructs `createAgentSession({ hasUI: false, ... })`; the model-identity result for that fresh resolution is recorded separately in `modifier-behavior.md`.
+This proves actual SDK headless lifecycle and actual WorkBuddy payload-hook execution in a parent and child-shaped session. It does not prove a live Task tool completion, actual Task executor role-model binding, or authenticated WorkBuddy Chat. Task 1.6b retains that runtime proof; authenticated WorkBuddy Task E2E remains a later release gate.

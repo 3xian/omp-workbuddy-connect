@@ -17,23 +17,39 @@ The probe registered a synthetic OAuth provider with one model and `oauth.modify
 | Credential-change timing | A and B logins did not invoke the modifier directly. The first subsequent registry lookup invoked it with the new OAuth credential. |
 | Exception behavior | A thrown modifier exception was swallowed by the registry; the provider model remained present but its prior identity projection was not retained (`X-Probe-Account` became absent). Fail-closed validation must therefore remain in `oauth.getApiKey()` and must not rely on modifier exceptions blocking use. |
 | Old model reference | After A→B, the old A `Model` object remained unchanged while a new registry lookup returned a distinct B-projected object. Existing references are stale, not mutated in place. |
-| New child session | A task-style fresh registry resolution returned the B-projected object, and a new headless child `createAgentSession()` started with `workbuddy-m0-modifier/probe-model` carrying B. |
+| Probe-only child construction | A fresh `registry.find()` returned the B-projected object, and a child-shaped headless `createAgentSession({ model: freshModel })` started with B. This was not the actual OMP Task executor and is not a sanctioned rebind pattern. |
 
-## Public paths
+Production consequence: invalid or ambiguous identity should make the modifier return only foreign-provider rows, so WorkBuddy disappears from the projected catalog. Request-boundary authentication must still reject independently because a modifier exception serves the unprojected WorkBuddy catalog.
 
-- Registration/invalidation owner: `ModelRegistry.registerProvider()`.
-- Normal provider refresh used by `/login`: `ModelRegistry.refreshProvider(provider, "online")`.
-- Policy invalidation: `ModelRegistry.reapplyModelPolicies()`.
-- Fresh projection lookup: `ModelRegistry.find(provider, modelId)`.
-- Child task model selection: OMP's task executor resolves the model from `ModelRegistry` before `createAgentSession()`; the probe exercised the equivalent fresh-resolution/session-construction boundary.
+## Request-boundary atomicity follow-up
 
-## M0 blocking result
+A final isolated probe installed a WorkBuddy-only `resolveHeaders` through `modifyModels()`, explicitly composing the model's existing resolver with lifecycle-captured `AuthStorage.getOAuthAccess()`. It then used the built-in `openai-completions` transport against a local HTTP server, with `AuthStorage.resolver()` supplying the host Bearer.
 
-**M0 remains blocked on current-session identity consistency.** The official `/login` controller persists credentials and calls `refreshProvider(provider, "online")`, but does not rebind `session.model`. The probe observed:
+Captured outbound attempts kept Bearer and identity on one durable row:
 
-1. current A model reference retained A after login B;
-2. official post-login refresh did not execute the modifier or mutate that reference;
-3. a fresh registry lookup produced a distinct B model;
-4. a newly constructed child could use B only after fresh resolution.
+- normal A: `access-a1`, `account-a`, `org-a`, row 1;
+- forced refresh A: `access-a2`, `account-a`, `org-a`, row 1;
+- 401 attempt/retry: `access-a2` then `access-a3`, both with A identity and row 1;
+- logout A → login B through a retained old model object: `access-b1`, B identity, row 2;
+- abort during header resolution: B was selected, but zero requests reached transport.
 
-Therefore a current WorkBuddy session can hold stale A identity headers after the Bearer credential generation changes to B. Public primitives exist to obtain the correct new model, but the official login sequence does not atomically install it into the existing session. Tasks after the M0 gate must not start until the design identifies a supported current-session rebind path and proves A→B Bearer/header atomicity. No private host API or patched OMP behavior is acceptable.
+This verifies resolver preservation, fixed-header composition, lifecycle AuthStorage capture, host refresh/retry interaction, dynamic account switching, and abort-before-transport under the v1 single-stored-account invariant.
+
+## Selected public path
+
+- Request-boundary materialization: `Model.resolveHeaders(signal)`.
+- Token plus identity from one OAuth selection: `AuthStorage.getOAuthAccess(provider, sessionId, options)`.
+- Catalog installation point: WorkBuddy-only `oauth.modifyModels()`.
+- Host Bearer and 401 retry: `AuthStorage.resolver(provider, context)`.
+- `ExtensionAPI.setModel(model)` remains a fallback if future OMP behavior invalidates resolver preservation; it is not needed for the selected path.
+- Static catalog refresh and lookup remain useful evidence paths, but old `Model` objects are not mutated.
+
+## M0 result
+
+**Request-boundary credential atomicity is proven for task 1.5.** Static identity values in a retained A `Model` remain rejected. The accepted path is:
+
+```text
+modifyModels -> compose resolveHeaders -> getOAuthAccess -> identity headers at dispatch
+```
+
+The separate Task executor experiment remains task 1.6b. Live authenticated WorkBuddy Chat and production fail-closed implementation remain later gates. See `adr-request-identity-binding.md`.

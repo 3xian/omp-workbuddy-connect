@@ -44,15 +44,15 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 - **THEN** 刷新不返回可用认证，报告明确错误并提示重新登录，不回退其他 Token 来源
 
 ### Requirement: AUTH-04 Credential generation atomicity
-每次 WorkBuddy Chat 的 Authorization、X-User-Id 和 X-Enterprise-Id SHALL 对应同一 credential generation；Authorization 由宿主原生认证提供，账号 Headers 来自对应宿主 credential。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
+每次 WorkBuddy Chat 的 Authorization、X-User-Id 和 X-Enterprise-Id SHALL 对应同一 credential generation；Authorization 由宿主原生认证提供，账号 Headers SHALL 在请求边界从对应宿主 credential 解析，不得依赖长期静态账号 Header 快照。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户首次登录后发出模型请求
-- **THEN** 实际请求的 Bearer、用户 ID、企业 ID 一致，且携带官方国际版固定 Headers，无旧 Marker Header
+- **THEN** 实际出站请求的 Bearer、用户 ID、企业 ID 和 durable credential ID 一致，且携带官方国际版固定 Headers，无旧 Marker Header
 
-#### Scenario: Registry rebuild and scope re-registration
-- **WHEN** 同一账号刷新后目录重建或切换 scope 导致 Provider 重注册
-- **THEN** 后续真实请求仍使用当前 credential generation 的完整认证，不因旧模型引用携带旧账号 Headers
+#### Scenario: Refresh, retry, and account switch
+- **WHEN** 单账号发生 forced refresh 或 401 retry，或 A logout 后 B 在已有会话登录
+- **THEN** 每次实际出站尝试的 Bearer、用户 ID、企业 ID 均来自该次选择的同一 credential generation，迟到 A 结果不会恢复旧身份
 
 ### Requirement: AUTH-05 Three-layer fail closed
 系统 SHALL 在登录返回前、刷新返回前、提供请求 API key 前分别校验必要身份。只在模型投影抛异常不构成拒绝保证；任何必要身份缺失时 MUST 不提供可用认证且不发送 Chat Completion 请求。
@@ -65,23 +65,23 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 - **WHEN** orgId 缺失且宿主捕获模型投影异常并继续提供目录
 - **THEN** 仍无法获得可用请求认证，不因目录可见而发送无企业身份的 Chat
 
-### Requirement: AUTH-06 Provider isolation during identity projection
-账号身份投影 SHALL 仅影响 `workbuddy` 的模型，保留所有其他 Provider 的模型内容和行为，不得假定输入只有 WorkBuddy。
+### Requirement: AUTH-06 Provider isolation during identity binding
+账号身份绑定 SHALL 仅影响 `workbuddy` 的模型，保留所有其他 Provider 的模型内容和行为，不得假定 modifier 输入只有 WorkBuddy。身份无效或 stored credential 歧义时 SHOULD 从投影目录移除 WorkBuddy rows，同时请求认证边界仍须独立 fail closed；不得依赖 modifier 抛错。
 
 #### Scenario: Mixed-provider catalog
-- **WHEN** 带 OpenAI、Anthropic、WorkBuddy 模型的目录应用 WorkBuddy 身份
-- **THEN** 仅 WorkBuddy 模型具有相应身份 Headers，其他 Provider 的模型内容保持不变
+- **WHEN** 带 OpenAI、Anthropic、WorkBuddy 模型的目录应用 WorkBuddy 身份绑定
+- **THEN** 仅 WorkBuddy 模型获得相应 request-boundary identity resolver；其他 Provider 的模型内容保持不变
 
 ### Requirement: AUTH-07 Enforced single effective account
-v1 SHALL 只支持一个有效 WorkBuddy 账号。若公开 API 可可靠检测多个 active WorkBuddy credential，模型调用 SHALL 被明确拒绝且不得擅自删除用户凭据；无法可靠检测时 SHALL 记录限制并以完整顺序换号验收证明没有身份混用。不能证明一致性不得发布。
+v1 SHALL 只支持一个 stored WorkBuddy OAuth credential。`listOAuthAccounts('workbuddy')` 返回零行时视为未登录，一行时允许继续，超过一行时模型调用 SHALL 被明确拒绝且不得擅自选择、轮换或删除用户凭据。`active` 仅表示指定 session sticky 到哪一行，不得用于判断 stored credential 数量。不能证明身份一致性不得发布。
 
-#### Scenario: Multiple active credentials are detectable
-- **WHEN** 公开 API 显示存在多个 active WorkBuddy credential
+#### Scenario: Multiple stored credentials are detectable
+- **WHEN** 公开 API 显示存在多个 stored WorkBuddy OAuth credentials
 - **THEN** 明确拒绝模型调用并告知单账号要求，不允许宿主轮换导致身份错配
 
 #### Scenario: Sequential account switch in existing session
 - **WHEN** A 登录并调用、刷新并调用，然后 A 退出、B 登录，并在已有会话和新 subagent 中请求
-- **THEN** B 登录完成后的请求不再带 A Bearer、A user ID 或 A enterprise ID，且所有认证信息属于 B
+- **THEN** B 登录完成后的请求不再带 A Bearer、A user ID 或 A enterprise ID，且每次请求的所有认证信息属于 B 的同一 credential generation
 
 ### Requirement: AUTH-08 Provider-scoped logout
 `/workbuddy logout` SHALL 删除 OMP 中 WorkBuddy 的认证、使旧认证和身份运行态不可再用于新请求、清理 Widget/status 并使待返回积分失效，必要时更新模型。不得删除 Desktop credential 或 WorkBuddy 客户端数据。

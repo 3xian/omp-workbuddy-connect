@@ -21,15 +21,18 @@ The official `/login` controller delegates to `session.modelRegistry.authStorage
 | Select an account for a session | `pinSessionOAuthAccount(provider, sessionId, credentialId)` | Marked B active for that session |
 | Restart | `close()`, `AuthStorage.create()`, `reload()` | Both OAuth rows and identity fields survived reopening the SQLite database |
 | Forced refresh | `getApiKey(provider, sessionId, { forceRefresh: true, signal })` | Refresh callbacks received both eligible stored identities during candidate resolution; identity fields omitted by refresh responses remained attached to their respective durable rows |
+| Resolve token plus identity | `getOAuthAccess(provider, sessionId, options)` | Returns `accessToken`, durable `credentialId`, and identity metadata from one OAuth selection; candidate for request-boundary identity resolution |
 | Delete one account | `removeCredential(provider, credentialId)` | Removed only the selected provider credential |
 | Provider logout | `remove(provider)` | Removed every credential for that provider |
 | Cancel login | `AuthStorage.login(..., { signal })` | Signal reached the OAuth login callback, the promise rejected, and no credential row was written |
 
 ## Rotation and active-account semantics
 
-`listOAuthAccounts(provider, sessionId)` reports `active` from the session's durable credential pin. `active` is not a statement that only one provider credential exists or can participate in resolution. In the forced-refresh probe, B was pinned, but the host refreshed both expired/forced candidates (B then A). Implementations must therefore validate every candidate's identity and must not assume the final refresh callback corresponds only to the pinned account.
+`listOAuthAccounts(provider, sessionId)` reports `active` from the session's durable credential pin. `active` is not the stored credential count. In the forced-refresh probe, B was pinned, but the host refreshed both expired/forced candidates (B then A). Implementations must validate every candidate and must not assume the final refresh callback corresponds only to the pinned account.
 
-The extension's single-effective-account rule should use `listOAuthAccounts("workbuddy")`: zero rows means logged out, one row is admissible, and more than one row must fail closed. It must never silently choose or delete one of several rows.
+The v1 rule uses `listOAuthAccounts("workbuddy").length`: zero rows means logged out, one row is admissible, and more than one stored OAuth credential must fail closed. It must never silently choose, rotate, or delete one of several rows.
+
+`getOAuthCredential(provider)` is not session-aware and must not be used as the request identity source. `getOAuthAccess(provider, sessionId, options)` is the accepted public source for token and identity metadata from one selected row; the separate request-boundary probe demonstrated alignment with host Bearer resolution across normal, refresh, retry, sequential account switch, and abort. See `adr-request-identity-binding.md`.
 
 ## Public deletion and restart paths
 
@@ -37,6 +40,7 @@ The extension's single-effective-account rule should use `listOAuthAccounts("wor
 - Provider-scoped logout: `authStorage.remove("workbuddy")`.
 - Durable reload: `await authStorage.reload()` or a newly created `AuthStorage` bound to the same SQLite path.
 - Session-specific selection: `authStorage.pinSessionOAuthAccount("workbuddy", sessionId, credentialId)`.
+- Request-bound token plus identity: `authStorage.getOAuthAccess("workbuddy", sessionId, { signal })`.
 
 These paths are provider-scoped. No global credential deletion or private database mutation is required.
 

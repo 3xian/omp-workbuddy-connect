@@ -17,12 +17,16 @@ Host contract: `@oh-my-pi/pi-ai@18.2.6` and `@oh-my-pi/pi-coding-agent@18.2.6`, 
 | `model_select` | Not in the extension event union | Removed; use supported `turn_start` for deferred model-dependent UI refresh | 18.2.6 event type; typecheck; loader has no unknown-event failure |
 | Marker header | No host contract; existed only to find requests for the removed header hook | Removed | Provider registration no longer emits `X-Pi-WorkBuddy` |
 | Legacy `thinkingLevelMap` | Not part of OMP 18.2.6 `ProviderModelConfig` | Removed; OMP canonical `thinking` metadata is not implemented yet | M2 task 3.2 remains pending; no reasoning E2E capability is claimed |
-| Account identity headers | Must eventually come from the same host credential generation as Bearer authentication | M0 found a current-session rebind gap; implementation remains blocked until a supported atomic path is designed | `modifier-behavior.md`: fresh lookup returns B, but the existing A `Model` reference remains stale after official `/login` refresh |
+| Account identity headers | Bearer and identity must share one credential generation | Use request-boundary binding; static credential snapshots in `model.headers` are rejected | Captured normal/refresh/401/A→B/abort attempts; `adr-request-identity-binding.md` |
+| `Model.resolveHeaders(signal)` | Public request-boundary header resolver awaited by `stream()` / `streamSimple()` | Compose with the model's existing resolver for WorkBuddy rows | Built-in `openai-completions` probe preserved fixed headers and resolved identity before transport |
+| `AuthStorage.getOAuthAccess()` | Public session-aware OAuth selection returning access token, credential ID, and identity | Selected identity source; do not use non-session-aware `getOAuthCredential()` for requests | Captured token/account/org/durable-row selection matched outbound Bearer generations |
+| `ExtensionAPI.setModel()` | Public current-session model mutation API | Documented fallback only; unnecessary for the accepted resolver path | Exact type/source verified; retained old model safely resolved B dynamically |
+| `listOAuthAccounts()` | Public stored OAuth row enumeration; `active` means session sticky selection | Reject when WorkBuddy row count exceeds one; never count `active` flags as stored accounts | Credential probe: A+B returned two rows with at most one active |
 | `before_provider_request` | Supported payload hook | Retain, scoped by the current WorkBuddy model-ID set | Typecheck; `test/scope.test.mts` proves a foreign payload is byte-for-byte unchanged |
 | OAuth `login()` | Supported | Retain for the M0 protocol probe; production credential-boundary hardening is M1 | Typecheck and loader binding |
 | OAuth `refreshToken()` | Supported | Retain for M0; remove legacy credential fallback in M1 | Typecheck and loader binding |
 | OAuth `getApiKey()` | Supported | Retain as the Bearer source; identity fail-closed validation is M1 | Typecheck and loader binding |
-| OAuth `modifyModels()` | Supported; receives the full catalog and current credentials during lazy catalog composition | Full-catalog scope verified; keep foreign rows unchanged and validate identity independently in `getApiKey()` because exceptions fall back to unprojected rows | `modifier-behavior.md`: 5,112 rows/70 providers, rebuild timing, exception fallback, stale reference, and child-resolution evidence |
+| OAuth `modifyModels()` | Supported; receives the full catalog and current credentials during lazy catalog composition | Keep foreign rows unchanged; install WorkBuddy request binding; invalid/ambiguous identity should remove WorkBuddy rows rather than throw | `modifier-behavior.md`: 5,112 rows/70 providers, exception fallback, stale static reference, resolver preservation |
 | `fetchDynamicModels()` | Supported Provider capability | Decision deferred to the task 1.7 Dynamic Model ADR | Type/source inspection only |
 | `usage` / UsageProvider | Supported host capability | Decision deferred to the task 1.8 Credits / Usage ADR | Type/source inspection only |
 | `session_start` | Supported in interactive and headless sessions | Retain; optional Billing/UI work remains non-blocking and must branch on `ctx.hasUI` | `test/session-start.test.mts`; `headless-behavior.md` parent/child-shaped runtime evidence |
@@ -37,9 +41,10 @@ Host contract: `@oh-my-pi/pi-ai@18.2.6` and `@oh-my-pi/pi-coding-agent@18.2.6`, 
 - Extension self-check: `ok`.
 - Foreign-provider payload isolation check: passed.
 - Non-blocking `session_start` check: passed.
+- Request-boundary atomicity probe under Bun 1.3.14: lifecycle AuthStorage capture, fixed+identity composition, normal request, forced refresh, 401 retry, A→B through a retained model, and abort-before-transport all passed.
 
 ## Current implementation boundary
 
-**Loadable does not mean authenticated-runtime ready.** M0 now verifies AuthStorage persistence/removal/cancellation, full-catalog modifier behavior, and headless parent/child-shaped lifecycle. Canonical Thinking metadata and authenticated WorkBuddy Chat remain unverified.
+**Loadable does not mean authenticated-runtime ready.** M0 now verifies AuthStorage persistence/removal/cancellation, full-catalog modifier behavior, SDK headless lifecycle, and the `resolveHeaders` / `getOAuthAccess` request-boundary mechanism across normal, refresh, retry, account switch, and abort. Canonical Thinking metadata, actual Task executor behavior, and authenticated WorkBuddy Chat remain unverified.
 
-Current-session A→B identity atomicity is not proven: official `/login` refresh leaves an existing A `Model` reference stale while a fresh registry lookup returns B. `modifier-behavior.md` records the blocking evidence. M0 must remain blocked until a supported rebind design is proven; M1 implementation must not start on the assumption that refresh mutates old model objects.
+Task 1.5 selects the request-boundary resolver; it no longer blocks M0. M0 remains incomplete on tasks 1.6b–1.10. Production single-account fail-closed enforcement and live WorkBuddy E2E remain M1 work. See `adr-request-identity-binding.md`.
