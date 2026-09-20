@@ -5,6 +5,8 @@ import type { ProviderModelConfig } from "@oh-my-pi/pi-coding-agent";
 
 const PRODUCT_CONFIG_ENV = "WORKBUDDYAI_PRODUCT_CONFIG";
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } as const;
+// These flags describe the shared WorkBuddy OpenAI-compatible gateway dialect.
+// `thinking` controls per-model efforts and mandatory reasoning; no unverified off wire value is asserted.
 const COMPAT = {
   supportsDeveloperRole: false,
   supportsReasoningEffort: true,
@@ -91,6 +93,7 @@ function positiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
+/** Product credits are multiplier strings; every canonical numeric zero spelling is explicit free evidence. */
 export function creditsAreFree(credits: string | undefined): boolean {
   if (credits === undefined) return false;
   return /^x?0(?:\.0+)?$/u.test(credits.trim());

@@ -2,17 +2,15 @@
 
 > **Development status — not release-ready**
 >
-> M0 和 M1 已通过各自里程碑 gate。M2–M5 仍未完成，因此本分支尚不可发布。
+> M0、M1 与 M2 3.1–3.5 已完成；M2 3.6–3.10 以及 M3–M5 尚未完成，因此本分支不可发布。
 > 权威实施进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
-> 下文仍含尚未完成 M2–M4 迁移的上游行为说明，不代表当前发布契约。
+> 下文描述当前开发分支行为；尚未通过的里程碑能力会明确标注。
 
-## Legacy upstream behavior
+## 当前开发分支
 
-The remaining sections document the inherited Pi implementation and are retained only as migration context. They are not the contract of the unfinished OMP port.
+WorkBuddy AI 国际版 provider for OMP。当前认证与基础模型契约已迁移到 OMP，完整 M2 scope 切换安全与后续 Gateway/UI/release gate 仍在开发。
 
-WorkBuddy AI 国际版 provider for [pi](https://pi.dev)。在 pi 里直接使用 WorkBuddy AI 桌面 App 的模型。
-
-移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件），现在是 pi 原生扩展：无 shim、无 loopback 代理，直接注册 provider。
+移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
 ## 安装
 
@@ -38,15 +36,17 @@ pi -e /path/to/pi-workbuddy-connect
 
 ## 模型与推理档
 
-默认只列出免费模型（`x0.00`）。每个模型的推理档来自产品配置 `~/.workbuddy-ai/cache/acc-product-config-v3.json` 的 `reasoning.supportedEfforts`；缓存不存在时回退到内置清单：
+默认 scope 为 `free`。只有有效 Desktop 产品目录中带明确零 multiplier credits 证据的模型会显示；`0`、`0.0`、`x0`、`x0.00` 等规范零值会归一为免费证据，非零、缺失或格式错误均不是免费。内置清单仅作为目录 fallback，不构成免费证据，因此 fallback 来源的 `free` 可以为空。
 
-| 模型 | 上下文 | 推理档 |
+每个模型的 reasoning、图片能力和推理档来自产品配置 `~/.workbuddy-ai/cache/acc-product-config-v3.json`。缓存不可用时，`all` scope 可使用当前内置目录：
+
+| 模型 | 上下文 / 有效输出上限 | OMP canonical effort |
 | --- | --- | --- |
-| Deepseek-V4.1-Flash | 1M / 128k | low · medium · high · xhigh · max |
+| Deepseek-V4.1-Flash | 1M / 16k | low · medium · high · xhigh · max |
 | Hy4 preview | 1M / 64k | high |
 | Hy3 | 192k / 64k | low · high |
 
-没声明 `supportedEfforts` 的模型（`supportsReasoning: true`）默认给全套 low/medium/high/xhigh/max。
+推理配置使用 OMP canonical `thinking: { mode: "effort", efforts, requiresEffort }`。未声明可信 `supportedEfforts` 或 off 能力时，只保留 `reasoning` capability，不自动扩展 effort；`canDisableThinking=false` 会禁止 off。对于允许关闭的模型，OMP 18.2.6 在没有 Gateway-specific disable 证据时会把关闭请求限制到最低受支持 effort；WorkBuddy 的真实关闭编码仍须在 3.10 通过 live 请求确认，插件不会预设未经验证的 `none` 或其他 wire 值。
 
 ## 设置
 
@@ -63,7 +63,7 @@ pi 没有 DSH 那种插件配置卡片，等价入口有两处：
 
   也接受参数：`/workbuddy free` · `/workbuddy all`。断开认证请使用宿主命令 `/logout workbuddy`。
 
-切换范围后 provider 立即重新注册模型，无需 `/reload`。
+切换范围会立即重注册 provider；空目录清理与 retained model 阻断仍属于未完成的 3.7/3.8，当前不可视为完整 scope 安全保证。
 
 ## 环境变量
 
@@ -75,27 +75,29 @@ pi 没有 DSH 那种插件配置卡片，等价入口有两处：
 ## 自检
 
 ```bash
-node --experimental-strip-types extensions/workbuddy.ts --self-check
+npx --yes bun@1.3.14 extensions/workbuddy.ts --self-check
 ```
 
-覆盖 payload 规整、推理档映射、积分解析与 widget 渲染；认证边界由下列独立测试覆盖。
+覆盖 payload 规整、请求预算限制、积分解析与 widget 渲染；模型和认证边界由下列独立测试覆盖。
 
 ## 与上游的差异
 
 - 直接 `pi.registerProvider`，去掉 DSH 的 shim 与 loopback 端口转发。
-- 内置模型清单与上游 `BUILTIN_FREE_MODELS` 一致。
-- 推理档由 pi-ai 的 `thinkingLevelMap` 驱动，选择器直接读 `getSupportedThinkingLevels`。
-- 选 Default（auto）时**不发送** `reasoning_effort`，与上游一致；选具体档位时原样透传，不做任何改写。
-- Deepseek-V4.1-Flash 的 `max_tokens` 封顶 16k（`FLASH_MAX_TOKENS`）：该模型会陷入 `OK. / Let me write. / Go.` 式推理循环，把 128k 预算烧完才停。长答案被截断时调大此常量。
+- 内置模型仅作为产品目录不可用时的 fallback，不是免费模型证明。
+- 推理档由 OMP canonical `thinking` metadata 驱动；宿主根据 `efforts`、`requiresEffort` 和 Gateway compat 生成 `reasoning_effort`。
+- 选 Default（auto）时不主动选择 effort；选择具体档位、required off 和 optional off 均由 OMP transport 根据模型 metadata 处理。
+- Deepseek-V4.1-Flash 的目录与请求有效输出上限均为 16k（`FLASH_MAX_TOKENS`）：已记录的 Gateway 行为显示更大预算可能陷入重复推理循环。产品目录原始 `maxOutputTokens` 可以更高，但不会作为实际请求上限公开。
 - 发送前剔除 assistant 消息里回放的 `reasoning` / `thinking` / `reasoning_content` 字段，上游端点会拒绝这些字段。
-- 未移植上游的 reasoning-effort 探测（probe）功能：需要联网发真实请求，且当前免费模型都已声明 `supportedEfforts`，探测无增益。
+- 不按模型名称猜测 reasoning effort，也不为缺少可信能力信息的模型生成全档默认。
 
 ## 测试
 
 ```bash
-node --experimental-strip-types test/auth.test.mts
-node --experimental-strip-types test/provider.test.mts
-node --experimental-strip-types test/scope.test.mts
+node test/model-catalog.test.mts
+npx --yes bun@1.3.14 test/model-transport.test.mts
+npx --yes bun@1.3.14 test/auth.test.mts
+npx --yes bun@1.3.14 test/provider.test.mts
+npx --yes bun@1.3.14 test/scope.test.mts
 npx --yes bun@1.3.14 test/session-start.test.mts
 npx --yes bun@1.3.14 test/contract/persisted-credential-restart.test.mts
 npx --yes bun@1.3.14 test/contract/request-identity-binding.test.mts
