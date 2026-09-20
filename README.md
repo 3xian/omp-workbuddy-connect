@@ -98,6 +98,7 @@ node --experimental-strip-types test/auth.test.mts
 node --experimental-strip-types test/provider.test.mts
 node --experimental-strip-types test/scope.test.mts
 npx --yes bun@1.3.14 test/session-start.test.mts
+npx --yes bun@1.3.14 test/contract/persisted-credential-restart.test.mts
 npx --yes bun@1.3.14 test/contract/request-identity-binding.test.mts
 npx --yes bun@1.3.14 test/contract/task-runtime-contract.test.mts
 npx tsc -p tsconfig.json

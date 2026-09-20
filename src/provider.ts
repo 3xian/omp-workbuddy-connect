@@ -1,6 +1,6 @@
 import type { AuthStorage, Model, OAuthAccess, OAuthCredentials } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext, ProviderConfig } from "@oh-my-pi/pi-coding-agent";
-import { loginWorkBuddy, refreshWorkBuddyOAuth, validateRequestCredential } from "./auth.ts";
+import { loginWorkBuddy, refreshWorkBuddyOAuth, validateRequestCredential, validateStoredCredential } from "./auth.ts";
 import {
   WORKBUDDY_API_BASE,
   WORKBUDDY_ORIGIN,
@@ -18,7 +18,7 @@ export const WORKBUDDY_FIXED_HEADERS = {
   "X-Domain": "www.workbuddy.ai",
 } as const;
 
-type StoredAuth = Pick<AuthStorage, "listOAuthAccounts" | "getOAuthAccess">;
+type StoredAuth = Pick<AuthStorage, "listOAuthAccounts" | "getOAuthAccess" | "remove">;
 type ProviderModels = NonNullable<ProviderConfig["models"]>;
 type Fetch = typeof globalThis.fetch;
 
@@ -35,7 +35,7 @@ function validateSingleStoredAccount(binding: RuntimeBinding, credentials?: OAut
   const accounts = binding.authStorage.listOAuthAccounts(WORKBUDDY_PROVIDER);
   if (accounts.length !== 1) throw identityError(`expected one stored account, found ${accounts.length}`);
   const account = accounts[0]!;
-  if (!account.accountId || !account.orgId) throw identityError("stored account identity is incomplete");
+  if (!account.accountId) throw identityError("stored account identity is incomplete");
   if (credentials && (account.accountId !== credentials.accountId || account.orgId !== credentials.orgId)) {
     throw identityError("selected credential does not match the stored account identity");
   }
@@ -44,7 +44,7 @@ function validateSingleStoredAccount(binding: RuntimeBinding, credentials?: OAut
 
 function validateResolvedIdentity(access: OAuthAccess, binding: RuntimeBinding): OAuthAccess {
   const account = validateSingleStoredAccount(binding);
-  if (!access.accountId || !access.orgId || access.credentialId === undefined) {
+  if (!access.accountId || access.credentialId === undefined) {
     throw identityError("request credential identity is incomplete");
   }
   if (
@@ -57,24 +57,38 @@ function validateResolvedIdentity(access: OAuthAccess, binding: RuntimeBinding):
   return access;
 }
 
-export interface WorkBuddyAccountAccess {
+export interface WorkBuddyBillingAccess {
   accessToken: string;
   uid: string;
-  enterpriseId: string;
+  enterpriseId?: string;
   email?: string;
 }
 
 export interface WorkBuddyProviderController {
   bindContext(context: ExtensionContext): void;
   config(models: ProviderModels): ProviderConfig;
-  resolveCredential(signal?: AbortSignal): Promise<WorkBuddyAccountAccess>;
+  logout(): Promise<void>;
+  shutdown(): void;
+  /** Temporary legacy Billing bridge; M4 replaces this with the host UsageProvider. */
+  resolveBillingAccess(signal?: AbortSignal): Promise<WorkBuddyBillingAccess>;
 }
 
 export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): WorkBuddyProviderController {
   let binding: RuntimeBinding | undefined;
+  let authenticationEnabled = true;
+  const lifecycleAbort = new AbortController();
+  let authenticationAbort = new AbortController();
+
+  function combinedSignal(signal?: AbortSignal): AbortSignal {
+    const signals = [lifecycleAbort.signal, authenticationAbort.signal];
+    if (signal) signals.push(signal);
+    return AbortSignal.any(signals);
+  }
 
   function requireBinding(): RuntimeBinding {
-    if (!binding) throw identityError("session authentication is not initialized");
+    if (!binding || !authenticationEnabled || lifecycleAbort.signal.aborted) {
+      throw identityError("session authentication is not initialized");
+    }
     return binding;
   }
 
@@ -85,11 +99,9 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
   }
 
   function modifyModels(models: Model[], credentials: OAuthCredentials): Model[] {
-    let currentBinding: RuntimeBinding;
     try {
-      validateRequestCredential(credentials);
-      currentBinding = requireBinding();
-      validateSingleStoredAccount(currentBinding, credentials);
+      validateStoredCredential(credentials);
+      if (binding) validateSingleStoredAccount(binding, credentials);
     } catch {
       return models.filter((model) => model.provider !== WORKBUDDY_PROVIDER);
     }
@@ -101,17 +113,22 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
         ...model,
         resolveHeaders: async (signal?: AbortSignal) => {
           const preserved = await previous?.(signal);
+          const currentBinding = requireBinding();
+          const requestSignal = combinedSignal(signal);
           const resolved = await currentBinding.authStorage.getOAuthAccess(
             WORKBUDDY_PROVIDER,
             currentBinding.sessionId,
-            { signal },
+            { signal: requestSignal },
           );
+          requestSignal.throwIfAborted();
+          const latestBinding = requireBinding();
+          if (latestBinding !== currentBinding) throw identityError("session changed during credential resolution");
           if (!resolved) throw identityError("no usable OAuth credential");
-          const access = validateResolvedIdentity(resolved, currentBinding);
+          const access = validateResolvedIdentity(resolved, latestBinding);
           return {
             ...preserved,
             "X-User-Id": access.accountId!,
-            "X-Enterprise-Id": access.orgId!,
+            ...(access.orgId ? { "X-Enterprise-Id": access.orgId } : { "X-No-Enterprise-Id": "1" }),
           };
         },
       };
@@ -132,28 +149,63 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
         headers: WORKBUDDY_FIXED_HEADERS,
         oauth: {
           name: "WorkBuddy AI",
-          login: (callbacks) => loginWorkBuddy(callbacks, fetcher),
-          refreshToken: (credentials) => refreshWorkBuddyOAuth(credentials, fetcher),
+          login: async (callbacks) => {
+            const credentials = await loginWorkBuddy({
+              ...callbacks,
+              signal: combinedSignal(callbacks.signal),
+            }, fetcher);
+            authenticationEnabled = true;
+            return credentials;
+          },
+          refreshToken: (credentials: OAuthCredentials, signal?: AbortSignal) => refreshWorkBuddyOAuth(
+            credentials,
+            fetcher,
+            Date.now(),
+            combinedSignal(signal),
+          ),
           getApiKey,
           modifyModels,
         },
         models,
       };
     },
-    async resolveCredential(signal) {
+    async logout() {
+      if (!binding) throw identityError("session authentication is not initialized");
+      const wasEnabled = authenticationEnabled;
+      authenticationAbort.abort("WorkBuddy logout");
+      authenticationAbort = new AbortController();
+      try {
+        await binding.authStorage.remove(WORKBUDDY_PROVIDER);
+        authenticationEnabled = false;
+      } catch (error) {
+        authenticationEnabled = wasEnabled;
+        throw error;
+      }
+    },
+    shutdown() {
+      authenticationEnabled = false;
+      binding = undefined;
+      lifecycleAbort.abort("WorkBuddy extension shutdown");
+      authenticationAbort.abort("WorkBuddy extension shutdown");
+    },
+    async resolveBillingAccess(signal) {
       const currentBinding = requireBinding();
       validateSingleStoredAccount(currentBinding);
+      const requestSignal = combinedSignal(signal);
       const resolved = await currentBinding.authStorage.getOAuthAccess(
         WORKBUDDY_PROVIDER,
         currentBinding.sessionId,
-        { signal },
+        { signal: requestSignal },
       );
+      requestSignal.throwIfAborted();
+      const latestBinding = requireBinding();
+      if (latestBinding !== currentBinding) throw identityError("session changed during credential resolution");
       if (!resolved) throw identityError("no usable OAuth credential");
-      const access = validateResolvedIdentity(resolved, currentBinding);
+      const access = validateResolvedIdentity(resolved, latestBinding);
       return {
         accessToken: access.accessToken,
         uid: access.accountId!,
-        enterpriseId: access.orgId!,
+        ...(access.orgId ? { enterpriseId: access.orgId } : {}),
         ...(access.email ? { email: access.email } : {}),
       };
     },

@@ -20,7 +20,7 @@ function complete(overrides: Record<string, unknown> = {}): Record<string, unkno
   };
 }
 
-const required = ["accessToken", "refreshToken", "expiresIn", "uid", "enterpriseId"] as const;
+const required = ["accessToken", "refreshToken", "expiresIn", "uid"] as const;
 for (const field of required) {
   const data = complete();
   delete data[field];
@@ -32,6 +32,31 @@ for (const field of required) {
   }
   assert(rejected, `missing ${field} was accepted`);
 }
+
+const jwtAccess = `x.${Buffer.from(JSON.stringify({ sub: "jwt-account-a" })).toString("base64url")}.y`;
+const jwtIdentity = credentialFromLoginResponse(complete({
+  accessToken: jwtAccess,
+  uid: undefined,
+}), 1_000);
+assert(jwtIdentity.uid === "jwt-account-a", "signed access-token sub was not accepted as durable uid");
+const liveShape = oauthFromWorkBuddy(credentialFromLoginResponse(complete({
+  accessToken: jwtAccess,
+  uid: undefined,
+  enterpriseId: undefined,
+}), 1_000));
+assert(liveShape.accountId === "jwt-account-a", "live Plugin Auth subject was not mapped");
+assert(liveShape.orgId === undefined, "missing optional enterprise identity was fabricated");
+
+let emailClaimRejected = false;
+try {
+  credentialFromLoginResponse(complete({
+    accessToken: `x.${Buffer.from(JSON.stringify({ email: "display@example.com" })).toString("base64url")}.y`,
+    uid: undefined,
+  }), 1_000);
+} catch {
+  emailClaimRejected = true;
+}
+assert(emailClaimRejected, "email-only access-token claim was treated as durable uid");
 
 for (const expiresIn of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
   let rejected = false;
@@ -90,9 +115,22 @@ const refreshHeaders = new Headers(refreshRequest?.headers);
 assert(refreshHeaders.get("x-refresh-token") === "refresh-a", "refresh did not use host credential input");
 assert(refreshHeaders.get("x-enterprise-id") === "org-a", "refresh did not use host enterprise identity");
 
+const omittedRefreshFields: typeof fetch = async () => Response.json({
+  code: 0,
+  data: {
+    accessToken: "access-a3",
+    expiresIn: 1800,
+  },
+});
+const preserved = await refreshWorkBuddyOAuth(previous, omittedRefreshFields, 10_000);
+assert(preserved.refresh === previous.refresh, "omitted refresh token did not preserve the host credential");
+assert(
+  preserved.accountId === previous.accountId && preserved.orgId === previous.orgId,
+  "omitted response identity did not preserve the durable account identity",
+);
+
 for (const responseData of [
   complete({ accessToken: "", uid: undefined, enterpriseId: undefined }),
-  complete({ refreshToken: "", uid: undefined, enterpriseId: undefined }),
   complete({ expiresIn: 0, uid: undefined, enterpriseId: undefined }),
   complete({ accessToken: "access-x", refreshToken: "refresh-x", uid: "account-b", enterpriseId: "org-a" }),
   complete({ accessToken: "access-x", refreshToken: "refresh-x", uid: "account-a", enterpriseId: "org-b" }),
@@ -107,12 +145,23 @@ for (const responseData of [
   assert(rejected, `invalid refresh response was accepted: ${JSON.stringify(responseData)}`);
 }
 
-let missingIdentityRejected = false;
+let missingAccountRejected = false;
 try {
-  await refreshWorkBuddyOAuth({ ...previous, orgId: undefined }, successfulRefresh, 10_000);
+  await refreshWorkBuddyOAuth({ ...previous, accountId: undefined }, successfulRefresh, 10_000);
 } catch {
-  missingIdentityRejected = true;
+  missingAccountRejected = true;
 }
-assert(missingIdentityRejected, "refresh input without identity was accepted");
+assert(missingAccountRejected, "refresh input without account identity was accepted");
+
+let noEnterpriseRequest: RequestInit | undefined;
+const noEnterpriseRefresh: typeof fetch = async (_input, init) => {
+  noEnterpriseRequest = init;
+  return Response.json({ code: 0, data: { accessToken: "access-a4", expiresIn: 1800 } });
+};
+const noEnterprise = await refreshWorkBuddyOAuth({ ...previous, orgId: undefined }, noEnterpriseRefresh, 10_000);
+assert(noEnterprise.orgId === undefined, "refresh fabricated an enterprise identity");
+const noEnterpriseHeaders = new Headers(noEnterpriseRequest?.headers);
+assert(noEnterpriseHeaders.get("x-enterprise-id") === null, "refresh sent a fabricated enterprise header");
+assert(noEnterpriseHeaders.get("x-no-enterprise-id") === null, "refresh sent a Chat-only no-enterprise marker");
 
 console.log("OK: login mapping and refresh boundaries reject incomplete or conflicting identity");

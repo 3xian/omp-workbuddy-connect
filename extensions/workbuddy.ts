@@ -6,11 +6,11 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import {
   createWorkBuddyProvider,
-  type WorkBuddyAccountAccess,
+  type WorkBuddyBillingAccess,
   type WorkBuddyProviderController,
 } from "../src/provider.ts";
 
-type Cred = WorkBuddyAccountAccess & { expiresAtMs?: number; nickname?: string };
+type Cred = WorkBuddyBillingAccess & { expiresAtMs?: number; nickname?: string };
 
 const PROVIDER = "workbuddy";
 const GLOBAL_BASE = "https://www.workbuddy.ai";
@@ -392,8 +392,10 @@ export function widgetLines(input: {
   return lines;
 }
 
-async function fetchCredits(cred: Cred): Promise<{ total: number; packs: Pack[] }> {
+async function fetchCredits(cred: Cred, signal?: AbortSignal): Promise<{ total: number; packs: Pack[] }> {
   const now = new Date();
+  const timeoutSignal = AbortSignal.timeout(30_000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
   const response = await fetch(`${GLOBAL_BASE}/v2/billing/meter/get-user-resource`, {
     method: "POST",
     headers: {
@@ -414,9 +416,11 @@ async function fetchCredits(cred: Cred): Promise<{ total: number; packs: Pack[] 
       PackageEndTimeRangeBegin: fmtStamp(now),
       PackageEndTimeRangeEnd: fmtStamp(new Date(now.getTime() + 365 * 101 * 24 * 3600 * 1000)),
     }),
-    signal: AbortSignal.timeout(30_000),
+    signal: requestSignal,
   });
+  signal?.throwIfAborted();
   const envelope: unknown = await response.json();
+  signal?.throwIfAborted();
   const msg = unwrap(envelope).msg;
   if (!response.ok || unwrap(envelope).code !== 0) {
     throw new Error(typeof msg === "string" && msg !== "" ? msg : `credits ${response.status}`);
@@ -436,17 +440,20 @@ export function showsWorkBuddyCard(provider: unknown, force = false): boolean {
 }
 
 type PaintCtx = { ui: Ui; model?: { provider?: string } };
+type PaintGuard = { signal: AbortSignal; current(): boolean };
 
-/** Paints the card and returns the lines drawn, or undefined when hidden. */
+/** Paints the card and returns the lines drawn, or undefined when hidden/stale. */
 async function paint(
   ctx: PaintCtx,
   provider: WorkBuddyProviderController,
+  guard: PaintGuard,
   notify = false,
   extra: { scope: Scope; models: { name: string }[] } = { scope: "free", models: [] },
   force = false,
 ): Promise<string[] | undefined> {
   const { ui } = ctx;
   if (!showsWorkBuddyCard(ctx.model?.provider, force)) {
+    if (!guard.current()) return undefined;
     ui.setWidget("workbuddy", undefined);
     ui.setStatus("workbuddy", undefined);
     return undefined;
@@ -454,12 +461,15 @@ async function paint(
   let cred: Cred | undefined;
   let credits: { total: number; packs: Pack[] } | undefined;
   let error: string | undefined;
+  // Temporary legacy Billing adapter; M4 moves this fetch into OMP UsageProvider.
   try {
-    cred = await provider.resolveCredential();
-    credits = await fetchCredits(cred);
+    cred = await provider.resolveBillingAccess(guard.signal);
+    credits = await fetchCredits(cred, guard.signal);
   } catch (caught) {
+    if (!guard.current()) return undefined;
     error = caught instanceof Error ? caught.message : String(caught);
   }
+  if (!guard.current()) return undefined;
   const lines = widgetLines({ cred, credits, error, ...extra });
   ui.setWidget("workbuddy", lines);
   ui.setStatus("workbuddy", credits ? `积分 ${credits.total}` : cred ? "WorkBuddy 已登录" : "WorkBuddy 未登录");
@@ -478,10 +488,17 @@ export default async function (pi: ExtensionAPI) {
   let scope = loadSettings().scope;
   let models = buildPiModels(loadProductConfig(), scope);
   let ids = new Set(models.map((model) => model.id));
-  /** Last painted card lines for this session, reused on model switch. */
   let card: string[] | undefined;
+  let uiGeneration = 0;
+  let uiAbort = new AbortController();
   const extra = () => ({ scope, models });
 
+  function invalidateUi(reason: string): number {
+    uiGeneration += 1;
+    uiAbort.abort(reason);
+    uiAbort = new AbortController();
+    return uiGeneration;
+  }
 
   function apply(next?: Scope) {
     if (next) scope = next;
@@ -490,8 +507,37 @@ export default async function (pi: ExtensionAPI) {
     pi.registerProvider(PROVIDER, provider.config(models));
   }
 
-  apply();
+  async function repaint(
+    ctx: PaintCtx,
+    notify = false,
+    force = false,
+  ): Promise<string[] | undefined> {
+    const generation = invalidateUi("WorkBuddy UI superseded");
+    const signal = uiAbort.signal;
+    const guard: PaintGuard = {
+      signal,
+      current: () => generation === uiGeneration && !signal.aborted,
+    };
+    const lines = await paint(ctx, provider, guard, notify, extra(), force);
+    if (guard.current()) card = lines;
+    return lines;
+  }
 
+  async function logout(ctx: PaintCtx): Promise<void> {
+    invalidateUi("WorkBuddy logout");
+    try {
+      await provider.logout();
+      card = undefined;
+      ctx.ui.setWidget("workbuddy", undefined);
+      ctx.ui.setStatus("workbuddy", undefined);
+      ctx.ui.notify("WorkBuddy 已断开登录", "info");
+    } catch (caught) {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      ctx.ui.notify(`WorkBuddy 退出失败：${message}`, "error");
+    }
+  }
+
+  apply();
 
   pi.on("before_provider_request", (event) => {
     const payload = asObject(event.payload);
@@ -502,21 +548,32 @@ export default async function (pi: ExtensionAPI) {
   pi.on("session_start", (_event, ctx) => {
     provider.bindContext(ctx);
     // Never block session startup on the optional account/credits card.
-    void paint(ctx, provider, false, extra())
-      .then((lines) => { card = lines; })
-      .catch(() => undefined);
+    void repaint(ctx).catch(() => undefined);
+  });
+
+  pi.on("session_switch", (_event, ctx) => {
+    invalidateUi("WorkBuddy session switched");
+    card = undefined;
+    provider.bindContext(ctx);
+  });
+
+  pi.on("session_shutdown", () => {
+    invalidateUi("WorkBuddy session shutdown");
+    card = undefined;
+    provider.shutdown();
   });
 
   // OMP refreshes model-dependent UI at the next turn; never block it on network I/O.
   pi.on("turn_start", (_event, ctx) => {
     if (!showsWorkBuddyCard(ctx.model?.provider)) {
+      invalidateUi("WorkBuddy model inactive");
       card = undefined;
       ctx.ui.setWidget("workbuddy", undefined);
       ctx.ui.setStatus("workbuddy", undefined);
       return;
     }
     if (card) ctx.ui.setWidget("workbuddy", card);
-    void paint(ctx, provider, false, extra()).then((lines) => { card = lines; }).catch(() => undefined);
+    void repaint(ctx).catch(() => undefined);
   });
 
   pi.registerCommand("workbuddy", {
@@ -526,11 +583,11 @@ export default async function (pi: ExtensionAPI) {
       if (cmd === "free" || cmd === "all") {
         await saveSettings(cmd);
         apply(cmd);
-        await paint(ctx, provider, true, extra(), true);
+        await repaint(ctx, true, true);
         return;
       }
       if (cmd === "logout" || cmd === "disconnect") {
-        ctx.ui.notify("请使用 /logout workbuddy 删除 OMP 保存的 WorkBuddy 凭据", "info");
+        await logout(ctx);
         return;
       }
       const pick = await ctx.ui.select("WorkBuddy 设置", [
@@ -546,9 +603,10 @@ export default async function (pi: ExtensionAPI) {
         await saveSettings("free");
         apply("free");
       } else if (pick === "断开登录") {
-        ctx.ui.notify("请使用 /logout workbuddy 删除 OMP 保存的 WorkBuddy 凭据", "info");
+        await logout(ctx);
+        return;
       }
-      await paint(ctx, provider, true, extra(), true);
+      await repaint(ctx, true, true);
     },
   });
 }

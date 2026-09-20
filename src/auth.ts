@@ -1,12 +1,17 @@
+import { LoginCancelledError } from "@oh-my-pi/pi-ai/error";
 import type { OAuthCredentials, OAuthLoginCallbacks } from "@oh-my-pi/pi-ai";
-import { pollPluginToken, refreshPluginToken, startPluginLogin } from "./workbuddy-api.ts";
+import {
+  pollPluginToken,
+  refreshPluginToken,
+  startPluginLogin,
+} from "./workbuddy-api.ts";
 
 export interface WorkBuddyCredential {
   accessToken: string;
   refreshToken: string;
   expiresAtMs: number;
   uid: string;
-  enterpriseId: string;
+  enterpriseId?: string;
   email?: string;
   nickname?: string;
 }
@@ -41,21 +46,49 @@ function explicitEmail(value: unknown): string | undefined {
   return email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) ? email : undefined;
 }
 
+function jwtPayload(token: unknown): JsonRecord {
+  if (typeof token !== "string") return {};
+  const payload = token.split(".")[1];
+  if (!payload) return {};
+  try {
+    const padded = payload.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(payload.length / 4) * 4, "=");
+    const parsed: unknown = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+      ? parsed as JsonRecord
+      : {};
+  } catch {
+    return {};
+  }
+}
+
 function responseIdentity(data: JsonRecord): { uid?: string; enterpriseId?: string } {
+  const claims = jwtPayload(data.accessToken);
   return {
-    uid: optionalString(data.uid),
-    enterpriseId: optionalString(data.enterpriseId) ?? optionalString(data.enterprise_id),
+    uid: optionalString(data.uid) ?? optionalString(claims.uid) ?? optionalString(claims.sub),
+    enterpriseId: optionalString(data.enterpriseId)
+      ?? optionalString(data.enterprise_id)
+      ?? optionalString(claims.enterpriseId)
+      ?? optionalString(claims.enterprise_id),
   };
+}
+
+function identityShape(data: JsonRecord): string {
+  const responseKeys = Object.keys(data).sort().join(",") || "none";
+  const claimKeys = Object.keys(jwtPayload(data.accessToken)).sort().join(",") || "none";
+  return `response keys: ${responseKeys}; access-token claim keys: ${claimKeys}`;
 }
 
 export function credentialFromLoginResponse(data: JsonRecord, now = Date.now()): WorkBuddyCredential {
   const identity = responseIdentity(data);
+  if (!identity.uid) {
+    throw new Error(`workbuddy credential is missing uid (${identityShape(data)})`);
+  }
   const credential: WorkBuddyCredential = {
     accessToken: requiredString(data.accessToken, "access token"),
     refreshToken: requiredString(data.refreshToken, "refresh token"),
     expiresAtMs: expiryFromResponse(data.expiresIn, now),
-    uid: requiredString(identity.uid, "uid"),
-    enterpriseId: requiredString(identity.enterpriseId, "enterpriseId"),
+    uid: identity.uid,
+    ...(identity.enterpriseId ? { enterpriseId: identity.enterpriseId } : {}),
   };
   const email = explicitEmail(data.email);
   const nickname = optionalString(data.nickname);
@@ -70,7 +103,7 @@ export function oauthFromWorkBuddy(credential: WorkBuddyCredential): OAuthCreden
     refresh: credential.refreshToken,
     expires: credential.expiresAtMs,
     accountId: credential.uid,
-    orgId: credential.enterpriseId,
+    ...(credential.enterpriseId ? { orgId: credential.enterpriseId } : {}),
     ...(credential.email ? { email: credential.email } : {}),
   };
 }
@@ -79,21 +112,22 @@ export function validateRequestCredential(credentials: OAuthCredentials, now = D
   requiredString(credentials.access, "access token");
   requiredString(credentials.refresh, "refresh token");
   requiredString(credentials.accountId, "accountId");
-  requiredString(credentials.orgId, "orgId");
   if (!Number.isFinite(credentials.expires) || credentials.expires <= now) {
     throw new Error("workbuddy credential is expired or has invalid expiry; run /login workbuddy again");
   }
   return credentials;
 }
-
-function validateRefreshInput(credentials: OAuthCredentials): void {
+export function validateStoredCredential(credentials: OAuthCredentials): void {
   requiredString(credentials.access, "access token");
   requiredString(credentials.refresh, "refresh token");
   requiredString(credentials.accountId, "accountId");
-  requiredString(credentials.orgId, "orgId");
   if (!Number.isFinite(credentials.expires) || credentials.expires <= 0) {
     throw new Error("workbuddy credential has invalid expiry; run /login workbuddy again");
   }
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new LoginCancelledError("WorkBuddy login cancelled");
 }
 
 export async function loginWorkBuddy(
@@ -101,33 +135,41 @@ export async function loginWorkBuddy(
   fetcher: Fetch = globalThis.fetch,
   now: () => number = Date.now,
 ): Promise<OAuthCredentials> {
+  throwIfCancelled(callbacks.signal);
   callbacks.onProgress?.("正在打开 WorkBuddy 登录页…");
-  const { state, authUrl } = await startPluginLogin(fetcher);
+  const { state, authUrl } = await startPluginLogin(fetcher, { signal: callbacks.signal });
+  throwIfCancelled(callbacks.signal);
   callbacks.onAuth({ url: authUrl });
+  throwIfCancelled(callbacks.signal);
   callbacks.onProgress?.("请在弹出的页面完成登录，完成后会自动继续");
-  return oauthFromWorkBuddy(credentialFromLoginResponse(await pollPluginToken(state, fetcher, now), now()));
+  const response = await pollPluginToken(state, fetcher, { signal: callbacks.signal, now });
+  throwIfCancelled(callbacks.signal);
+  return oauthFromWorkBuddy(credentialFromLoginResponse(response, now()));
 }
 
 export async function refreshWorkBuddyOAuth(
   credentials: OAuthCredentials,
   fetcher: Fetch = globalThis.fetch,
   now = Date.now(),
+  signal?: AbortSignal,
 ): Promise<OAuthCredentials> {
-  validateRefreshInput(credentials);
-  const data = await refreshPluginToken(credentials.refresh, credentials.orgId!, fetcher);
+  throwIfCancelled(signal);
+  validateStoredCredential(credentials);
+  const data = await refreshPluginToken(credentials.refresh, credentials.orgId, fetcher, { signal });
+  throwIfCancelled(signal);
   const returnedIdentity = responseIdentity(data);
   if (returnedIdentity.uid && returnedIdentity.uid !== credentials.accountId) {
     throw new Error("workbuddy refresh returned a different account identity; run /login workbuddy again");
   }
-  if (returnedIdentity.enterpriseId && returnedIdentity.enterpriseId !== credentials.orgId) {
+  if (returnedIdentity.enterpriseId && credentials.orgId && returnedIdentity.enterpriseId !== credentials.orgId) {
     throw new Error("workbuddy refresh returned a different enterprise identity; run /login workbuddy again");
   }
   const refreshed: OAuthCredentials = {
     access: requiredString(data.accessToken, "refreshed access token"),
-    refresh: requiredString(data.refreshToken, "refreshed refresh token"),
+    refresh: optionalString(data.refreshToken) ?? credentials.refresh,
     expires: expiryFromResponse(data.expiresIn, now),
     accountId: credentials.accountId,
-    orgId: credentials.orgId,
+    ...(credentials.orgId ? { orgId: credentials.orgId } : {}),
     ...(credentials.email ? { email: credentials.email } : {}),
   };
   return validateRequestCredential(refreshed, now);

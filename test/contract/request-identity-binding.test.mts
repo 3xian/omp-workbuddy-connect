@@ -38,10 +38,6 @@ const registry = new ModelRegistry(authStorage, join(temp, "models.yml"), {
   cacheDbPath: join(temp, "models.db"),
 });
 const controller = createWorkBuddyProvider(refreshFetch);
-controller.bindContext({
-  modelRegistry: registry,
-  sessionManager: { getSessionId: () => SESSION },
-} as unknown as ExtensionContext);
 await authStorage.set(WORKBUDDY_PROVIDER, {
   type: "oauth",
   access: "access-a1",
@@ -60,11 +56,19 @@ registry.registerProvider(WORKBUDDY_PROVIDER, controller.config([{
   contextWindow: 32_000,
   maxTokens: 4_096,
 }]));
+const preBindModel = registry.find(WORKBUDDY_PROVIDER, "hy3");
+if (!preBindModel) throw new Error("persisted credential disappeared before session_start binding");
+controller.bindContext({
+  modelRegistry: registry,
+  sessionManager: { getSessionId: () => SESSION },
+} as unknown as ExtensionContext);
+const retainedModel = currentModel();
 
 interface Attempt {
   authorization: string | null;
   userId: string | null;
   orgId: string | null;
+  noEnterprise: string | null;
   origin: string | null;
   domain: string | null;
   product: string | null;
@@ -90,6 +94,7 @@ const chatFetch: typeof fetch = async (_input, init) => {
     authorization: headers.get("authorization"),
     userId: headers.get("x-user-id"),
     orgId: headers.get("x-enterprise-id"),
+    noEnterprise: headers.get("x-no-enterprise-id"),
     origin: headers.get("origin"),
     domain: headers.get("x-domain"),
     product: headers.get("x-product"),
@@ -146,7 +151,6 @@ function assert(condition: unknown, message: string): asserts condition {
 }
 
 try {
-  const retainedModel = currentModel();
   await request(retainedModel);
   const normal = attempts.at(-1)!;
   assert(normal.authorization === "Bearer access-a1", `normal bearer: ${normal.authorization}`);
@@ -191,17 +195,13 @@ try {
   assert(attempts.length === beforeAmbiguous, "two stored accounts reached provider transport");
 
   await authStorage.set(WORKBUDDY_PROVIDER, oauth("access-b1", "account-b", undefined, Date.now() + 60 * 60 * 1000));
-  const beforeMissingIdentity = attempts.length;
-  let missingIdentityRejected = false;
-  try {
-    await request(retainedModel);
-  } catch {
-    missingIdentityRejected = true;
-  }
-  assert(missingIdentityRejected, "missing org identity was not rejected");
-  assert(attempts.length === beforeMissingIdentity, "missing identity reached provider transport");
+  await request(retainedModel);
+  const withoutEnterprise = attempts.at(-1)!;
+  assert(withoutEnterprise.userId === "account-b", "optional enterprise path lost account identity");
+  assert(withoutEnterprise.orgId === null, "optional enterprise path fabricated an organization");
+  assert(withoutEnterprise.noEnterprise === "1", "optional enterprise path omitted X-No-Enterprise-Id");
 
-  console.log("OK: production normal, refresh, 401 identity, A→B, and fail-closed boundaries");
+  console.log("OK: production normal, refresh, 401 identity, A→B, optional enterprise, and fail-closed boundaries");
 } finally {
   unregisterOAuthProvider(WORKBUDDY_PROVIDER);
   authStorage.close();

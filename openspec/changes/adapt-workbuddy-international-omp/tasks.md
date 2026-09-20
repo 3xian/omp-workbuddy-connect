@@ -16,17 +16,17 @@
 
 ## 2. M1 — 完整认证与身份不变量
 
-- [x] 2.1 从入口提取 `src/auth.ts`、`src/provider.ts`、`src/workbuddy-api.ts` 的实际职责，建立完整凭据映射/边界校验；验证 access/refresh/expiry/uid/enterpriseId 缺失逐项拒绝，真实 email 才入 email，nickname 不污染身份，domain 不控制路由。（AUTH-02；D2/D11）
+- [x] 2.1 从入口提取 `src/auth.ts`、`src/provider.ts`、`src/workbuddy-api.ts` 的实际职责，建立完整凭据映射/边界校验；验证 access/refresh/expiry/durable uid 缺失逐项拒绝，enterpriseId 缺省不伪造 orgId，真实 email 才入 email，nickname 不污染身份，domain 不控制路由。（AUTH-02；D2/D11）
 - [x] 2.2 接通正式 `/login workbuddy` 与 OMP 持久化，删除正常请求的 saveOwn/current/resolveCred、Desktop/环境文件回退和旧刷新链；保留行为测试证明仅有旧凭据时仍未登录、重启仅恢复宿主凭据。（AUTH-01/02）
 - [x] 2.3 实现宿主 refreshToken callback，仅从传入 credential 构造官方刷新请求并保留身份；保留刷新后 identity 回归，验证有效 Token/expiry、无效 refresh、缺身份和身份矛盾均无错误 fallback，缺省新 refresh 的处理有协议证据。（AUTH-03）
-- [x] 2.4 配置固定国际版 Headers，用 modifier 为 WorkBuddy 行安装 M0 选定的 credential-aware request identity binding，组合而非覆盖既有 resolver；保留 OpenAI/Anthropic 混合目录不变回归，并检查首个实际请求固定 Header 和两个身份 Header 正确。（AUTH-04/06）
+- [x] 2.4 配置固定国际版 Headers，用 modifier 为 WorkBuddy 行安装 M0 选定的 credential-aware request identity binding，组合而非覆盖既有 resolver；保留 OpenAI/Anthropic 混合目录不变回归，并检查首个实际请求固定 Header、用户身份 Header，以及 enterprise/no-enterprise 分支正确。（AUTH-04/06）
 - [x] 2.5 在 getApiKey 与 request identity resolver 双边校验身份和单 stored account，不手动注入 Chat Authorization；非法/歧义时 modifier 返回 foreign rows 隐藏 WorkBuddy，同时请求边界再次 fail closed，覆盖 modifier 异常 fallback 且零 Chat 请求。（AUTH-05/06/07）
 - [x] 2.6 按 M0 证据实现单账号限制：`listOAuthAccounts('workbuddy')` 超过一个 stored OAuth credential 时明确拒绝调用，不自动选择、轮换或删除；验证 `active` 仅为 session sticky 标志，不能用于计数。（AUTH-07）
-- [ ] 2.7 实现 provider-scoped logout：先失效异步 generation，再删除宿主认证、清理状态并使 request-boundary identity resolver 不可继续取得旧身份；验证失败不虚报成功，Desktop credential/客户端数据不变。（AUTH-08、UX-02）
-- [ ] 2.8 按 M0 ADR 打通 normal/refresh/retry/logout/换号的 request-boundary durable identity binding，验证 refresh/retry 可换 Bearer 但保持同一 row 身份，已有会话及新 subagent 在换号后均获取 B；若采用 setModel fallback，覆盖 main/child/resume/task/headless，保留迟到 A 结果不恢复旧认证的回归。（AUTH-04/07）
-- [ ] 2.9 将用户取消、session abort、extension shutdown 接入 OAuth HTTP 请求和轮询等待；验证三类取消均停止后续轮询、不持久化迟到成功、不遗留定时器。（AUTH-09）
-- [ ] 2.10 分类授权拒绝、poll timeout、user cancelled、network failure、5xx、429，处理有效 Retry-After 与总截止时间；用隔离协议场景验证不同结果和可取消等待，不新增通用 retry。（AUTH-09）
-- [ ] 2.11 使用一个稳定真实 WorkBuddy 模型完成 fresh login→正确 Bearer/identity→Streaming→强制过期 refresh→restart→logout→B login→existing session/subagent B request；保存脱敏证据，全部通过才完成 M1。（HOST-05、AUTH-01–09）
+- [x] 2.7 实现 provider-scoped logout：先失效异步 generation，再删除宿主认证、清理状态并使 request-boundary identity resolver 不可继续取得旧身份；验证失败不虚报成功，Desktop credential/客户端数据不变。（AUTH-08、UX-02）
+- [x] 2.8 按 M0 ADR 打通 normal/refresh/retry/logout/换号的 request-boundary durable identity binding，验证 refresh/retry 可换 Bearer 但保持同一 row 身份，已有会话及新 subagent 在换号后均获取 B；若采用 setModel fallback，覆盖 main/child/resume/task/headless，保留迟到 A 结果不恢复旧认证的回归。（AUTH-04/07）
+- [x] 2.9 将用户取消、session abort、extension shutdown 接入 OAuth HTTP 请求和轮询等待；验证三类取消均停止后续轮询、不持久化迟到成功、不遗留定时器。（AUTH-09）
+- [x] 2.10 分类授权拒绝、poll timeout、user cancelled、network failure、5xx、429，处理有效 Retry-After 与总截止时间；用隔离协议场景验证不同结果和可取消等待，不新增通用 retry。（AUTH-09）
+- [x] 2.11 使用一个稳定真实 WorkBuddy 模型完成 fresh login→正确 Bearer/identity→Streaming→强制过期 refresh→restart→logout→B login→existing session/subagent B request；保存脱敏证据，全部通过才完成 M1。（HOST-05、AUTH-01–09）
 
 ## 3. M2 — 模型目录与能力契约
 

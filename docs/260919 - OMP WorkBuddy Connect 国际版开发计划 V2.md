@@ -551,8 +551,8 @@ WorkBuddy credential 至少包含：
 accessToken
 refreshToken
 expiresAtMs
-uid
-enterpriseId
+durable uid（data.uid；缺省时取同一官方 access token 的 JWT uid/sub）
+enterpriseId（可选；仅官方明确返回时）
 nickname / email
 ```
 
@@ -562,8 +562,8 @@ OMP 正式 credential：
 access       ← accessToken
 refresh      ← refreshToken
 expires      ← expiresAtMs
-accountId    ← uid
-orgId        ← enterpriseId
+accountId    ← data.uid ?? JWT uid ?? JWT sub
+orgId        ← enterpriseId（可选，不伪造）
 ```
 
 ---
@@ -614,22 +614,24 @@ OAuth 登录完成后，在 credential 写入 OMP 前必须验证：
 access
 refresh
 expires
-uid
-enterpriseId
+durable uid
 ```
 
-其中：
+其中 durable uid 的唯一允许顺序为：
 
 ```text
-uid
-enterpriseId
+Plugin Auth data.uid
+→ 同一官方 access token 的 JWT uid
+→ 同一官方 access token 的 JWT sub
 ```
 
-只要任一缺失：
+2026-09-20 隔离 Live 登录的脱敏 shape 确认：顶层不含 uid/enterpriseId，access token claim 含 `sub` 且不含 enterprise claim；冻结 upstream 同时定义 `enterpriseId?`，Chat 无企业时发送 `X-No-Enterprise-Id: 1`，refresh 则省略企业 Header。因此 JWT email/name/nickname 不得作为 accountId fallback；durable uid 缺失时：
 
 ```text
 Login = Failure
 ```
+
+enterpriseId 缺失不是登录失败，OMP credential 省略 orgId，Chat 显式发送 no-enterprise marker；禁止从 email、domain 或 accountId 伪造 orgId。
 
 不得：
 
@@ -649,17 +651,21 @@ old OMP OAuth Credential
 
 WorkBuddy Refresh API:
 → new access
-→ new refresh
 → new expiry
+→ new refresh（服务端发生 rotation 时）
+→ omit refresh（服务端未发生或未声明 rotation 时允许）
 
 Output:
 new access
-new refresh
 new expiry
+new refresh（响应明确提供时）
+old input refresh（响应省略 refresh 时）
 old accountId
 old orgId
 identity fields
 ```
+
+缺省 refresh 的兼容基线来自冻结 upstream `cb2398e3374144db0c088d7a4887dc0913342858`：既有 `refreshAccess` 在响应提供非空 `refreshToken` 时替换，否则保留本次输入 credential 的 refresh。当前没有官方或 live 证据证明成功 refresh 必定 rotation，因此 v1 不把 omission 误判为失败；这不允许读取旧文件、其他账号或保留旧 access/expiry。
 
 Refresh 不得再调用：
 

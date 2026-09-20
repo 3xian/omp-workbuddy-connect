@@ -61,9 +61,11 @@ The resolver must compose, not replace, the existing resolver because Provider f
 
 `getOAuthCredential(provider)` is not session-aware and is unsuitable as the request identity source.
 
-## Extension binding
+## Extension binding and lifecycle
 
-`ExtensionContext.modelRegistry` is public inside handlers, and `ModelRegistry.authStorage` is public. `ExtensionAPI` itself does not expose `modelRegistry`. The final probe captured the shared AuthStorage during an actual headless `session_start`; the resolver then used that closure successfully before every request. Production must keep the closure extension-instance-local and fail closed before transport if session initialization has not supplied it.
+`ExtensionContext.modelRegistry` is public inside handlers, and `ModelRegistry.authStorage` is public. `ExtensionAPI` itself does not expose `modelRegistry`. Provider registration and catalog projection can occur before `session_start`; lack of a runtime binding at that point is not an invalid credential and must not remove a valid persisted-account model. `modifyModels()` therefore installs the capability resolver after validating the supplied credential, and only performs the stored-row count optimization when a runtime binding already exists.
+
+`session_start` installs the initial binding and `session_switch` replaces it. Every retained model resolver calls `requireBinding()` at request time instead of capturing the projection-time session. An unbound request still fails before transport, while registration-before-bind and later resume/switch cannot stale the resolver's AuthStorage or session ID.
 
 ## Durable identity boundary
 
@@ -71,7 +73,7 @@ The resolver must compose, not replace, the existing resolver because Provider f
 
 Sequential A→B switching deletes A before storing B. Even a retained model object resolves B dynamically on its next request. More than one stored WorkBuddy OAuth credential must be rejected before Chat dispatch.
 
-The actual OMP Task executor lifecycle contract is verified in `test/contract/task-runtime-contract.test.mts` and summarized in `headless-behavior.md`. The permanent `test/contract/request-identity-binding.test.mts` regression exercises built-in `openai-completions` through normal, forced-refresh, 401-retry, retained-model A→B, and two-row fail-closed paths. Authenticated WorkBuddy Task E2E remains an M5 release gate and does not reopen the binding mechanism unless contrary live evidence appears.
+The actual OMP Task executor lifecycle contract is verified by the synthetic host/runtime harness in `test/contract/task-runtime-contract.test.mts` and summarized in `headless-behavior.md`; it is not production WorkBuddy Task authentication evidence. `test/contract/persisted-credential-restart.test.mts` follows restart order—persist A → register → `session_start` bind → fresh `find()` → request-boundary resolution—and separately asserts that the pre-bind projection remains visible with its resolver installed; it then emits `session_switch` and resolves B from the retained model. `test/contract/request-identity-binding.test.mts` exercises the same register → bind → find → built-in `openai-completions` order through normal, forced-refresh, 401-retry, retained-model A→B, and two-row fail-closed paths. Authenticated WorkBuddy Task E2E remains an M5 release gate.
 
 ## Rejected fallback
 

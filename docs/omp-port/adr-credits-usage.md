@@ -62,7 +62,7 @@ The aggregate report may include a total limit only when the response supports a
 - It does not refresh a token. OMP AuthStorage owns refresh and retry lifecycle.
 - It honors `params.signal` for the HTTP request and any host-provided wait.
 - It maps `credential.accountId` to Billing `X-User-Id`. `orgId` scopes the report but is not sent as `X-Enterprise-Id` without live evidence.
-- The provider enforces the same single-stored-account and required accountId/orgId invariant selected by the M1 authentication boundary. Ambiguity or missing identity yields unavailable with zero Billing requests.
+- The provider enforces the same single-stored-account and required `accountId` invariant selected by the M1 authentication boundary. `orgId` remains optional and scopes the report when present. Ambiguity or missing `accountId` yields unavailable with zero Billing requests.
 - Logout/account replacement invalidates cached/displayed results using the M4 UI generation guard; Usage data never restores authentication state.
 
 Therefore there is exactly one refresh implementation: the OAuth provider callback registered in M1.

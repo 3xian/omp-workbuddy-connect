@@ -314,8 +314,8 @@ WorkBuddy Credential：
 accessToken
 refreshToken
 expiresAtMs
-uid
-enterpriseId
+durable uid（data.uid；缺省时取同一官方 access token 的 JWT uid/sub）
+enterpriseId（可选；仅官方明确返回时）
 nickname
 email（可选；仅当官方响应明确提供真实 email 时）
 domain
@@ -327,12 +327,14 @@ domain
 accessToken       → access
 refreshToken      → refresh
 expiresAtMs       → expires
-uid               → accountId
-enterpriseId      → orgId
+data.uid/JWT uid/sub → accountId
+enterpriseId      → orgId（可选，不伪造）
 email             → email（仅真实、已验证的 email）
 nickname          → 仅用于当前 UI 展示，不写入 OAuth email
 domain            → 不保存，国际版固定 www.workbuddy.ai
 ```
+
+2026-09-20 隔离 Live 登录的脱敏 shape 为顶层 `accessToken,domain,expiresIn,refreshExpiresIn,refreshToken,scope,sessionState,tokenType`，JWT claim 含 `sub` 且无 enterprise claim；冻结 upstream `cb2398e3374144db0c088d7a4887dc0913342858` 同时定义可选 `enterpriseId`。因此 durable account identity 仅允许 `data.uid → JWT uid → JWT sub`；JWT email/name/nickname 不得替代 accountId。enterpriseId 缺省时省略 orgId，Chat 发送 `X-No-Enterprise-Id: 1`，refresh 省略 X-Enterprise-Id。
 
 示意：
 
@@ -341,8 +343,8 @@ return {
     access: credential.accessToken,
     refresh: credential.refreshToken,
     expires: credential.expiresAtMs,
-    accountId: credential.uid,
-    orgId: credential.enterpriseId,
+    accountId: credential.uid ?? accessTokenClaims.uid ?? accessTokenClaims.sub,
+    ...(credential.enterpriseId ? { orgId: credential.enterpriseId } : {}),
     ...(isVerifiedEmail(credential.email) ? { email: credential.email } : {}),
 };
 ```

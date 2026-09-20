@@ -18,52 +18,60 @@
 - **THEN** Chat 与积分使用恢复的同一宿主账号，无需重新登录或读取旧文件
 
 ### Requirement: AUTH-02 Validated login and identity semantics
-OAuth 登录 SHALL 在返回宿主持久化前校验非空 access、refresh、有效 expiry、uid 和 enterpriseId，并映射到 access、refresh、expires、accountId、orgId。真实 email 才能写入 email 字段；nickname SHALL 仅用于展示，不得伪装为 email 或账号 ID。国际版 domain 不作为可变 credential 路由保存。
+OAuth 登录 SHALL 在返回宿主持久化前校验非空 access、refresh、有效 expiry 和 durable uid，并映射到 access、refresh、expires、accountId。账号 uid 优先取 Plugin Auth data.uid；服务端省略该字段时 MAY 取同一官方 access token 的 JWT `uid`/`sub` subject claim。JWT email、nickname 或 name MUST NOT 代替账号 ID。enterpriseId 仅在官方响应明确提供时映射为 orgId；缺省时不得伪造企业身份。真实 email 才能写入 email 字段；nickname SHALL 仅用于展示。国际版 domain 不作为可变 credential 路由保存。
 
 #### Scenario: Complete login response
-- **WHEN** 官方 Plugin Auth 返回完整有效凭据和明确真实 email
-- **THEN** OMP 获得映射正确的 OAuth credential，email 保持原语义，UI 可以展示独立 nickname
+- **WHEN** 官方 Plugin Auth 返回有效凭据、durable subject 和明确真实 email，可选地返回 enterpriseId
+- **THEN** OMP 获得映射正确的 OAuth credential，email 保持原语义；enterpriseId 存在时映射 orgId，不存在时省略 orgId
 
 #### Scenario: Missing or invalid login fields
-- **WHEN** 登录响应缺少任一必需字段，特别是 uid 或 enterpriseId，或 expiry 无效
-- **THEN** 登录失败，不返回可持久化的部分成功 credential，并提示重新登录
+- **WHEN** 登录响应及同一官方 access token 均无法提供 uid/sub，或 access/refresh/expiry 无效
+- **THEN** 登录失败，不返回可持久化的部分成功 credential，并提示重新登录；email/name 不得作为身份 fallback
 
 #### Scenario: Nickname without email
 - **WHEN** 官方响应只有 nickname 而没有真实 email
 - **THEN** nickname 不写入 OAuth email，重启后允许用账号标识展示，不为保留昵称新增凭据文件
 
 ### Requirement: AUTH-03 Host-managed refresh preserves identity
-Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方刷新协议，以传入宿主 credential 为唯一输入，返回有效 Token/expiry 并保留 accountId、orgId 及已确认的身份字段。MUST NOT 从旧文件补身份或在身份变更不明时继续使用 Token。
+Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方刷新协议，以传入宿主 credential 为唯一输入，返回有效 access/expiry 并保留 accountId、已有可选 orgId 及已确认的身份字段。成功响应明确返回新 refresh token 时 SHALL 替换旧值；响应省略 refresh token 时 SHALL 保留传入宿主 credential 的 refresh token。该 omission 策略以冻结 upstream `cb2398e3374144db0c088d7a4887dc0913342858` 的既有 fallback 行为为兼容证据。orgId 缺省时刷新 SHALL 省略 X-Enterprise-Id，不得伪造企业 ID，也不得把仅属于 Chat 的 no-enterprise marker 扩展到刷新协议。服务端 refresh response MAY 省略重复身份；响应明确返回与已有 durable identity 矛盾的字段时 MUST 失败。MUST NOT 从旧文件补身份或在身份冲突不明时继续使用 Token。
 
 #### Scenario: Forced access expiry
 - **WHEN** 已登录账号的 access 被强制过期且 refresh 有效
-- **THEN** 宿主自动刷新并继续请求，新 Bearer 与保留的 accountId/orgId 属于同一账号，响应仍可 Streaming
+- **THEN** 宿主自动刷新并继续请求，新 Bearer 与保留的 accountId、可选 orgId 属于同一账号，响应仍可 Streaming
 
 #### Scenario: Invalid refresh or identity
-- **WHEN** refresh 失效、响应无效，或输入/输出身份不完整或矛盾
+- **WHEN** refresh 失效、access/expiry 响应无效、宿主缺少 accountId，或响应明确返回了与已有身份矛盾的值
 - **THEN** 刷新不返回可用认证，报告明确错误并提示重新登录，不回退其他 Token 来源
 
+#### Scenario: Refresh response omits rotation and repeated identity
+- **WHEN** 成功 refresh 返回有效新 access/expiry，但省略新 refresh token、uid 和 enterpriseId
+- **THEN** 输出保留传入宿主 credential 的 refresh、accountId 和已有可选 orgId；不是从旧文件或其他账号补值
+
 ### Requirement: AUTH-04 Durable credential identity binding
-每次 WorkBuddy Chat 的 Authorization、X-User-Id 和 X-Enterprise-Id SHALL 属于同一个 durable OAuth credential row 与 WorkBuddy account identity。401 retry 可刷新该行的 Bearer，但 accountId/orgId MUST 继续绑定同一 durable row；Authorization 由宿主原生认证提供，账号 Headers SHALL 在请求边界从对应宿主 credential 解析，不得依赖长期静态账号 Header 快照。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
+每次 WorkBuddy Chat 的 Authorization、X-User-Id SHALL 属于同一个 durable OAuth credential row 与 WorkBuddy account identity。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送官方 `X-No-Enterprise-Id: 1`，不得伪造组织。401 retry 可刷新该行的 Bearer，但 accountId 与已有可选 orgId MUST 继续绑定同一 durable row；Authorization 由宿主原生认证提供，账号 Headers SHALL 在请求边界从对应宿主 credential 解析，不得依赖长期静态账号 Header 快照。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户首次登录后发出模型请求
-- **THEN** 实际出站请求的 Bearer、用户 ID、企业 ID 属于同一 durable credential ID，且携带官方国际版固定 Headers，无旧 Marker Header
+- **THEN** 实际出站请求的 Bearer、用户 ID 和可选企业语义属于同一 durable credential ID；有 orgId 时发送企业 ID，无 orgId 时发送 no-enterprise marker，并携带官方国际版固定 Headers
 
 #### Scenario: Refresh, retry, and account switch
 - **WHEN** 单账号发生 forced refresh 或 401 retry，或 A logout 后 B 在已有会话登录
-- **THEN** forced refresh/401 retry 可更换 Bearer，但每次出站的 Bearer 与用户/企业身份仍属于同一 durable credential row；切换到 B 后不再使用 A row，迟到 A 结果不会恢复旧身份
+- **THEN** forced refresh/401 retry 可更换 Bearer，但每次出站的 Bearer 与用户/可选企业身份仍属于同一 durable credential row；切换到 B 后不再使用 A row，迟到 A 结果不会恢复旧身份
+
+#### Scenario: Persisted credential before session binding
+- **WHEN** OMP 重启时 AuthStorage 已持久化一个完整 WorkBuddy credential，Provider 在 `session_start` 绑定前注册并投影模型
+- **THEN** WorkBuddy 模型保留 request-boundary resolver；`session_start` 或 `session_switch` 绑定当前 runtime 后首个请求动态解析当前 session identity，注册期未绑定不得被误判为非法 credential
 
 ### Requirement: AUTH-05 Three-layer fail closed
-系统 SHALL 在登录返回前、刷新返回前、提供请求 API key 前分别校验必要身份。只在模型投影抛异常不构成拒绝保证；任何必要身份缺失时 MUST 不提供可用认证且不发送 Chat Completion 请求。
+系统 SHALL 在登录返回前、刷新返回前、提供请求 API key 前分别校验必要身份。只在模型投影抛异常不构成拒绝保证；accountId 缺失时 MUST 不提供可用认证且不发送 Chat Completion 请求。enterpriseId/orgId 是服务端实证可缺省的可选组织属性，不属于账号主体；缺省时必须显式发送 no-enterprise marker。
 
 #### Scenario: Stored credential lacks accountId
 - **WHEN** 宿主已存 credential 有 access 但没有 accountId
 - **THEN** 在请求认证边界拒绝调用，提示 `/login workbuddy`，观测到零个 Chat HTTP 请求
 
-#### Scenario: Stored credential lacks orgId despite modifier recovery
-- **WHEN** orgId 缺失且宿主捕获模型投影异常并继续提供目录
-- **THEN** 仍无法获得可用请求认证，不因目录可见而发送无企业身份的 Chat
+#### Scenario: Stored credential omits optional orgId
+- **WHEN** 唯一宿主 credential 有完整 accountId 但没有 orgId
+- **THEN** 请求继续绑定该 durable row，发送 X-User-Id 与 `X-No-Enterprise-Id: 1`，且不发送 X-Enterprise-Id
 
 ### Requirement: AUTH-06 Provider isolation during identity binding
 账号身份绑定 SHALL 仅影响 `workbuddy` 的模型，保留所有其他 Provider 的模型内容和行为，不得假定 modifier 输入只有 WorkBuddy。身份无效或 stored credential 歧义时 SHOULD 从投影目录移除 WorkBuddy rows，同时请求认证边界仍须独立 fail closed；不得依赖 modifier 抛错。

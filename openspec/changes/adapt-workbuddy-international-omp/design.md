@@ -65,18 +65,18 @@ M0 交付拟存于 `docs/omp-port/`：`baseline-manifest.md`、`api-compatibilit
 
 `auth.ts` 负责协议值映射与验证；`workbuddy-api.ts` 只负责国际版 Auth/Refresh/Billing 和 ADR 选中的产品协议。Token 不存插件文件，不在模块全局保持独立 refresh 生命周期。
 
-映射为 access/refresh/expires/accountId/orgId；真实 email 才写 email。nickname 只保存在当前 UI generation 的非认证展示态，重启丢失昵称时展示账号，不为此扩展 credential 存储。domain 固定国际版，不根据服务端任意 domain 路由；不以 JWT email 代替 uid。已有 uid fallback 仅在确证 WorkBuddy 身份语义时保留，否则登录失败。
+映射为 access/refresh/expires/accountId，并在官方响应明确提供 enterpriseId 时映射可选 orgId；真实 email 才写 email。nickname 只保存在当前 UI generation 的非认证展示态，重启丢失昵称时展示账号，不为此扩展 credential 存储。domain 固定国际版，不根据服务端任意 domain 路由；不以 JWT email/name 代替 uid。2026-09-20 隔离 Live 登录的脱敏形状为 response keys `accessToken,domain,expiresIn,refreshExpiresIn,refreshToken,scope,sessionState,tokenType`、JWT identity keys 包含 `sub` 但无 enterprise claim。因此保留 `data.uid → JWT uid → JWT sub` 的账号 subject 顺序，禁止 email/name fallback；缺失 enterpriseId 不得伪造 orgId。
 
-登录拒绝缺失或无效 access/refresh/expiry/uid/enterpriseId；刷新以传入宿主 credential 为唯一输入，保留既有身份和明确 email，新的 Token/expiry 必须合法。刷新响应缺省 refresh 的保留行为只有得到官方协议证据后才能保留，不能以旧过期时间伪造成功；响应身份与旧身份矛盾视为失败。
+登录拒绝缺失或无效 access/refresh/expiry/durable uid；durable uid 可来自 data.uid 或同一官方 access token 的 JWT uid/sub。enterpriseId 是可选组织属性：冻结 upstream `cb2398e3374144db0c088d7a4887dc0913342858` 的 `Cred.enterpriseId?`、`chatHeaders` 无企业时发送 `X-No-Enterprise-Id: 1`、`refreshAccess` 无企业时省略 X-Enterprise-Id，与本次 Live 字段形状一致。刷新以传入宿主 credential 为唯一输入，保留既有账号身份、可选 orgId 和明确 email；新的 access/expiry 必须合法。响应明确提供新 refresh 时替换，省略时仅保留本次宿主输入 credential 的 refresh；不得读取旧文件，也不得保留旧 access 或旧 expiry 伪造成功。服务端可省略重复身份，输出继续保留宿主 durable identity；响应若明确返回与已有身份矛盾的值则失败。
 
-`getApiKey()` 在返回 access 前重验必要身份，不手动向 Chat 注入 Authorization。request identity resolver 同样校验必要身份，并必须证明与宿主 Bearer 绑定同一 durable OAuth credential row/account identity。modifier 内校验用于隐藏非法/歧义的 WorkBuddy rows，但因宿主捕获 modifier 异常，绝不是唯一阻断点。缺 accountId/orgId 分别验证实际 Chat 请求计数为零。替代方案“Widget 警告后继续”违反 fail-closed，拒绝。
+`getApiKey()` 在返回 access 前重验必要 accountId，不手动向 Chat 注入 Authorization。request identity resolver 同样校验 Bearer、credentialId、accountId 以及已有可选 orgId 属于同一 durable OAuth credential row。Chat 有 orgId 时发送 X-Enterprise-Id；无 orgId 时按冻结 upstream 发送 `X-No-Enterprise-Id: 1`。modifier 内校验用于隐藏非法/歧义的 WorkBuddy rows，但因宿主捕获 modifier 异常，绝不是唯一阻断点。缺 accountId 验证实际 Chat 请求计数为零；缺 orgId 验证 no-enterprise 路径，不伪造组织。
 
 ### D3 — Durable credential identity 与单账号安全边界
 
-安全边界是宿主 durable credential row 及其 accountId/orgId，不是一次 access-token generation。单账号 refresh 或 401 retry 可更换 Bearer，但必须保留同一 durable row 的身份；账号替换必须使后续 request-boundary Bearer 与身份解析共同切换到新 row。该术语与仅用于异步 UI 的 `stateGeneration` 无关。
+安全边界是宿主 durable credential row、credentialId 和 accountId；orgId 是同一 row 上的可选组织属性，不是账号主体。单账号 refresh 或 401 retry 可更换 Bearer，但必须保留同一 durable row 的 accountId 和已有 orgId；账号替换必须使后续 request-boundary Bearer 与身份解析共同切换到新 row。该术语与仅用于异步 UI 的 `stateGeneration` 无关。
 
-`modifyModels(models, credentials)` 只处理 `model.provider === 'workbuddy'`，保留其他行，并为 WorkBuddy 安装已验证的 credential-aware identity binding：组合模型既有 `resolveHeaders` 与基于 `AuthStorage.getOAuthAccess(provider, sessionId, { signal })` 的身份 resolver；不得用长期静态 `model.headers` 保存账号快照。固定 Header 包括 Accept、X-Requested-With、Origin=`https://www.workbuddy.ai`、Referer=`https://www.workbuddy.ai/`、User-Agent（以已验证协议为准）、X-Product=`SaaS`、X-Domain=`www.workbuddy.ai`。不保留 Marker 或缺身份时的 Chat 降级 Header。
-ExtensionAPI 注册入口本身不暴露 ModelRegistry；只有 ExtensionContext 提供公开 `modelRegistry`。M0 1.5 已证明实际 headless `session_start` 可在首个请求前捕获当前 session ID 与共享 registry/AuthStorage，未绑定必须 fail closed；actual Task executor 的独立扩展绑定由 1.6b 单独验收。
+`modifyModels(models, credentials)` 只处理 `model.provider === 'workbuddy'`，保留其他行，并为 WorkBuddy 安装已验证的 credential-aware identity binding：组合模型既有 `resolveHeaders` 与基于 `AuthStorage.getOAuthAccess(provider, sessionId, { signal })` 的身份 resolver；不得用长期静态账号 Header 快照。Provider 注册早于 `session_start` 时，缺少 runtime binding 只是生命周期尚未就绪，不是 credential 非法：catalog-time 仍安装 resolver；若 binding 已存在则可额外隐藏非法/歧义行。真正的安全边界在每次 request 动态读取最新 binding 并 fail closed。固定 Header 包括 Accept、X-Requested-With、Origin=`https://www.workbuddy.ai`、Referer=`https://www.workbuddy.ai/`、User-Agent（以已验证协议为准）、X-Product=`SaaS`、X-Domain=`www.workbuddy.ai`。不保留 Marker；缺 accountId 时拒绝，只有可选 orgId 缺省时发送官方 no-enterprise marker。
+ExtensionAPI 注册入口本身不暴露 ModelRegistry；只有 ExtensionContext 提供公开 `modelRegistry`。`session_start` 捕获初始 runtime，`session_switch` 更新 runtime；resolver 不捕获投影时 sessionId，而是在每次请求调用 `requireBinding()` 读取最新 AuthStorage/sessionId。未绑定请求必须在 transport 前 fail closed；注册期未绑定不得永久删除合法的持久化 WorkBuddy 模型。actual Task executor 的独立扩展绑定由 1.6b 单独验收。
 
 `listOAuthAccounts('workbuddy')` 返回的 stored OAuth rows 是 v1 单账号判定依据：0 行未登录，1 行可继续，超过 1 行明确拒绝模型调用。`active` 仅表示指定 session 的 sticky row，不代表 stored credential 数量。不得自动选择、轮换或删除其他凭据。
 

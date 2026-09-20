@@ -113,7 +113,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | Expired access | AUTH-03 Forced expiry | 2.3/2.11 |
 | Invalid refresh | AUTH-03 Invalid refresh | 2.3 |
 | Missing accountId | AUTH-05 Stored credential lacks accountId | 2.5 |
-| Missing orgId | AUTH-05 Stored credential lacks orgId | 2.5 |
+| Missing orgId | AUTH-05 Optional orgId uses explicit no-enterprise Chat semantics | 2.5 |
 | Account A→B | AUTH-07 Sequential switch | 2.8/2.11 |
 | Logout truly invalid | AUTH-08 Logout | 2.7/2.11 |
 | ≥3 real models | MODEL-01；REL-02 | 3.10 |
@@ -138,7 +138,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | V2 §13 回归 | 规格 | 保留/迁移任务 |
 |---|---|---|
 | Refresh 保留身份 | AUTH-03 | 2.3 |
-| Missing identity 无可用认证/零请求 | AUTH-05 | 2.5 |
+| Missing account identity 零请求；optional orgId 显式 no-enterprise | AUTH-05 | 2.5 |
 | modifier 非目标不变 | AUTH-06 | 2.4 |
 | payload 非目标不变 | GATE-03 | 4.3（现有 scope 测试） |
 | A logout+B login 无 A 身份 | AUTH-07 | 2.8 |
