@@ -1,0 +1,50 @@
+{
+  "models": [
+    {
+      "id": "contract-free-high",
+      "name": "Contract Free High",
+      "credits": "x0.00",
+      "maxInputTokens": 1000000,
+      "maxOutputTokens": 64000,
+      "supportsImages": true,
+      "supportsReasoning": true,
+      "reasoning": {
+        "canDisableThinking": false,
+        "defaultEffort": "high",
+        "supportedEfforts": ["high"]
+      }
+    },
+    {
+      "id": "contract-free-multi",
+      "name": "Contract Free Multi",
+      "credits": "x0.00",
+      "maxInputTokens": 192000,
+      "maxOutputTokens": 64000,
+      "supportsImages": true,
+      "supportsReasoning": true,
+      "reasoning": {
+        "canDisableThinking": false,
+        "defaultEffort": "high",
+        "supportedEfforts": ["low", "high"]
+      }
+    },
+    {
+      "id": "contract-free-text",
+      "name": "Contract Free Text",
+      "credits": "x0.00",
+      "maxInputTokens": 80000,
+      "maxOutputTokens": 4000,
+      "supportsImages": false,
+      "supportsReasoning": false
+    },
+    {
+      "id": "contract-paid",
+      "name": "Contract Paid",
+      "credits": "x0.34 credits",
+      "maxInputTokens": 200000,
+      "maxOutputTokens": 32000,
+      "supportsImages": true,
+      "supportsReasoning": true
+    }
+  ]
+}

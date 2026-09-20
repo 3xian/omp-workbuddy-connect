@@ -47,7 +47,7 @@ The implementation enforces these invariants in `src/models.ts`; `test/model-cat
 
 ## Empty-catalog feasibility
 
-OMP static `registerProvider({ models: [] })` is not a clearing operation: 18.2.6 processes static overlays only when `config.models.length > 0` (`model-registry.ts:2931`). M2 therefore MUST explicitly remove the previous provider registration/overlay before registering an empty projection, or use another verified host operation that demonstrably removes stale rows. Merely re-registering an empty array is insufficient.
+OMP static `registerProvider({ models: [] })` is not a clearing operation: 18.2.6 processes static overlays only when `config.models.length > 0` (`model-registry.ts:2931`). Non-empty updates SHOULD re-register in place because the same-source overlay is replaced without tearing down OAuth/runtime state. An empty projection MUST explicitly remove the previous provider registration/overlay before registering the empty Provider config; merely re-registering an empty array is insufficient.
 
 `fetchDynamicModels` would support an authoritative empty dynamic result, but it remains unselected because no trustworthy endpoint/response contract was found. Identity and cache integration are secondary implementation risks.
 

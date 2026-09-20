@@ -26,12 +26,19 @@ export interface ProductModel {
   supportsReasoning: boolean;
   supportedEfforts?: Effort[];
   canDisableThinking?: boolean;
+  defaultEffort?: Effort;
 }
 
 export interface ModelDiagnostic {
   index: number;
   id?: string;
-  code: "invalid-structure" | "missing-id" | "invalid-context-window" | "invalid-max-tokens" | "duplicate-id";
+  code:
+    | "invalid-structure"
+    | "missing-id"
+    | "invalid-context-window"
+    | "invalid-max-tokens"
+    | "invalid-default-effort"
+    | "duplicate-id";
   message: string;
 }
 
@@ -108,11 +115,13 @@ export function creditsAreFree(credits: string | undefined): boolean {
   return /^x?0(?:\.0+)?$/u.test(credits.trim());
 }
 
+function isEffort(value: unknown): value is Effort {
+  return typeof value === "string" && (EFFORTS as readonly string[]).includes(value);
+}
+
 function parseEfforts(value: unknown): Effort[] | undefined {
   if (!Array.isArray(value)) return undefined;
-  const declared = new Set(value.filter((effort): effort is Effort =>
-    typeof effort === "string" && (EFFORTS as readonly string[]).includes(effort)
-  ));
+  const declared = new Set(value.filter(isEffort));
   const efforts = EFFORTS.filter((effort) => declared.has(effort));
   return efforts.length > 0 ? [...efforts] : undefined;
 }
@@ -151,6 +160,20 @@ function parseProductModel(
   const canDisableThinking = typeof reasoning?.canDisableThinking === "boolean"
     ? reasoning.canDisableThinking
     : undefined;
+  let defaultEffort: Effort | undefined;
+  if (reasoning && "defaultEffort" in reasoning) {
+    const declaredDefault = reasoning.defaultEffort;
+    if (isEffort(declaredDefault) && supportedEfforts?.includes(declaredDefault)) {
+      defaultEffort = declaredDefault;
+    } else {
+      diagnostics.push({
+        index,
+        id,
+        code: "invalid-default-effort",
+        message: `${id} has a default reasoning effort outside its supported efforts`,
+      });
+    }
+  }
   return {
     model: {
       id,
@@ -162,8 +185,9 @@ function parseProductModel(
       supportsReasoning: row.supportsReasoning === true,
       ...(supportedEfforts ? { supportedEfforts } : {}),
       ...(canDisableThinking === undefined ? {} : { canDisableThinking }),
+      ...(defaultEffort ? { defaultEffort } : {}),
     },
-    diagnostics: [],
+    diagnostics,
   };
 }
 
@@ -254,6 +278,10 @@ export function buildOmpModels(config: ProductConfig, scope: ModelScope): Provid
       const hasCanonicalThinking = model.supportsReasoning
         && model.supportedEfforts !== undefined
         && model.canDisableThinking !== undefined;
+      type OmpThinking = NonNullable<ProviderModelConfig["thinking"]>;
+      // Product canonical effort strings are the runtime values of OMP's Effort enum.
+      const thinkingEfforts = model.supportedEfforts as OmpThinking["efforts"];
+      const defaultLevel = model.defaultEffort as OmpThinking["defaultLevel"];
       return {
         id: model.id,
         name: `${model.name} · ${model.credits ?? "x?"}`,
@@ -262,8 +290,9 @@ export function buildOmpModels(config: ProductConfig, scope: ModelScope): Provid
           ? {
               thinking: {
                 mode: "effort",
-                efforts: model.supportedEfforts! as NonNullable<ProviderModelConfig["thinking"]>["efforts"],
+                efforts: thinkingEfforts,
                 requiresEffort: !model.canDisableThinking,
+                ...(defaultLevel ? { defaultLevel } : {}),
               },
             }
           : {}),

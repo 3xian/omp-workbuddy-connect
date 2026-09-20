@@ -15,19 +15,27 @@ const productConfigPath = join(temp, "product-config.json");
 const settingsPath = join(temp, ".workbuddy-settings.json");
 process.env.PI_CODING_AGENT_DIR = temp;
 process.env.WORKBUDDYAI_PRODUCT_CONFIG = productConfigPath;
+// OMP snapshots directory env at module load. Refresh explicitly before loading
+// the extension so future import reordering cannot escape this isolated directory.
+const { getAgentDir, refreshDirsFromEnv } = await import("@oh-my-pi/pi-utils");
+refreshDirsFromEnv();
+assert(getAgentDir() === temp, "OMP agent directory was not isolated");
 const { AuthStorage, streamSimple } = await import("@oh-my-pi/pi-ai");
 const { unregisterOAuthProvider } = await import("@oh-my-pi/pi-ai/registry/oauth");
 const { ModelRegistry } = await import("@oh-my-pi/pi-coding-agent/config/model-registry");
 
-const realSample: unknown = JSON.parse(
-  await readFile(new URL("../fixtures/desktop-product-config-real-sample.json", import.meta.url), "utf8"),
+const contractSample: unknown = JSON.parse(
+  await readFile(new URL("../fixtures/model-scope-contract.json", import.meta.url), "utf8"),
 );
 assert(
-  typeof realSample === "object" && realSample !== null && "models" in realSample && Array.isArray(realSample.models),
-  "real Desktop cache sample has an invalid root",
+  typeof contractSample === "object"
+    && contractSample !== null
+    && "models" in contractSample
+    && Array.isArray(contractSample.models),
+  "synthetic model scope contract fixture has an invalid root",
 );
-const realModels: unknown[] = realSample.models;
-await writeFile(productConfigPath, `${JSON.stringify(realSample, null, 2)}\n`);
+const contractModels: unknown[] = contractSample.models;
+await writeFile(productConfigPath, `${JSON.stringify(contractSample, null, 2)}\n`);
 
 const authStorage = await AuthStorage.create(join(temp, "auth.db"));
 const registry = new ModelRegistry(authStorage, join(temp, "models.yml"), {
@@ -52,11 +60,13 @@ globalThis.fetch = async () => Response.json({
 const handlers: Record<string, Function[]> = {};
 let command: ((args: unknown, ctx: any) => Promise<void>) | undefined;
 let failNextRegister = false;
+let unregisterCalls = 0;
 const pi: any = {
   on(name: string, handler: Function) {
     (handlers[name] ??= []).push(handler);
   },
   unregisterProvider(name: string) {
+    unregisterCalls += 1;
     registry.unregisterProvider(name);
   },
   registerProvider(name: string, config: Parameters<ModelRegistryType["registerProvider"]>[1]) {
@@ -94,42 +104,65 @@ try {
   await sessionStart({}, ctx);
   await command("all", ctx);
 
-  const deepseek = registry.find("workbuddy", "deepseek-v4.1-flash");
-  const hy4 = registry.find("workbuddy", "hy4-preview-f");
-  const hy3 = registry.find("workbuddy", "hy3");
-  const retained = registry.find("workbuddy", "fast-model");
-  assert(deepseek && hy4 && hy3 && retained, "real Desktop cache sample did not register every model in all scope");
-  assert(deepseek.contextWindow === 1_000_000 && deepseek.maxTokens === 16_384, "Deepseek real budgets or safety clamp changed");
-  assert(deepseek.input.includes("image") && deepseek.reasoning, "Deepseek real Vision/reasoning metadata changed");
-  assert(hy4.contextWindow === 1_000_000 && hy4.maxTokens === 64_000, "Hy4 real budgets changed");
-  assert(hy4.thinking?.efforts.join(",") === "high" && hy4.thinking.requiresEffort, "Hy4 real thinking metadata changed");
-  assert(hy3.contextWindow === 192_000 && hy3.maxTokens === 64_000, "Hy3 real budgets changed");
-  assert(hy3.thinking?.efforts.join(",") === "low,high" && hy3.thinking.requiresEffort, "Hy3 real thinking metadata changed");
-  assert(retained.contextWindow === 200_000 && retained.maxTokens === 32_000 && retained.input.includes("image"), "paid real model metadata changed");
+  const high = registry.find("workbuddy", "contract-free-high");
+  const multi = registry.find("workbuddy", "contract-free-multi");
+  const text = registry.find("workbuddy", "contract-free-text");
+  const retained = registry.find("workbuddy", "contract-paid");
+  assert(high && multi && text && retained, "synthetic catalog did not register every model in all scope");
+  assert(high.contextWindow === 1_000_000 && high.maxTokens === 64_000, "high-effort model budgets changed");
+  assert(high.input.includes("image") && high.reasoning, "high-effort model Vision/reasoning metadata changed");
+  assert(
+    high.thinking?.efforts.join(",") === "high"
+      && high.thinking.requiresEffort
+      && high.thinking.defaultLevel === "high",
+    "high-effort model canonical thinking metadata changed",
+  );
+  assert(multi.contextWindow === 192_000 && multi.maxTokens === 64_000, "multi-effort model budgets changed");
+  assert(
+    multi.thinking?.efforts.join(",") === "low,high"
+      && multi.thinking.requiresEffort
+      && multi.thinking.defaultLevel === "high",
+    "multi-effort model canonical thinking metadata changed",
+  );
+  assert(text.input.join(",") === "text" && !text.reasoning, "text-only model capabilities changed");
+  assert(retained.contextWindow === 200_000 && retained.maxTokens === 32_000 && retained.input.includes("image"), "paid model metadata changed");
+  assert(unregisterCalls === 0, "non-empty registration unnecessarily tore down the provider");
   assert(widgets.some((lines) => lines?.some((line) => line === "目录  desktop-cache")), "widget did not expose the Desktop cache source");
   assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "all", "all scope was not persisted");
 
   ctx.model = retained;
   failNextRegister = true;
   await command("free", ctx);
-  assert(registry.find("workbuddy", "fast-model"), "registration failure did not restore the previous provider");
+  assert(registry.find("workbuddy", "contract-paid"), "registration failure did not restore the previous provider");
   assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "all", "registration failure persisted an uncommitted scope");
   assert(notifications.at(-1)?.type === "error", "registration failure was falsely reported as success");
 
-  await chmod(settingsPath, 0o400);
-  await command("free", ctx);
-  await chmod(settingsPath, 0o600);
-  assert(registry.find("workbuddy", "fast-model"), "settings failure did not restore the previous provider");
-  assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "all", "settings failure changed the committed scope");
+  const committedSettings = await readFile(settingsPath, "utf8");
+  await chmod(temp, 0o500);
+  try {
+    await command("free", ctx);
+  } finally {
+    await chmod(temp, 0o700);
+  }
+  assert(registry.find("workbuddy", "contract-paid"), "settings failure did not restore the previous provider");
+  assert(await readFile(settingsPath, "utf8") === committedSettings, "settings failure changed committed bytes");
   assert(notifications.at(-1)?.type === "error", "settings failure was falsely reported as success");
+  assert(unregisterCalls === 0, "non-empty rollback unnecessarily tore down the provider");
 
-  const paidModel = realModels.find(
-    (model) => typeof model === "object" && model !== null && "id" in model && model.id === "fast-model",
+  const paidModel = contractModels.find(
+    (model) => typeof model === "object" && model !== null && "id" in model && model.id === "contract-paid",
   );
-  assert(paidModel, "real paid model evidence is missing");
+  assert(paidModel, "synthetic paid model fixture is missing");
   await writeFile(productConfigPath, `${JSON.stringify({ models: [paidModel] }, null, 2)}\n`);
+  failNextRegister = true;
+  await command("free", ctx);
+  assert(registry.find("workbuddy", "contract-paid"), "failed empty registration did not restore the previous provider");
+  assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "all", "failed empty registration persisted an uncommitted scope");
+  assert(unregisterCalls === 1, "failed empty registration did not exercise stale-overlay cleanup exactly once");
+  assert(notifications.at(-1)?.type === "error", "failed empty registration was falsely reported as success");
   await command("free", ctx);
   assert(!registry.getAll().some((model) => model.provider === "workbuddy"), "empty free scope retained stale WorkBuddy models");
+  assert(unregisterCalls === 2, "successful empty scope did not perform its stale-overlay cleanup");
   assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "free", "empty free scope was not persisted");
   assert(notifications.some((item) => item.type === "warning" && item.message.includes("重新选择模型")), "removed current model did not prompt reselection");
   assert(widgets.at(-1)?.some((line) => line === "模型  （当前范围为空）"), "empty scope was not explicit in the widget");
@@ -169,7 +202,7 @@ try {
   assert(!registry.getAll().some((model) => model.provider === "workbuddy"), "restart widened an authoritative empty free scope");
   assert(JSON.stringify(authStorage.get("workbuddy")) === credentialBefore, "restart registration modified the OMP credential row");
 
-  console.log("OK: M2 real catalog metadata, transactional scope, retained-model guard, restart, and credential invariants");
+  console.log("OK: M2 synthetic metadata, transactional scope, retained-model guard, restart, and credential invariants");
 } finally {
   unregisterOAuthProvider("workbuddy");
   globalThis.fetch = previousFetch;
@@ -178,5 +211,6 @@ try {
   else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
   if (previousProductConfig === undefined) delete process.env.WORKBUDDYAI_PRODUCT_CONFIG;
   else process.env.WORKBUDDYAI_PRODUCT_CONFIG = previousProductConfig;
+  refreshDirsFromEnv();
   await rm(temp, { recursive: true, force: true });
 }

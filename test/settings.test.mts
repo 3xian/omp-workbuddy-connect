@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,10 @@ const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = temp;
 
 try {
+  // OMP snapshots directory env at module load; refresh before importing settings.
+  const { getAgentDir, refreshDirsFromEnv } = await import("@oh-my-pi/pi-utils");
+  refreshDirsFromEnv();
+  assert(getAgentDir() === temp, "OMP agent directory was not isolated");
   const settings = await import("../src/settings.ts");
   const path = join(temp, ".workbuddy-settings.json");
   assert(settings.workBuddySettingsPath() === path, "settings did not honor OMP's public agent directory");
@@ -24,11 +28,29 @@ try {
   assert(!raw.includes("token") && !raw.includes("credential") && !raw.includes("secret"), "settings persisted credential material");
   assert(((await stat(path)).mode & 0o777) === 0o600, "settings permissions are not 0600");
 
+  let failedAtomically = false;
+  await chmod(temp, 0o500);
+  try {
+    await settings.saveSettings("free");
+  } catch {
+    failedAtomically = true;
+  } finally {
+    await chmod(temp, 0o700);
+  }
+  assert(failedAtomically, "read-only settings directory did not exercise the failure path");
+  assert(await readFile(path, "utf8") === raw, "failed atomic update changed committed settings bytes");
+  assert(
+    (await readdir(temp)).join(",") === ".workbuddy-settings.json",
+    "failed atomic update left a temporary settings file",
+  );
+
   await settings.saveSettings("free");
   assert(settings.loadSettings().scope === "free", "free scope did not survive restart load");
-  console.log("OK: settings use OMP agent dir, persist scope only, and enforce 0600");
+  console.log("OK: settings use isolated OMP agent dir, replace atomically, persist scope only, and enforce 0600");
 } finally {
   if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
+  const { refreshDirsFromEnv } = await import("@oh-my-pi/pi-utils");
+  refreshDirsFromEnv();
   await rm(temp, { recursive: true, force: true });
 }

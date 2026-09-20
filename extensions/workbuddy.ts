@@ -346,14 +346,16 @@ export default async function (pi: ExtensionAPI) {
     return uiGeneration;
   }
 
-  function replaceProvider(nextModels: typeof models): void {
-    pi.unregisterProvider(PROVIDER);
+  function installProvider(nextModels: typeof models): void {
+    // OMP replaces non-empty overlays on register. Empty static overlays are ignored,
+    // so only that case needs an explicit unregister to clear stale selector rows.
+    if (nextModels.length === 0) pi.unregisterProvider(PROVIDER);
     pi.registerProvider(PROVIDER, provider.config(nextModels));
   }
 
   function throwAfterRollback(previousModels: typeof models, original: unknown): never {
     try {
-      replaceProvider(previousModels);
+      installProvider(previousModels);
     } catch (rollbackError) {
       throw new AggregateError(
         [original, rollbackError],
@@ -375,7 +377,7 @@ export default async function (pi: ExtensionAPI) {
     transitioning = true;
     try {
       try {
-        replaceProvider(nextModels);
+        installProvider(nextModels);
       } catch (error) {
         throwAfterRollback(previousModels, error);
       }
@@ -450,7 +452,7 @@ export default async function (pi: ExtensionAPI) {
     await repaint(ctx, true, true);
   }
 
-  replaceProvider(models);
+  installProvider(models);
 
   pi.on("before_provider_request", (event) => {
     const payload = asObject(event.payload);

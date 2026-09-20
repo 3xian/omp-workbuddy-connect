@@ -28,6 +28,7 @@ const catalog = parseProductConfig(JSON.stringify({
       reasoning: {
         supportedEfforts: ["max", "invalid", "minimal", "high", "minimal"],
         canDisableThinking: false,
+        defaultEffort: "high",
       },
     },
     {
@@ -36,7 +37,7 @@ const catalog = parseProductConfig(JSON.stringify({
       maxInputTokens: 100_000,
       maxOutputTokens: 8_000,
       supportsReasoning: true,
-      reasoning: { supportedEfforts: ["max", "low"], canDisableThinking: true },
+      reasoning: { supportedEfforts: ["max", "low"], canDisableThinking: true, defaultEffort: "medium" },
     },
     {
       id: "unknown-reasoning",
@@ -62,7 +63,7 @@ assert(catalog, "mixed product catalog was rejected");
 assert(catalog.models.length === 3, `invalid catalog rows were registered: ${catalog.models.length}`);
 assert(
   catalog.diagnostics.map((diagnostic) => diagnostic.code).join(",")
-    === "invalid-structure,missing-id,invalid-context-window,invalid-max-tokens,duplicate-id",
+    === "invalid-default-effort,invalid-structure,missing-id,invalid-context-window,invalid-max-tokens,duplicate-id",
   `invalid row diagnostics were incomplete: ${JSON.stringify(catalog.diagnostics)}`,
 );
 
@@ -76,12 +77,14 @@ assert(
   `unsupported or unordered efforts leaked: ${required.thinking.efforts.join(",")}`,
 );
 assert(required.thinking.requiresEffort === true, "non-disableable reasoning exposed off");
+assert(required.thinking.defaultLevel === "high", "valid product default effort was not preserved");
 assert(required.input.join(",") === "text,image", "vision capability was not emitted");
 assert(required.compat?.stripImageInput === false, "host vision stripping was not disabled");
 
 const optional = all.find((model) => model.id === "paid-optional");
 assert(optional?.thinking?.requiresEffort === false, "optional reasoning did not expose off");
 assert(optional.thinking.efforts.join(",") === "low,max", "optional model exposed unsupported efforts");
+assert(optional.thinking.defaultLevel === undefined, "unsupported product default effort leaked into OMP metadata");
 const unknownReasoning = all.find((model) => model.id === "unknown-reasoning");
 assert(unknownReasoning?.reasoning === true, "reasoning capability was dropped");
 assert(unknownReasoning.thinking === undefined, "missing effort evidence defaulted to every effort");

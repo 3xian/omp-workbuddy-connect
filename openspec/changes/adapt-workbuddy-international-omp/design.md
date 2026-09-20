@@ -112,7 +112,7 @@ M0 调查了已有 upstream 实现、仓库资料、授权可访问的 Desktop �
 
 移除宿主已正确完成的 stream=true、developer→system、标准 effort/max_tokens 和解析逻辑。默认不注入 system prompt；仅真实 Gateway 无 system 必失败时允许最小修正并记证据。reasoning 清理保留 tool_call_id、tool result association、assistant tool replay，完成下一轮而非仅测试 JSON 变换。
 
-Model ID 冲突按 V2 L3 接受：非匹配 ID 请求必须完全不变；同名跨 Provider 场景明确未解决，不把隔离测试描述为所有 Provider 绝对隔离。不得因此自建 transport。
+Model ID 冲突按 V2 L3 接受：`before_provider_request` 只提供 model ID，因此累计 known-ID 阻断无法区分同 ID 的其他 Provider；非匹配 ID 请求必须完全不变，但不得把该回归描述为绝对 Provider 隔离。M3 应优先调查可获得 provider identity 的宿主 resolver/request boundary；没有公开边界前保持已记录限制，不因此自建 transport。
 
 ### D8 — Credits / Usage ADR 与可选管理面
 
@@ -122,7 +122,7 @@ M4 将现有 `POST /v2/billing/meter/get-user-resource` 适配为一个 WorkBudd
 
 ### D9 — 目录和 UI 是不同状态边界
 
-Scope 更新先构建候选目录与 ID Set，再按外部 Provider 注销/注册 → 持久化设置 → 提交内存目录、selector/请求 ID 和 UI 状态的顺序执行；注册或写设置失败必须重注册旧 Provider，且不得提交或虚报新 scope。空模型数组的真实替换语义在 M2 通过真实 `ModelRegistry` 验证。当前模型被移除时明确要求重选，并在用户选择范围内模型前阻断 retained Model object 的后续 WorkBuddy transport；绝不自动换付费或任意 fallback。
+Scope 更新先构建候选目录与 ID Set。非空候选直接 `registerProvider`，利用 OMP 对同 source overlay 的原位替换，避免无谓拆除 OAuth/runtime 状态；只有空候选先 `unregisterProvider` 清除 18.2.6 不会被 `models: []` 覆盖的旧行。外部注册成功后原子持久化设置，最后提交内存目录、selector/请求 ID 和 UI 状态；注册或写设置失败必须恢复旧 Provider，且不得提交或虚报新 scope。当前模型被移除时明确要求重选，并在用户选择范围内模型前阻断 retained Model object 的后续 WorkBuddy transport；绝不自动换付费或任意 fallback。
 `stateGeneration` 是仅针对异步展示的内存计数，logout/account switch/scope/session teardown 递增；完成后比对 generation、当前模型和活动会话再应用结果。模型离开 WorkBuddy 时同步清理，迟到响应不能重显。使用 `session_start/turn_start`，接受下一 turn 更新限制；无 UI 时所有交互调用跳过，认证/注册/hooks 始终可用。
 
 设置只保存 scope 等非敏感值，使用宿主 getAgentDir 等实际公开目录规则，默认 `~/.omp/agent` 并尊重 `PI_CODING_AGENT_DIR`，不引入新环境变量。

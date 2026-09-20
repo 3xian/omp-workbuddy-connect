@@ -12,16 +12,12 @@ WorkBuddy AI 国际版 provider for OMP。当前认证、模型目录契约和 s
 
 移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
-## 安装
+## 开发加载
+
+当前分支尚未发布，不应使用上游仓库的 `pi install` 命令冒充本实现。检出本仓库后使用绝对路径加载：
 
 ```bash
-pi install git:github.com/icekale/pi-workbuddy-connect
-```
-
-或本地加载：
-
-```bash
-pi -e /path/to/pi-workbuddy-connect
+pi -e /absolute/path/to/omp-workbuddy-connect
 ```
 
 ## 登录
@@ -63,7 +59,7 @@ pi 没有 DSH 那种插件配置卡片，等价入口有两处：
 
   也接受参数：`/workbuddy free` · `/workbuddy all`。断开认证请使用宿主命令 `/logout workbuddy`。
 
-切换范围会先注销旧 Provider overlay，再注册新目录、保存非敏感 scope，最后提交内存与 Widget 状态。注册或设置写入失败会恢复旧目录且不报告成功；空目录会清除旧模型。当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
+非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除 OMP 18.2.6 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存与 Widget 状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
 
 ## 环境变量
 

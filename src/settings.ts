@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { getAgentDir } from "@oh-my-pi/pi-coding-agent";
 import type { ModelScope } from "./models.ts";
@@ -25,6 +26,18 @@ export function loadSettings(agentDir = getAgentDir()): WorkBuddySettings {
 export async function saveSettings(scope: ModelScope, agentDir = getAgentDir()): Promise<void> {
   await mkdir(agentDir, { recursive: true, mode: 0o700 });
   const path = workBuddySettingsPath(agentDir);
-  await writeFile(path, `${JSON.stringify({ scope }, null, 2)}\n`, { mode: 0o600 });
-  await chmod(path, 0o600);
+  const temporaryPath = join(agentDir, `.workbuddy-settings.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    const temporary = await open(temporaryPath, "wx", 0o600);
+    try {
+      await temporary.writeFile(`${JSON.stringify({ scope }, null, 2)}\n`);
+      await temporary.chmod(0o600);
+      await temporary.sync();
+    } finally {
+      await temporary.close();
+    }
+    await rename(temporaryPath, path);
+  } finally {
+    await rm(temporaryPath, { force: true });
+  }
 }
