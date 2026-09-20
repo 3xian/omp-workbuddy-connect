@@ -278,21 +278,21 @@ model.provider === "workbuddy"
  目标：管理功能正确，并与核心调用解耦。
 
 
- 1. `/workbuddy` 按需展示脱敏账号、积分/套餐、scope/模型数/来源和 Provider 状态。
- 2. `/workbuddy free|all`：
+ 1. /workbuddy 展示登录状态、账号、积分、套餐、scope、模型数和 Provider 状态。
+ 2. /workbuddy free|all：
    - 构建新目录；
    - 更新 Provider 和 hook 的 ID 集合；
    - 持久化 scope；
-   - 清除旧详情并发送一次性通知；
-   - 不查询 Billing、不改 credential。
+   - 同步 Widget；
+   - 不改 credential。
  3. 对当前模型被移出 scope 的情况明确提示，不自动切换到付费模型。
- 4. `/workbuddy logout` 调用认证删除路径，清理 Widget/status key。
+ 4. /workbuddy logout 调用认证删除路径，清理 Widget/status。
  5. 积分认证从 OMP 获取，不创建第二套刷新器。
  6. 积分查询失败显示 unavailable，而不是零积分。
- 7. `session_start` / `session_switch` 只绑定 runtime 并清理旧显示；`turn_start` 收起显式详情并使迟到结果失效；三者均不查询 Billing。
- 8. `ctx.hasUI === false` 时跳过 UI。
- 9. WorkBuddy 不挂载常驻 status line，不使用 timer。
- 10. 设置路径使用宿主目录规则，尊重 `PI_CODING_AGENT_DIR`。
+ 7. session_start/turn_start 更新显示，启动不等待积分网络请求。
+ 8. ctx.hasUI === false 时跳过 UI。
+ 9. 防止迟到的积分响应在 logout 或切换模型后恢复旧 Widget。
+ 10. 设置路径使用宿主目录规则，尊重 PI_CODING_AGENT_DIR。
 
 
  - 四个必需命令全部可用；
@@ -434,3 +434,16 @@ M5 集成验收与发布
 
  验证边界：本次执行了现有隔离测试并确认模块导入失败；核对了上述宿主源码。未执行真实登录或模型调用，具体 OAuth 类型导出、AuthStorage
  删除路径及 subagent 运行时行为列为 M0 必须验证项。
+
+---
+
+### 实施后修订附录：Command-scoped Management UI
+
+上文 M4 条目保留为冻结规划记录。自 `v1.1.6` 起，实际实现采用以下替代契约：
+
+- `/workbuddy` 按需查询 Billing 并临时展示紧凑详情；模型名单最多前四项加剩余数量；
+- `/workbuddy free|all` 只提交 scope 并发送一次性通知，不查询 Billing；
+- `session_start` / `session_switch` 只绑定 runtime 并清理旧显示；
+- `turn_start` 收起显式详情并使旧 generation 失效，迟到结果不得重绘；
+- WorkBuddy 不挂载常驻 status line，不使用 timer；
+- 调用方 AbortSignal 不保证终止宿主共享的 in-flight Usage 请求。

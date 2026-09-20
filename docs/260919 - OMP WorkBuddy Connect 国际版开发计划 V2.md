@@ -1680,33 +1680,36 @@ Retry-After
 
 ---
 
-# 8.9 UI Lifecycle — Requirement Revision 1.6
+# 8.9 UI Lifecycle
 
-不再依赖 `model_select`，也不维护常驻 WorkBuddy Widget/status：
+不再依赖：
 
 ```text
-session_start / session_switch
-→ 绑定 request runtime
-→ 清理旧的 command-scoped UI
-→ zero Billing
-
-turn_start
-→ 收起显式详情
-→ 使待处理详情刷新 generation 失效
-→ 迟到 Billing 结果不得重绘
-→ zero Billing
-
-/workbuddy
-→ 唯一自动 Billing/detail 入口
-→ 临时显示紧凑 Widget
-
-/workbuddy free | all
-→ transactional scope update
-→ one-shot notify
-→ zero Billing / no persistent Widget
+model_select
 ```
 
-WorkBuddy 不占用 OMP status line，不使用 timer。调用方 AbortSignal 不保证终止宿主共享的 in-flight Usage 请求；契约是使旧详情失效并丢弃迟到结果。
+使用：
+
+```text
+session_start
+turn_start
+```
+
+同步：
+
+```text
+current model
+WorkBuddy widget
+status
+```
+
+接受：
+
+```text
+模型切换到下一 turn 才刷新 widget
+```
+
+这一差异属于 Known Limitation。
 
 ---
 
@@ -2370,9 +2373,13 @@ no credential leakage
 
 ---
 
-### L2. Command-scoped Management UI
+### L2. Widget 延迟
 
-WorkBuddy 不提供常驻 Widget/status。用户运行 `/workbuddy` 时临时显示详情；下一次 `turn_start` 收起并使旧详情刷新失效。模型选择使用 OMP 原生 `/model` 界面。
+模型切换后：
+
+```text
+可能到下一 turn_start 才刷新
+```
 
 ---
 
@@ -2557,3 +2564,33 @@ Subagent
 ```
 
 才建立在可靠基础上。
+
+---
+
+# Appendix A — Requirement Revision 1.6: Command-scoped Management UI
+
+本附录保留上文冻结的 v1 规划与当时的 Widget lifecycle 决策，并记录自 `v1.1.6` 起实际采用的后续修订；若与 §8.9 或 §20 L2 冲突，以本附录为准。
+
+```text
+session_start / session_switch
+→ 绑定 request runtime
+→ 清理旧的 command-scoped UI
+→ zero Billing
+
+turn_start
+→ 收起显式详情
+→ 使待处理详情刷新 generation 失效
+→ 迟到 Billing 结果不得重绘
+→ zero Billing
+
+/workbuddy
+→ 唯一自动 Billing/detail 入口
+→ 临时显示紧凑 Widget
+
+/workbuddy free | all
+→ transactional scope update
+→ one-shot notify
+→ zero Billing / no persistent Widget
+```
+
+WorkBuddy 不占用 OMP status line，不使用 timer。调用方 AbortSignal 不保证终止宿主共享的 in-flight Usage 请求；契约是使旧详情失效并丢弃迟到结果。详情最多显示前四个模型名称和剩余数量，完整选择使用 `/model`。

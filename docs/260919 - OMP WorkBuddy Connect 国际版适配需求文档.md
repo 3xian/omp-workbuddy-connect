@@ -969,48 +969,71 @@ OMP 本身也提供 provider-scoped `/logout`。
 
 # 28. UI / Widget
 
-以下 OMP UI API 可用于命令级管理面：
+以下 OMP UI API 可继续使用：
 
 ```text
 notify
+setStatus
 setWidget
 select
 ```
 
-`setStatus` 只用于清除旧版本遗留的 WorkBuddy status key；插件不占用 OMP 常驻 status line。WorkBuddy Widget 应保持紧凑且仅由显式 `/workbuddy` 临时显示。
+OMP ExtensionContext 已公开这些能力。
+
+现有 WorkBuddy Widget 视觉设计可尽量保持。
 
 ---
 
-# 29. Management UI 生命周期适配 — Requirement Revision 1.6
+# 29. Model Select 生命周期适配
 
-upstream 插件使用的 `model_select` 不属于 OMP 18.2.6 保证的公开事件。v1.1.6 起采用 command-scoped management UI：
-
-### session_start / session_switch
+upstream 插件使用：
 
 ```text
-绑定 request runtime
-清理旧 WorkBuddy Widget/status key
-不查询 Billing
+model_select
+```
+
+OMP 18.2.6 不保证存在等价公开事件。
+
+v1.0 采用：
+
+```text
+session_start
+turn_start
+```
+
+同步 Widget。
+
+要求：
+
+### session_start
+
+如果当前模型为 WorkBuddy：
+
+```text
+显示 WorkBuddy Widget
+```
+
+否则：
+
+```text
+隐藏 Widget
 ```
 
 ### turn_start
 
+每次 turn 开始重新检查：
+
 ```text
-收起显式 /workbuddy 详情
-使待处理详情刷新 generation 失效
-迟到 Billing 结果不得恢复 UI
-不查询 Billing
+ctx.model / ctx.models.current()
 ```
 
-调用方 AbortSignal 不保证终止宿主共享的 in-flight Usage 请求；这里保证的是显示失效与迟到结果丢弃。
+并同步 Widget。
 
-### /workbuddy
+允许存在：
 
-这是唯一自动执行 Billing 并显示详情的入口。详情使用紧凑 Widget，不挂载 WorkBuddy status line，也不使用 timer。
+> 用户刚刚切换模型，但在下一次 Turn 开始前 Widget 尚未立即变化。
 
-### /workbuddy free / all
-
-只执行事务性 scope 更新并发送一次性通知，不查询 Billing，不挂载常驻详情。下一次显式 `/workbuddy` 显示已提交范围。
+该差异不属于 release blocker。
 
 ---
 
@@ -1436,9 +1459,15 @@ v1.0 明确接受以下限制：
 
 多 OAuth account rotation 不保证 Header 身份一致。
 
-### L2. Command-scoped Management UI
+### L2. Widget 非模型切换瞬时刷新
 
-WorkBuddy 不提供常驻 Widget/status。`/workbuddy` 临时显示详情，下一次 `turn_start` 收起并使旧详情刷新失效；模型选择继续使用 OMP 原生 `/model`。
+模型切换后可能到下一次：
+
+```text
+turn_start
+```
+
+才更新。
 
 ### L3. Request-bound Provider Isolation
 
@@ -1600,3 +1629,25 @@ headless mode
 **6. 对 OMP 18.2.6 没有暴露的能力，通过明确功能边界处理，而不是修改 OMP 本体。**
 
 **7. 第一版优先保证认证链、模型调用链和 Agent 调用稳定，再完善模型发现和 UI。**
+
+---
+
+# Appendix A — Requirement Revision 1.6: Command-scoped Management UI
+
+本附录保留上文原始 v1.0 需求和 Known Limitations 作为冻结历史，并记录自 `v1.1.6` 起的替代契约；若与 §28、§29 或 §38 L2 冲突，以本附录为准。
+
+### session_start / session_switch
+
+绑定 request runtime、清理旧 WorkBuddy Widget/status key，不查询 Billing。
+
+### turn_start
+
+收起显式 `/workbuddy` 详情并使待处理详情刷新 generation 失效；迟到 Billing 结果不得恢复 UI，不查询 Billing。调用方 AbortSignal 不保证终止宿主共享的 in-flight Usage 请求。
+
+### /workbuddy
+
+这是唯一自动执行 Billing 并显示详情的入口。详情使用紧凑 Widget，最多显示前四个模型名称和剩余数量；完整选择使用 `/model`。插件不挂载 WorkBuddy status line，也不使用 timer。
+
+### /workbuddy free / all
+
+只执行事务性 scope 更新并发送一次性通知，不查询 Billing，不挂载常驻详情。下一次显式 `/workbuddy` 显示已提交范围。
