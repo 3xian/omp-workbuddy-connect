@@ -104,6 +104,8 @@ try {
   assert(sessionStart, "extension did not register session_start");
   await sessionStart({}, ctx);
   await command("all", ctx);
+  assert(widgets.at(-1) === undefined, "scope action mounted persistent WorkBuddy detail");
+  await command("", ctx);
 
   const high = registry.find("workbuddy", "contract-free-high");
   const multi = registry.find("workbuddy", "contract-free-multi");
@@ -128,7 +130,7 @@ try {
   assert(text.input.join(",") === "text" && !text.reasoning, "text-only model capabilities changed");
   assert(retained.contextWindow === 200_000 && retained.maxTokens === 32_000 && retained.input.includes("image"), "paid model metadata changed");
   assert(unregisterCalls === 0, "non-empty registration unnecessarily tore down the provider");
-  assert(widgets.some((lines) => lines?.some((line) => line === "目录  desktop-cache")), "widget did not expose the Desktop cache source");
+  assert(widgets.some((lines) => lines?.some((line) => line.includes("范围  all · 4 模型 · desktop-cache"))), "explicit status did not expose the Desktop cache source");
   assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "all", "all scope was not persisted");
 
   ctx.model = retained;
@@ -166,7 +168,9 @@ try {
   assert(unregisterCalls === 2, "successful empty scope did not perform its stale-overlay cleanup");
   assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "free", "empty free scope was not persisted");
   assert(notifications.some((item) => item.type === "warning" && item.message.includes("重新选择模型")), "removed current model did not prompt reselection");
-  assert(widgets.at(-1)?.some((line) => line === "模型  （当前范围为空）"), "empty scope was not explicit in the widget");
+  assert(widgets.at(-1) === undefined, "empty scope action mounted persistent WorkBuddy detail");
+  await command("", ctx);
+  assert(widgets.at(-1)?.some((line) => line === "模型  （当前范围为空）"), "explicit status did not expose the empty scope");
 
   let chatRequests = 0;
   const chatFetch: typeof fetch = async () => {

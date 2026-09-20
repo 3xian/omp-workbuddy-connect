@@ -4,21 +4,19 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
-// M4 exercises the host credential/UsageProvider boundary. Billing deliberately
-// remains pending while session_start must return immediately.
+// Command-scoped management UI stays dormant during session startup: no
+// Billing request and no persistent Widget/status content.
 const authDir = join(tmpdir(), `workbuddy-session-start-${process.pid}`);
 await mkdir(authDir, { recursive: true });
 const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = authDir;
 
 let fetchCalls = 0;
-let releaseBilling!: (response: Response) => void;
+const uiWrites: Array<{ widget?: string[]; status?: string }> = [];
 const authStorage = await AuthStorage.create(join(authDir, "auth.db"), {
   usageFetch: async () => {
     fetchCalls += 1;
-    return new Promise<Response>((resolve) => {
-      releaseBilling = resolve;
-    });
+    return Response.json({ code: 0, data: { Response: { Data: { Accounts: [] } } } });
   },
 });
 await authStorage.set("workbuddy", {
@@ -45,7 +43,11 @@ try {
   const start = handlers.session_start?.[0];
   if (!start) throw new Error("no session_start handler");
 
-  const ui = { setWidget() {}, setStatus() {}, notify() {} };
+  const ui = {
+    setWidget(_key: string, value: string[] | undefined) { uiWrites.push({ widget: value }); },
+    setStatus(_key: string, value: string | undefined) { uiWrites.push({ status: value }); },
+    notify() {},
+  };
   const context = {
     hasUI: true,
     model: { provider: "workbuddy" },
@@ -60,13 +62,12 @@ try {
   if (result === Symbol.for("timed-out")) {
     throw new Error("session_start is blocked by the WorkBuddy network request");
   }
-  for (let attempt = 0; attempt < 50 && fetchCalls === 0; attempt += 1) await sleep(1);
-  if (fetchCalls !== 1) throw new Error(`host UsageProvider started ${fetchCalls} Billing request(s)`);
-  releaseBilling(Response.json({
-    code: 0,
-    data: { Response: { Data: { Accounts: [] } } },
-  }));
-  console.log("OK: session_start returns without waiting for host Billing");
+  await sleep(10);
+  if (fetchCalls !== 0) throw new Error(`session_start started ${fetchCalls} unsolicited Billing request(s)`);
+  if (uiWrites.some((write) => write.widget !== undefined || write.status !== undefined)) {
+    throw new Error("session_start mounted persistent WorkBuddy UI");
+  }
+  console.log("OK: session_start keeps command-scoped management UI dormant");
 } finally {
   authStorage.close();
   if (originalAgentDir === undefined) {

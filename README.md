@@ -23,7 +23,7 @@ bun --version
 其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。然后通过固定 GitHub tag 安装：
 
 ```bash
-omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.5
+omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.6
 omp
 ```
 
@@ -61,7 +61,7 @@ omp plugin uninstall omp-workbuddy-connect
 
 默认 scope 为 `free`。只有有效 Desktop 产品目录中带明确零 multiplier credits 证据的模型会显示；`0`、`0.0`、`x0`、`x0.00` 等规范零值会归一为免费证据，非零、缺失或格式错误均不是免费。有效缓存（包括 `models: []`）是权威结果，不会被内置列表扩宽。内置清单仅作为整个目录不可用或无任何有效行时的 fallback，不构成免费证据，因此 fallback 来源的 `free` 可以为空。
 
-每个模型的 reasoning、图片能力和推理档来自产品配置 `~/.workbuddy-ai/cache/acc-product-config-v3.json`。Widget 显示精确来源 `desktop-cache` 或 `builtin-fallback`；fallback 同时显示缺失、不可读、JSON 无效、结构无效或无有效模型的原因。缓存不可用时，`all` scope 可使用当前内置目录：
+每个模型的 reasoning、图片能力和推理档来自产品配置 `~/.workbuddy-ai/cache/acc-product-config-v3.json`。`/workbuddy` 详情显示精确来源 `desktop-cache` 或 `builtin-fallback`；fallback 同时显示缺失、不可读、JSON 无效、结构无效或无有效模型的原因。缓存不可用时，`all` scope 可使用当前内置目录：
 
 | 模型 | 上下文 / 有效输出上限 | OMP canonical effort |
 | --- | --- | --- |
@@ -75,15 +75,15 @@ omp plugin uninstall omp-workbuddy-connect
 
 管理面完全可选；Billing、Widget 或 TUI 故障不会阻塞登录、Chat 或工具调用。
 
-- **侧栏 Widget/status** — 显示登录、账号、积分、套餐、scope、模型数、目录来源和 Provider 状态。积分明确区分未查询、查询中、可用（含真实 0）和不可用；失败后不沿用 last-good 值。
-- **`/workbuddy`** — 强制刷新并显示当前状态。
-- **`/workbuddy free`** — 切到有明确免费证据的模型范围。
-- **`/workbuddy all`** — 切到当前插件可识别的全部模型。
+- **默认界面** — 不挂载 WorkBuddy Widget，也不占用 OMP status line；`session_start` / `turn_start` 不主动查询 Billing。
+- **`/workbuddy`** — 强制刷新并临时显示紧凑详情：脱敏账号、积分/套餐、scope/模型数/目录来源和 Provider 状态。下一次 `turn_start` 自动清除，不使用计时器。
+- **`/workbuddy free`** — 切到有明确免费证据的模型范围，以一次性通知报告结果；不查询 Billing，也不挂载常驻详情。
+- **`/workbuddy all`** — 切到当前插件可识别的全部模型，以一次性通知报告结果；不查询 Billing，也不挂载常驻详情。
 - **`/workbuddy logout`** — 失效异步 UI、删除 OMP WorkBuddy credential，并清除 Widget/status。
 
-scope 存于 OMP agent 目录的 `.workbuddy-settings.json`；默认目录与 profile 均由 OMP 决定，`PI_CODING_AGENT_DIR` 可覆盖。模型切换依赖 `session_start` / `turn_start`，因此 Widget 允许到下一次 turn 才反映新模型；这不影响认证或请求路由。Headless 模式不会调用 select/notify/widget/status。
+积分明确区分查询中、可用（含真实 0）和不可用；失败后不沿用 last-good 值。scope 存于 OMP agent 目录的 `.workbuddy-settings.json`；默认目录与 profile 均由 OMP 决定，`PI_CODING_AGENT_DIR` 可覆盖。Headless 模式不会调用 select/notify/widget/status。
 
-非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除 OMP 18.2.6 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存与 Widget 状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
+非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除 OMP 18.2.6 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
 
 ## 环境变量
 
@@ -117,17 +117,17 @@ npm run typecheck
 - 不复用旧 Pi/Fork、DSH 或 Desktop credential；安装后必须执行 `/login workbuddy`。
 - `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源。
 - 旧 scope 设置不会导入；用 `/workbuddy free` 或 `/workbuddy all` 明确选择。
-- 包版本保持 `1.1.5`；“v1”是功能发布定义，不会把 manifest 版本倒退到 `1.0.0`。
+- 包版本保持 `1.1.6`；“v1”是功能发布定义，不会把 manifest 版本倒退到 `1.0.0`。
 
 ## v1 限制
 
 - 仅验证官方 OMP `18.2.6` 与 WorkBuddy 国际版 `https://www.workbuddy.ai`。
 - 仅支持一个已存储 WorkBuddy Account；零个或多个账号、缺失身份或身份错配均在 transport 前拒绝。
-- Widget/status 可能到下一次 `turn_start` 才反映模型切换。
+- WorkBuddy 不提供常驻 Widget/status；运行 `/workbuddy` 可临时查看详情，下一次 `turn_start` 自动收起。
 - 模型目录只读 `~/.workbuddy-ai/cache/acc-product-config-v3.json` 的产品元数据；不读取 Desktop credential。缓存失效时 `all` 使用内置 fallback，`free` 不把 fallback 或缺少 multiplier 的模型猜成免费。
 - WorkBuddy 身份 Header 在请求边界从 OMP AuthStorage 原子解析；同 ID 的其他 Provider 不经过 WorkBuddy payload 或身份逻辑。
 - v1 不包含多账号轮换、Desktop credential import、自定义 Chat transport、在线动态目录端点或即时 model-select UI。
-- OMP 18.2.6 的 Usage API 是跨 Provider 聚合刷新；Widget 只展示 WorkBuddy 报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
+- OMP 18.2.6 的 Usage API 是跨 Provider 聚合刷新；`/workbuddy` 只展示 WorkBuddy 报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
 
 ## License
 

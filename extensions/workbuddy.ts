@@ -73,7 +73,7 @@ export default async function (pi: ExtensionAPI) {
     const previousModels = models;
     transitioning = true;
     provider.setModelAccess(activeIds, transitioning);
-    ui.invalidate("WorkBuddy model scope changed");
+    ui.clear(ctx, "WorkBuddy model scope changed");
     try {
       try {
         installProvider(nextModels);
@@ -115,7 +115,7 @@ export default async function (pi: ExtensionAPI) {
       notify(ctx, `WorkBuddy 模型范围切换失败：${message}`, "error");
       return;
     }
-    await ui.refresh(ctx, { forceRefresh: true, notify: true, showWhenInactive: true });
+    notify(ctx, `WorkBuddy 模型范围已切换为 ${nextScope}`, "info");
   }
 
   async function logout(ctx: ExtensionContext): Promise<void> {
@@ -168,7 +168,7 @@ export default async function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("workbuddy", {
-    description: "显示 WorkBuddy 状态；可切换 free/all 范围或 logout",
+    description: "按需显示 WorkBuddy 状态；可切换 free/all 范围或 logout",
     handler: async (args, ctx) => {
       const command = String(args ?? "").trim().toLowerCase();
       if (command === "free" || command === "all") {
@@ -183,7 +183,7 @@ export default async function (pi: ExtensionAPI) {
         notify(ctx, `未知 WorkBuddy 命令：${command}；可用命令为 free、all、logout`, "warning");
         return;
       }
-      await ui.refresh(ctx, { forceRefresh: true, notify: true, showWhenInactive: true });
+      await ui.refresh(ctx, { forceRefresh: true, showWhenInactive: true, showWidget: true });
     },
   });
 }

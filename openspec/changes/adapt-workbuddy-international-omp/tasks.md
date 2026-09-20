@@ -36,7 +36,7 @@
 - [x] 3.4 将已有且有 Gateway 证据的模型 token clamp 同步到目录/请求，测试高于上限被限制和较小合法预算不被上调，contextWindow/maxTokens 不虚报。（MODEL-04、GATE-01）
 - [x] 3.5 重写免费过滤：已知付费和未知价格排除，有效目录免费为空不补 FREE_IDS；保留 paid/unknown/empty 三类永久回归，并证明 cost 零占位不用于宣称免费。（MODEL-05）
 - [x] 3.6 实现 M0 Dynamic Model ADR 选中的唯一目录路径：A 使用 fetchDynamicModels/宿主缓存并验证 identity/scope/空集合；B 使用 Desktop product cache→builtin fallback 并验证缺失/损坏缓存及免费证据约束；两种选择均显示准确 model source，未选分支在 ADR 记理由、不写空实现。（MODEL-06；D6）
-- [x] 3.7 完成 Provider 重注册与 scope 提交：同步模型、ID Set、selector、持久化和 Widget 状态；验证空数组真正替换旧目录、注册/设置失败不虚报成功，并保留 credential unchanged 永久回归。（MODEL-07）
+- [x] 3.7 完成 Provider 重注册与 scope 提交：同步模型、ID Set、selector 与持久化；验证下一次显式详情反映新范围、空数组真正替换旧目录、注册/设置失败不虚报成功，并保留 credential unchanged 永久回归。（MODEL-07）
 - [x] 3.8 当前模型被新 scope 移除时提示用户重选，并在选择范围内模型前阻断该 retained Model object 的后续 WorkBuddy 请求；用真实 OMP 验证 all→paid model→free(empty)→next Chat 在 transport 前失败且 WorkBuddy HTTP 请求数为零，不自动选择付费或任意 fallback。（MODEL-07）
 - [x] 3.9 提取非敏感 `src/settings.ts`，采用宿主 agent 目录规则与 PI_CODING_AGENT_DIR；验证默认 .omp 路径、scope 及 empty free 重启恢复且文件无 Token/credential。（MODEL-07、UX-07）
 - [x] 3.10 验收至少三个模型的 metadata、thinking、Vision、context/max tokens、free/all/empty、scope restart 和重注册不改 credential；保存目录来源与真实模型 ID 证据后通过 M2。（MODEL-01–07）
@@ -55,11 +55,11 @@
 
 - [x] 5.1 按 M0 ADR 接通 WorkBuddy UsageProvider，设置 `retainLastGoodOnFailure: false`，从宿主 credential 的 accountId 发送 Billing `X-User-Id`，不读旧文件、不自行 refresh、不在无证据时新增 `X-Enterprise-Id`；成功响应可得账号/积分/套餐。（UX-03；D8）
 - [x] 5.2 实现 available/unavailable/未查询状态，拒绝把无效响应解析为零积分或沿用 last-good 旧值；验证 genuine zero、success→5xx、超时、慢响应、解析失败都不破坏正常 Chat。（UX-01/03）
-- [x] 5.3 完成 `/workbuddy` 状态展示和 free/all/logout 用户交互，包含 login/account/credits/plan/scope/model count/model source/provider state；验证各命令输出、当前模型移除提示及 credential 不变/真正删除。（UX-01/02）
-- [x] 5.4 提取 `src/ui.ts`，以 session_start/turn_start 同步当前模型的 Widget/status，启动只触发非阻塞更新；迁移 session-start 测试到宿主凭据边界，永久验证 Billing 慢及 UI 失败不阻塞启动/Chat。（UX-03/05）
-- [x] 5.5 实现 stateGeneration 与当前模型/活动会话检查，logout、account switch、scope change、session teardown 失效旧请求；保留退出迟到积分回归，并验证换号、换范围、离开 WorkBuddy、关闭会话均不恢复旧 Widget。（UX-04）
+- [x] 5.3 完成 `/workbuddy` 按需详情和 free/all/logout 用户交互，详情包含脱敏 account、credits/plan、scope/model count/model source/provider state；scope action 不查询 Billing，使用一次性通知且不挂载常驻详情。（UX-01/02）
+- [x] 5.4 提取 `src/ui.ts`；默认不挂载 Widget 或 WorkBuddy status line，session/turn 不主动查询 Billing，显式 `/workbuddy` 临时显示紧凑 Widget，下一 turn 收起并取消待处理刷新。（UX-03/05）
+- [x] 5.5 实现 stateGeneration 与当前模型/活动会话检查，下一 turn、logout、account switch、scope change、session teardown 失效旧请求；验证迟到积分不恢复已收起或退出后的 Widget。（UX-04）
 - [x] 5.6 所有 UI 操作以 hasUI 隔离，非 UI 认证/注册/hook 正常装配；保留 headless 无 UI 依赖回归，验证没有 select/notify/widget/status 调用也能运行请求与工具。（UX-06、REL-01）
-- [x] 5.7 验收四个命令、Billing 正常/失败/慢、pending credits logout、scope restart、headless 与无 UI 访问；记录 Widget 下一 turn 才更新的限制后通过 M4。（UX-01–07）
+- [x] 5.7 验收四个命令、Billing 正常/失败/慢、pending credits logout、scope restart、next-turn dismiss、headless 与无 UI 访问后通过 M4。（UX-01–07）
 
 ## 6. M5 — Agent、四层验收与发布证据
 
@@ -70,5 +70,5 @@
 - [x] 6.5 审查源码与实际日志、错误、网络、文件和诊断附件，确认 Token/Authorization 不入日志、仓库、项目或第三方，identity 输出脱敏，网络只到功能所需官方国际端点，Desktop 数据未改变。（REL-04）
 - [x] 6.6 保存 `release-evidence.md`：OMP version/commit、extension version/commit、Node/Bun runtime、日期、账号类型、模型 IDs、矩阵结果、known limitations、脱敏证据；补齐 Requirement→Implementation→Test 实际定位，未运行/失败不得标通过。（REL-05）
 - [x] 6.7 真实冒烟及矩阵通过后完成入口 composition root/模块边界收尾，删除失去用途的旧认证与兼容代码、临时探针和脚本；验证没有生产占位实现、额外 CredentialStore/Transport 框架或被误加载的 helper。（HOST-02、AUTH-01；D11）
-- [x] 6.8 更新 README/安装与迁移/目录/环境变量/命令/版本发布说明，明确单账号不容错配、Widget 延迟、缓存来源三项限制及 request-bound Provider 隔离行为和 ADR 实际选择；检查旧 Pi 安装/旧凭据优先级宣传已移除，包版本不因功能名 v1 倒退。（REL-06）
+- [x] 6.8 更新 README/安装与迁移/目录/环境变量/命令/版本发布说明，明确单账号不容错配、命令级临时 Widget、缓存来源三项限制及 request-bound Provider 隔离行为；检查旧 Pi 安装/旧凭据优先级宣传已移除，包版本不因功能名 v1 倒退。（REL-06）
 - [x] 6.9 按 V2 §19 全部条件核签 v1：OMP 零修改、正式安装、AuthStorage 唯一来源、OAuth/refresh/identity/restart、目录/Streaming/thinking/声明 Vision/工具、main/subagent/headless、credits/free-all/logout/isolation/秘密保护均有证据；任一未通过保持发布阻断。（REL-01–06、HOST-05）

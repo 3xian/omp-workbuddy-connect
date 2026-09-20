@@ -160,7 +160,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 6. **隔离分层**：modifier 对所有非 WorkBuddy 不变；payload hook 使用 request-bound `ctx.model.provider`，当前与历史同 ID 的其他 Provider 也不变；活动 scope/切换期 fail-closed 由 WorkBuddy `resolveHeaders` 承担。
 7. **ADR 不被偷换成延期或必做**：1.7/1.8 有选择证据，3.6/5.1 有选定路径实施及验收，未选路径无空壳实现。
 8. **M0 不被规划检查冒充完成**：已记录精确提交但尚有工作区差异、宿主实验待运行；coverage.md 不是六项 M0 交付中的运行证明。
-9. **工期与版本不混用**：M0 后重估；功能 v1 不把 manifest 1.1.5 自动降级。
+9. **工期与版本不混用**：M0 后重估；功能 v1 不把 manifest 1.1.6 自动降级。
 10. **必需内容不被 P1 隐藏**：管理命令、Credits、main/subagent/headless、声明 Vision 均在发布矩阵，不作为可裁剪后续项。
 
 ## 尚需执行的证据，不是规划遗漏

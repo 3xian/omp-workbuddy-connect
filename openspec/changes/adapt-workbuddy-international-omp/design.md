@@ -13,7 +13,7 @@
 | Fork | `https://github.com/ha5h6r000wn/omp-workbuddy-connect`，分支 `feat/omp-port` | `cb2398e3374144db0c088d7a4887dc0913342858` | `git log -1`；仅代表 HEAD，不代表全部工作区 |
 | Upstream | `https://github.com/icekale/pi-workbuddy-connect` | `cb2398e3374144db0c088d7a4887dc0913342858` | 本地 Fork HEAD 与本次查询 upstream/main 相同；M0 冻结保留该精确 SHA，不随 main 漂移 |
 | OMP | `can1357/oh-my-pi`，`v18.2.6` | `78b753124d11f8dd3ae73e2524125890ff7c977e` | `git ls-remote` 和 GitHub commits/v18.2.6 的 commit SHA 一致 |
-| 包版本 | `omp-workbuddy-connect` | 当前 manifest `1.1.5` | V2 的 v1 是功能基线，不自动降级包版本 |
+| 包版本 | `omp-workbuddy-connect` | 当前 manifest `1.1.6` | V2 的 v1 是功能基线，不自动降级包版本 |
 | 未提交修改 | `.gitignore`、`extensions/workbuddy.ts`、`package.json` | 本次观察相对 HEAD 共 22 additions / 11 deletions | 只记录已跟踪差异，不声称覆盖未跟踪文件；M0 保存完整工作区证据，不能覆盖用户工作 |
 
 规划快照中的实现仍集中在 `extensions/workbuddy.ts`：`saveOwn/current/resolveCred` 维护旧凭据；refresh 从旧文件补身份并丢失身份输出；Provider 使用 Marker、unsupported hook/refreshModels；scope 空集合回退 `FREE_IDS`；模型默认扩展到全部 effort；payload 自动插入 system。当时 `package.json` 已有 OMP manifest/import，但 peer 为 `*`；`tsconfig.json` 只列扩展入口。两个既有测试保护 payload 隔离和启动不阻塞，后者使用旧凭据文件。
@@ -118,12 +118,12 @@ OMP 18.2.6 将本次 provider request 的精确 Model 作为 hook `ctx.model`，
 
 M0 结论记录于 `docs/omp-port/adr-credits-usage.md`：**选择宿主 UsageProvider**。18.2.6 的 Usage schema 可表达 credits 的 used/limit/remaining、accountId/orgId、tier、notes/metadata/raw，并向 fetcher 提供标准化 OAuth credential、AbortSignal 与宿主 fetch 生命周期；`ProviderConfigInput.usage` 由 AuthStorage 管理。
 
-M4 将现有 `POST /v2/billing/meter/get-user-resource` 适配为一个 WorkBuddy UsageProvider，使用 accountId 发送 `X-User-Id`，并显式设置 `retainLastGoodOnFailure: false`。`/workbuddy` 和可选 UI 消费同一 normalized report。Billing 不调用旧 `current/resolveCred`，不读取 Desktop/插件凭据，不创建 refresh 去重器；唯一刷新实现仍是 M1 OAuth callback。积分状态区分 available / unavailable / 未查询，parse 失败、5xx 或 timeout 必须成为 unavailable，不得显示零或 last-good 旧值。后台更新不进入 Chat critical path，显式状态命令才可等待刷新。
+M4 将现有 `POST /v2/billing/meter/get-user-resource` 适配为一个 WorkBuddy UsageProvider，使用 accountId 发送 `X-User-Id`，并显式设置 `retainLastGoodOnFailure: false`。只有显式 `/workbuddy` 消费 normalized report 并临时挂载紧凑 Widget；插件不占用 OMP status line，session/turn 生命周期不主动刷新 Billing。Billing 不调用旧 `current/resolveCred`，不读取 Desktop/插件凭据，不创建 refresh 去重器；唯一刷新实现仍是 M1 OAuth callback。积分状态区分 available / unavailable / 未查询，parse 失败、5xx 或 timeout 必须成为 unavailable，不得显示零或 last-good 旧值。
 
 ### D9 — 目录和 UI 是不同状态边界
 
-Scope 更新先构建候选目录与 ID Set。非空候选直接 `registerProvider`，利用 OMP 对同 source overlay 的原位替换，避免无谓拆除 OAuth/runtime 状态；只有空候选先 `unregisterProvider` 清除 18.2.6 不会被 `models: []` 覆盖的旧行。外部注册成功后原子持久化设置，最后提交内存目录、selector/请求 ID 和 UI 状态；注册或写设置失败必须恢复旧 Provider，且不得提交或虚报新 scope。当前模型被移除时明确要求重选，并在用户选择范围内模型前阻断 retained Model object 的后续 WorkBuddy transport；绝不自动换付费或任意 fallback。
-`stateGeneration` 是仅针对异步展示的内存计数，logout/account switch/scope/session teardown 递增；完成后比对 generation、当前模型和活动会话再应用结果。模型离开 WorkBuddy 时同步清理，迟到响应不能重显。使用 `session_start/turn_start`，接受下一 turn 更新限制；无 UI 时所有交互调用跳过，认证/注册/hooks 始终可用。
+Scope 更新先构建候选目录与 ID Set。非空候选直接 `registerProvider`，利用 OMP 对同 source overlay 的原位替换，避免无谓拆除 OAuth/runtime 状态；只有空候选先 `unregisterProvider` 清除 18.2.6 不会被 `models: []` 覆盖的旧行。外部注册成功后原子持久化设置，最后提交内存目录、selector/请求 ID；注册或写设置失败必须恢复旧 Provider，且不得提交或虚报新 scope。当前模型被移除时明确要求重选，并在用户选择范围内模型前阻断 retained Model object 的后续 WorkBuddy transport；绝不自动换付费或任意 fallback。
+`stateGeneration` 是仅针对异步详情的内存计数，下一 turn、logout/account switch/scope/session teardown 递增；完成后比对 generation、当前模型和活动会话再应用结果。`session_start` / `session_switch` 清除旧显示，`turn_start` 收起显式详情并取消待处理刷新；不使用计时器。无 UI 时所有交互调用跳过，认证/注册/hooks 始终可用。
 
 设置只保存 scope 等非敏感值，使用宿主 getAgentDir 等实际公开目录规则，默认 `~/.omp/agent` 并尊重 `PI_CODING_AGENT_DIR`，不引入新环境变量。
 
@@ -143,7 +143,7 @@ Scope 更新先构建候选目录与 ID Set。非空候选直接 `registerProvid
 | `src/payload.ts` | 有证据的 Gateway delta |
 | `src/credits.ts` | Billing response 与积分状态 |
 | `src/settings.ts` | scope/non-sensitive settings；不接触 Token |
-| `src/ui.ts` | status/widget/notify/select 和 generation-aware rendering |
+| `src/ui.ts` | command-scoped widget/notify/select 和 generation-aware rendering；不挂载 status line |
 
 随里程碑迁移现有实现并更新调用者，不先建立无用抽象或占位模块。更新 tsconfig 让实际实现和必要 contract tests 接受真实类型检查；扩展目录仅有入口，避免 helper 被当扩展加载。
 
@@ -163,7 +163,7 @@ V2 §13 的十二类长期回归全部保留，不用“字段被转发”或源
 - [在线目录/Usage 尚无实际端点/能力证据] → D6/D8 已定义调查、选择和对应任务；保持决策待实测而不是伪造 API。分支不改变安全和对外验收标准。
 - [空免费集合与 builtin fallback 容易冲突] → 目录 fallback 不等于免费 fallback；有效目录空免费必须保留，未知永不免费。
 - [宿主更改 request-bound hook context 或异常策略] → 固定 OMP 18.2.6，使用真实 `ExtensionRunner` 契约测试精确 `ctx.model` 与异常吞没行为；Provider 识别留在 hook context，fail-closed scope guard 留在 WorkBuddy resolver，不改 transport。
-- [不刷新 Widget 即时体验较弱] → 接受 L2，下一 turn 同步；generation 处理旧异步响应。
+- [详情自动收起可能中断慢 Billing] → 下一 turn 是明确用户边界；AbortSignal 取消待处理刷新，用户可再次运行 `/workbuddy`，不使用易竞态的计时器。
 - [真实账号或某模型暂不可用] → 相应 live gate 保持未完成，不以 Mock 或删验收范围代替。
 - [未提交用户修改与基线混淆] → 保存差异证据、不覆盖或代提交用户工作；M0 冻结后重估，不承诺总工期。
 

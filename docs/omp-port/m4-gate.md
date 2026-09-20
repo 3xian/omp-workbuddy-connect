@@ -13,11 +13,11 @@ Tasks 5.1–5.7 are complete:
 - Billing sends `X-User-Id`, does not send unevidenced `X-Enterprise-Id`, and has no credential lookup or refresh path of its own;
 - valid zero credits remain available, while negative/incoherent quantities, empty package lists, HTTP failure, timeout, malformed data, missing identity, and ambiguous stored accounts are unavailable;
 - `validatesCredentials: false` accurately states that Billing is optional usage data, not an evidenced credential-health probe;
-- `/workbuddy`, `/workbuddy free`, `/workbuddy all`, and `/workbuddy logout` expose the required management operations;
-- `src/ui.ts` owns Widget/status rendering and the display-only `stateGeneration` guard;
-- account replacement, scope changes, model departure, logout, session switch, and session teardown invalidate old asynchronous results;
-- every Widget/status/notify operation is guarded by `ctx.hasUI` and contained so optional UI failure cannot enter the Chat plane;
-- `session_start` and `turn_start` schedule optional Billing without awaiting it.
+- `/workbuddy`, `/workbuddy free`, `/workbuddy all`, and `/workbuddy logout` expose the required management operations; scope actions issue no Billing and use one-shot notifications;
+- `src/ui.ts` owns command-scoped Widget rendering and the display-only `stateGeneration` guard;
+- next turn, account replacement, scope changes, logout, session switch, and session teardown invalidate old asynchronous results;
+- every Widget/status-clear/notify operation is guarded by `ctx.hasUI` and contained so optional UI failure cannot enter the Chat plane;
+- `session_start` and `turn_start` do not request Billing or mount persistent WorkBuddy UI.
 
 No legacy credential file, Desktop credential, environment credential, plugin refresh loop, Chat transport, or global fetch interceptor was added.
 
@@ -40,22 +40,20 @@ The parser requires a successful envelope, a non-empty structurally valid `Accou
 
 `test/ui.test.mts` verifies the management surface through the actual extension entry and real OMP `ModelRegistry`/`AuthStorage`:
 
-- `/workbuddy` renders login, account, credits, plan, scope, model count, model source, and Provider state;
+- `/workbuddy` renders compact masked account, credits, plan, scope/model count/source, and Provider state;
+- WorkBuddy never occupies OMP's status line, and the next turn dismisses explicit detail;
 - account A's pending response cannot repaint after switching to B;
 - a pending old-scope response cannot repaint after `/workbuddy free`;
-- leaving WorkBuddy clears Widget/status and rejects the pending result;
-- UI method exceptions are contained;
-- a headless context performs no Widget/status/notify access and starts no optional Billing request.
+- a pending detail response cannot repaint after the next turn;
+- UI method exceptions are contained, while headless context performs no Widget/status/notify access or optional Billing request.
 
 `test/contract/model-scope-lifecycle.test.mts` retains transactional free/all registration, persistence, rollback, current-model removal warning, empty-scope display, unchanged credentials, and restart behavior. `test/contract/provider-logout.test.mts` retains failed-delete truthfulness, successful provider-scoped deletion, pending-credit invalidation, old resolver rejection, and unchanged Desktop-owned data.
 
-`test/session-start.test.mts` now uses a host OAuth row and registered UsageProvider. Its Billing request remains unresolved while `session_start` returns, proving the optional plane does not block startup.
+`test/session-start.test.mts` uses a host OAuth row and registered UsageProvider. It proves `session_start` issues no Billing request and mounts no persistent WorkBuddy UI.
 
 ## Known limitation
 
-OMP 18.2.6 exposes `session_start` and `turn_start`, not a required `model_select` event for this extension. A model switch may therefore update the WorkBuddy Widget/status on the next `turn_start`. Authentication, model resolution, and Chat routing do not wait for or depend on that display refresh.
-
-OMP 18.2.6 publicly exposes aggregate `fetchUsageReports()` but no provider-scoped fetch. The Widget filters the aggregate result after host-managed fetching; another configured provider may also be refreshed when its usage cache expires. This preserves host refresh/cache/timeout/single-flight ownership and is included in the M5 network audit.
+OMP 18.2.6 exposes aggregate `fetchUsageReports()` but no provider-scoped fetch. `/workbuddy` filters the aggregate result after host-managed fetching; another configured provider may also refresh when its usage cache expires. This preserves host refresh/cache/timeout/single-flight ownership and is included in the M5 network audit.
 
 ## Verification
 

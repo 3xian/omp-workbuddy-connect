@@ -83,20 +83,22 @@ const ctx: any = {
   ui,
 };
 
-function billingResponse(remaining: number): Response {
+function billingResponse(remaining: number, bonusRemaining?: number): Response {
+  const accounts = [{
+    PackageName: "Free Plan Subscription",
+    CycleCapacitySize: 100,
+    CycleCapacityRemain: remaining,
+  }];
+  if (bonusRemaining !== undefined) {
+    accounts.push({
+      PackageName: "Bonus Pack",
+      CycleCapacitySize: 20,
+      CycleCapacityRemain: bonusRemaining,
+    });
+  }
   return Response.json({
     code: 0,
-    data: {
-      Response: {
-        Data: {
-          Accounts: [{
-            PackageName: "Free Plan Subscription",
-            CycleCapacitySize: 100,
-            CycleCapacityRemain: remaining,
-          }],
-        },
-      },
-    },
+    data: { Response: { Data: { Accounts: accounts } } },
   });
 }
 
@@ -117,56 +119,78 @@ try {
   assert(sessionStart && sessionSwitch && turnStart && sessionShutdown && command, "management handlers were not registered");
 
   const startResult = await sessionStart({}, ctx);
-  assert(startResult === undefined, "session_start awaited optional Billing");
+  assert(startResult === undefined, "session_start returned an unexpected value");
+  assert(billingCalls === 0, "session_start started unsolicited Billing");
+  assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "session_start mounted persistent WorkBuddy UI");
+
+  const accountADetail = command("", ctx);
   await waitForCalls(1);
-  assert(widgets.at(-1)?.some((line) => line === "积分  查询中"), "startup did not expose the pending state");
+  assert(widgets.at(-1)?.some((line) => line === "积分  查询中"), "explicit status did not expose the pending state");
   assert(widgets.at(-1)?.some((line) => line === "账号  em***@example.com"), "email identity was not rendered redacted");
   assert(!widgets.at(-1)?.some((line) => line.includes("employee@example.com")), "email identity leaked into the Widget");
+  pending[0]!.resolve(billingResponse(9, 4));
+  await accountADetail;
+  const accountALines = widgets.at(-1) ?? [];
+  for (const field of ["账号  ", "范围  ", "模型  ", "积分  ", "套餐  ", "Provider  "]) {
+    assert(accountALines.some((line) => line.startsWith(field)), `/workbuddy omitted ${field.trim()}`);
+  }
+  for (const redundantField of ["登录  ", "模型数  ", "目录  ", "设置  "]) {
+    assert(!accountALines.some((line) => line.startsWith(redundantField)), `/workbuddy retained redundant ${redundantField.trim()}`);
+  }
+  assert(accountALines.some((line) => line === "积分  13"), "account A credits were not rendered");
+  assert(accountALines.length === 7, "compact detail exceeded seven logical lines");
+  assert(accountALines.some((line) => line.includes("Free Plan Subscription 9 / 100  |  Bonus Pack 4 / 20")), "multiple packs were not consolidated");
+  assert(statuses.at(-1) === undefined, "explicit status mounted a WorkBuddy status line");
 
+  await turnStart({}, ctx);
+  assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "next turn did not dismiss WorkBuddy detail");
+  assert(billingCalls === 1, "turn_start started unsolicited Billing");
+
+  const staleAccountRefresh = command("", ctx);
+  await waitForCalls(2);
   await authStorage.remove("workbuddy");
   await authStorage.set("workbuddy", credential("account-b"));
   await sessionSwitch({}, ctx);
-  await waitForCalls(2);
-  assert(pending[0]?.account === "account-a" && pending[1]?.account === "account-b", "account switch used the wrong host identity");
+  assert(billingCalls === 2, "session_switch started unsolicited Billing");
+  assert(widgets.at(-1) === undefined, "session_switch did not dismiss WorkBuddy detail");
+  const accountBDetail = command("", ctx);
+  await waitForCalls(3);
+  assert(pending[1]?.account === "account-a" && pending[2]?.account === "account-b", "account switch used the wrong host identity");
   const widgetsBeforeLateA = widgets.length;
-  pending[0]!.resolve(billingResponse(99));
+  pending[1]!.resolve(billingResponse(99));
   await new Promise((resolve) => setTimeout(resolve, 5));
   assert(widgets.length === widgetsBeforeLateA, "late account A result repainted account B UI");
-  pending[1]!.resolve(billingResponse(8));
-  await new Promise((resolve) => setTimeout(resolve, 5));
+  pending[2]!.resolve(billingResponse(8));
+  await Promise.all([staleAccountRefresh, accountBDetail]);
   assert(widgets.at(-1)?.some((line) => line === "账号  acco…nt-b"), "account B identity was not rendered redacted");
   assert(!widgets.at(-1)?.some((line) => line.includes("account-b")), "account B identity leaked into the Widget");
-  assert(widgets.at(-1)?.some((line) => line === "积分  合计 8"), "account B credits were not rendered");
-
-  const statusPromise = command("", ctx);
-  await waitForCalls(3);
-  pending[2]!.resolve(billingResponse(7));
-  await statusPromise;
-  const statusLines = widgets.at(-1) ?? [];
-  for (const field of ["登录  ", "账号  ", "积分  ", "套餐  ", "范围  ", "模型数  ", "目录  ", "Provider  "]) {
-    assert(statusLines.some((line) => line.startsWith(field)), `/workbuddy omitted ${field.trim()}`);
-  }
+  assert(widgets.at(-1)?.some((line) => line === "积分  8"), "account B credits were not rendered");
 
   await authStorage.invalidateUsageCache("workbuddy");
   const staleScopeRefresh = command("", ctx);
   await waitForCalls(4);
-  const scopeChange = command("free", ctx);
-  await waitForCalls(5);
+  await command("free", ctx);
+  assert(billingCalls === 4, "scope action started an unsolicited Billing request");
   pending[3]!.resolve(billingResponse(66));
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert(!widgets.at(-1)?.some((line) => line === "积分  合计 66"), "old-scope result repainted the new scope");
+  await staleScopeRefresh;
+  assert(!widgets.at(-1)?.some((line) => line === "积分  66"), "old-scope result repainted the new scope");
+  assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "scope action mounted persistent UI");
+  assert(notifications.some((message) => message.includes("范围已切换为 free")), "scope action did not report completion");
+
+  const freeDetail = command("", ctx);
+  await waitForCalls(5);
   pending[4]!.resolve(billingResponse(5));
-  await Promise.all([staleScopeRefresh, scopeChange]);
-  assert(widgets.at(-1)?.some((line) => line === "范围  free"), "free command did not update scope display");
-  assert(widgets.at(-1)?.some((line) => line === "模型数  0"), "free command did not display the empty scope");
+  await freeDetail;
+  assert(widgets.at(-1)?.some((line) => line === "范围  free · 0 模型 · desktop-cache"), "explicit status omitted the empty free scope");
+  assert(widgets.at(-1)?.some((line) => line === "模型  （当前范围为空）"), "explicit status omitted the empty model state");
 
   await authStorage.invalidateUsageCache("workbuddy");
-  await turnStart({}, ctx);
+  const pendingDetail = command("", ctx);
   await waitForCalls(6);
   await turnStart({}, { ...ctx, model: { provider: "openai", id: "gpt" } });
   pending[5]!.resolve(billingResponse(6));
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "late result restored UI after leaving WorkBuddy");
+  await pendingDetail;
+  assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "late result restored UI after the next turn");
 
   const callsBeforeHeadless = billingCalls;
   const headlessUi = new Proxy({}, {
@@ -189,9 +213,8 @@ try {
   };
   await turnStart({}, throwingCtx);
   await sessionShutdown({}, throwingCtx);
-  assert(notifications.some((message) => message.includes("状态已更新")), "/workbuddy did not report status completion");
 
-  console.log("OK: commands, generation guards, optional UI failures, and headless isolation");
+  console.log("OK: command-scoped detail, generation guards, optional UI failures, and headless isolation");
 } finally {
   authStorage.close();
   if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;

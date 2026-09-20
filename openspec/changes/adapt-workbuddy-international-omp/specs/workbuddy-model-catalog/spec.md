@@ -69,7 +69,7 @@ free SHALL 仅包含有充分免费证据的当前模型；已知付费和未知
 - **THEN** 目录通过宿主原生动态发现和缓存提供，来源如实显示；scope 与认证约束不因在线刷新绕过
 
 ### Requirement: MODEL-07 Scope update consistency and persistence
-free/all 切换 SHALL 同步目录、Provider 注册、请求识别 ID 集合、选择器、Widget 与持久化 scope，不修改 OAuth credential 或要求重新登录。空列表 SHALL 真正清除旧选择集合，重启后 scope 保持。被新 scope 移除但仍由 session 持有的旧 WorkBuddy Model object MUST NOT 再发起请求，直到用户明确选择范围内模型。
+free/all 切换 SHALL 同步目录、Provider 注册、请求识别 ID 集合、选择器与持久化 scope，不修改 OAuth credential 或要求重新登录；下一次显式 `/workbuddy` 详情 SHALL 反映已提交范围。空列表 SHALL 真正清除旧选择集合，重启后 scope 保持。被新 scope 移除但仍由 session 持有的旧 WorkBuddy Model object MUST NOT 再发起请求，直到用户明确选择范围内模型。
 
 #### Scenario: Re-register while authenticated
 - **WHEN** 用户从 free 切换到 all 再切回 free

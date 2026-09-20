@@ -71,7 +71,7 @@ Therefore there is exactly one refresh implementation: the OAuth provider callba
 
 ## Critical-plane isolation
 
-Usage is optional management data. Session startup and Chat do not await it. `/workbuddy` may explicitly await a refresh for command output, but background widget/status refresh remains non-blocking. Host usage timeout/cache behavior and UI generation checks prevent Billing latency or failure from entering the Chat critical path.
+Usage is optional management data. Session startup and turns do not request it. `/workbuddy` explicitly awaits a refresh for a temporary compact Widget; the next turn clears that Widget and cancels a pending refresh. WorkBuddy does not occupy OMP's status line. Host usage timeout/cache behavior and UI generation checks prevent Billing latency or failure from entering the Chat critical path.
 
 States remain distinct:
 

@@ -30,6 +30,7 @@ interface RefreshOptions {
   forceRefresh?: boolean;
   notify?: boolean;
   showWhenInactive?: boolean;
+  showWidget?: boolean;
 }
 
 function accountKey(account: OAuthAccountSummary): string {
@@ -54,7 +55,6 @@ export class WorkBuddyUiController {
   #credits: CreditsState = { kind: "unqueried" };
   #activeSessionId: string | undefined;
   #accountKey: string | undefined;
-  #card: string[] | undefined;
 
   constructor(private readonly currentView: () => WorkBuddyUiView) {}
 
@@ -63,32 +63,23 @@ export class WorkBuddyUiController {
     this.#abort.abort(reason);
     this.#abort = new AbortController();
     this.#credits = { kind: "unqueried" };
-    this.#card = undefined;
   }
 
   beginSession(ctx: ExtensionContext): void {
-    const sessionId = ctx.sessionManager.getSessionId();
-    if (this.#activeSessionId !== sessionId) this.invalidate("WorkBuddy session changed");
-    this.#activeSessionId = sessionId;
+    this.invalidate("WorkBuddy session initialized");
+    this.#activeSessionId = ctx.sessionManager.getSessionId();
     this.#invalidateOnAccountChange(ctx);
     if (!ctx.hasUI) return;
-    if (ctx.model?.provider !== WORKBUDDY_PROVIDER) {
-      this.clear(ctx, "WorkBuddy model inactive");
-      return;
-    }
-    this.#render(ctx);
-    void this.refresh(ctx).catch(() => undefined);
+    this.#safeWidget(ctx, undefined);
+    this.#safeStatus(ctx, undefined);
   }
 
   syncTurn(ctx: ExtensionContext): void {
     this.#invalidateOnAccountChange(ctx);
+    this.invalidate("WorkBuddy detail dismissed on next turn");
     if (!ctx.hasUI) return;
-    if (ctx.model?.provider !== WORKBUDDY_PROVIDER) {
-      this.clear(ctx, "WorkBuddy model inactive");
-      return;
-    }
-    if (this.#card) this.#safeWidget(ctx, this.#card);
-    void this.refresh(ctx).catch(() => undefined);
+    this.#safeWidget(ctx, undefined);
+    this.#safeStatus(ctx, undefined);
   }
 
   clear(ctx: ExtensionContext, reason: string): void {
@@ -121,7 +112,7 @@ export class WorkBuddyUiController {
     if (!account) {
       this.invalidate("WorkBuddy account unavailable");
       this.#credits = { kind: "unavailable" };
-      return this.#render(ctx, options.notify);
+      return this.#render(ctx, options.notify, options.showWidget);
     }
 
     const nextAccountKey = accountKey(account);
@@ -136,7 +127,7 @@ export class WorkBuddyUiController {
     const sessionId = ctx.sessionManager.getSessionId();
     const scope = view.scope;
     this.#credits = { kind: "loading" };
-    this.#render(ctx);
+    this.#render(ctx, false, options.showWidget);
 
     try {
       if (options.forceRefresh) {
@@ -152,7 +143,7 @@ export class WorkBuddyUiController {
       if (!this.#isCurrent(ctx, generation, sessionId, scope, nextAccountKey, options.showWhenInactive)) return undefined;
       this.#credits = { kind: "unavailable" };
     }
-    return this.#render(ctx, options.notify);
+    return this.#render(ctx, options.notify, options.showWidget);
   }
 
   #invalidateOnAccountChange(ctx: ExtensionContext): void {
@@ -188,26 +179,23 @@ export class WorkBuddyUiController {
       ctx.sessionManager.getSessionId(),
     );
     const account = accounts.length === 1 && accounts[0]?.accountId ? accounts[0] : undefined;
-    const fallback = view.fallbackReason ? ` · ${FALLBACK_REASON_LABELS[view.fallbackReason]}` : "";
+    const source = `${view.source}${view.fallbackReason ? ` · ${FALLBACK_REASON_LABELS[view.fallbackReason]}` : ""}`;
     const names = view.models.map((model) => model.name).join("  |  ");
     const lines = [
-      `WorkBuddy AI · 国际版 · ${view.scope === "all" ? "全部模型" : "仅免费模型"}`,
-      `登录  ${account ? "已登录" : accounts.length > 1 ? `不可用（${accounts.length} 个账号）` : "未登录"}`,
+      "WorkBuddy AI · 国际版",
       `账号  ${redactIdentity(account?.email || account?.accountId)}`,
-      `范围  ${view.scope}`,
-      `模型数  ${view.models.length}`,
-      `目录  ${view.source}${fallback}`,
+      `范围  ${view.scope} · ${view.models.length} 模型 · ${source}`,
       `模型  ${names || "（当前范围为空）"}`,
     ];
 
     if (this.#credits.kind === "available") {
       const { credits } = this.#credits;
-      lines.push(`积分  合计 ${credits.totalRemaining}`);
-      lines.push(`套餐  ${credits.plans.join("、") || "无可用套餐"}`);
-      for (const pack of credits.packs) {
+      const packs = credits.packs.map((pack) => {
         const amount = pack.limit === undefined ? String(pack.remaining) : `${pack.remaining} / ${pack.limit}`;
-        lines.push(`  ${pack.name}  剩余 ${amount}`);
-      }
+        return `${pack.name} ${amount}`;
+      });
+      lines.push(`积分  ${credits.totalRemaining}`);
+      lines.push(`套餐  ${packs.join("  |  ")}`);
     } else if (this.#credits.kind === "loading") {
       lines.push("积分  查询中");
       lines.push("套餐  查询中");
@@ -227,23 +215,16 @@ export class WorkBuddyUiController {
           ? "已就绪（当前范围无模型）"
           : "已就绪";
     lines.push(`Provider  ${providerState}`);
-    lines.push("设置  /workbuddy free | all | logout");
     return lines;
   }
 
-  #render(ctx: ExtensionContext, notify = false): string[] | undefined {
+  #render(ctx: ExtensionContext, notify = false, showWidget = false): string[] | undefined {
     if (!ctx.hasUI) return undefined;
     const lines = this.#lines(ctx);
-    this.#card = lines;
-    this.#safeWidget(ctx, lines);
-    const status = this.#credits.kind === "available"
-      ? `WorkBuddy · 积分 ${this.#credits.credits.totalRemaining}`
-      : this.#credits.kind === "loading"
-        ? "WorkBuddy · 积分查询中"
-        : this.#credits.kind === "unavailable"
-          ? "WorkBuddy · 积分不可用"
-          : "WorkBuddy · 积分未查询";
-    this.#safeStatus(ctx, status);
+    this.#safeWidget(ctx, showWidget ? lines : undefined);
+    // OMP already owns the persistent status line. WorkBuddy details are
+    // intentionally command-scoped and disappear on the next turn.
+    this.#safeStatus(ctx, undefined);
     if (notify) {
       const message = this.#credits.kind === "available"
         ? `WorkBuddy 状态已更新 · 积分 ${this.#credits.credits.totalRemaining}`

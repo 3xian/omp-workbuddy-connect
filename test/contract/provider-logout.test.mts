@@ -104,6 +104,7 @@ try {
   const start = handlers.session_start?.[0];
   assert(start && command, "extension did not register lifecycle and command handlers");
   await start({}, ctx);
+  const pendingDetail = command("", ctx);
 
   for (let attempt = 0; attempt < 50 && billingCalls === 0; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 1));
@@ -152,7 +153,7 @@ try {
     code: 0,
     data: { Response: { Data: { Accounts: [{ PackageName: "late A", CapacityRemain: 99 }] } } },
   }));
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await pendingDetail;
   assert(widgets.at(-1) === undefined && statuses.at(-1) === undefined, "late A Billing result restored logged-out UI");
 
   statuses.push("积分 99");
