@@ -2,13 +2,13 @@
 
 > **Development status — not release-ready**
 >
-> M0–M3 已完成；M4–M5 尚未完成，因此本分支不可发布。
+> M0–M4 已完成；M5 发布验收尚未完成，因此本分支不可发布。
 > 权威实施进度见 `openspec/changes/adapt-workbuddy-international-omp/tasks.md`。
 > 下文描述当前开发分支行为；尚未通过的里程碑能力会明确标注。
 
 ## 当前开发分支
 
-WorkBuddy AI 国际版 provider for OMP。当前认证、模型目录契约、scope 切换安全与最小 Gateway 兼容已迁移到 OMP；UI/release gate 仍在开发。
+WorkBuddy AI 国际版 provider for OMP。当前认证、模型目录契约、scope 切换安全、最小 Gateway 兼容和非阻塞管理面已迁移到 OMP；release gate 仍在开发。
 
 移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
@@ -50,18 +50,15 @@ omp --profile workbuddy-m3-live \
 
 ## 设置
 
-OMP 没有 DSH 那种插件配置卡片，等价入口有两处：
+管理面完全可选；Billing、Widget 或 TUI 故障不会阻塞登录、Chat 或工具调用。
 
-- **侧栏 widget** — 账号、token 过期时间、目录来源与 fallback 原因、各积分包余量，以及当前模型列表（空范围会明确显示）。
-- **`/workbuddy`** — 弹出选择菜单：
+- **侧栏 Widget/status** — 显示登录、账号、积分、套餐、scope、模型数、目录来源和 Provider 状态。积分明确区分未查询、查询中、可用（含真实 0）和不可用；失败后不沿用 last-good 值。
+- **`/workbuddy`** — 强制刷新并显示当前状态。
+- **`/workbuddy free`** — 切到有明确免费证据的模型范围。
+- **`/workbuddy all`** — 切到当前插件可识别的全部模型。
+- **`/workbuddy logout`** — 失效异步 UI、删除 OMP WorkBuddy credential，并清除 Widget/status。
 
-  ```
-  刷新积分与账号
-  列出全部模型（含付费）   ← 切换范围，scope 存 ~/.omp/agent/.workbuddy-settings.json
-  断开登录
-  ```
-
-  也接受参数：`/workbuddy free` · `/workbuddy all`。断开认证请使用宿主命令 `/logout workbuddy`。
+scope 存于 `~/.omp/agent/.workbuddy-settings.json`（或 `PI_CODING_AGENT_DIR`）。模型切换依赖 `session_start` / `turn_start`，因此 Widget 允许到下一次 turn 才反映新模型；这不影响认证或请求路由。Headless 模式不会调用 select/notify/widget/status。
 
 非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除 OMP 18.2.6 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存与 Widget 状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
 
@@ -78,7 +75,7 @@ OMP 没有 DSH 那种插件配置卡片，等价入口有两处：
 npx --yes bun@1.3.14 extensions/workbuddy.ts --self-check
 ```
 
-覆盖最小 payload compatibility boundary、请求预算限制、积分解析与 widget 渲染；模型和认证边界由下列独立测试覆盖。
+覆盖最小 payload compatibility boundary、请求预算限制与严格积分解析；模型、认证和 UI 生命周期边界由下列独立测试覆盖。
 
 ## 与上游的差异
 
@@ -104,11 +101,14 @@ npx --yes bun@1.3.14 test/auth.test.mts
 npx --yes bun@1.3.14 test/provider.test.mts
 npx --yes bun@1.3.14 test/scope.test.mts
 npx --yes bun@1.3.14 test/session-start.test.mts
+npx --yes bun@1.3.14 test/credits.test.mts
+npx --yes bun@1.3.14 test/ui.test.mts
 npx --yes bun@1.3.14 test/contract/model-scope-lifecycle.test.mts
 npx --yes bun@1.3.14 test/contract/before-provider-request-runtime.test.mts
 npx --yes bun@1.3.14 test/contract/persisted-credential-restart.test.mts
 npx --yes bun@1.3.14 test/contract/request-identity-binding.test.mts
 npx --yes bun@1.3.14 test/contract/task-runtime-contract.test.mts
+npx --yes bun@1.3.14 test/contract/provider-logout.test.mts
 npx tsc --noEmit
 ```
 

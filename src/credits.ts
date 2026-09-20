@@ -1,0 +1,174 @@
+import type {
+  UsageCredential,
+  UsageLimit,
+  UsageProvider,
+  UsageReport,
+} from "@oh-my-pi/pi-ai";
+import { fetchWorkBuddyBillingEnvelope } from "./workbuddy-api.ts";
+
+export const WORKBUDDY_USAGE_PROVIDER = "workbuddy";
+
+export interface WorkBuddyCreditPack {
+  id: string;
+  name: string;
+  remaining: number;
+  limit?: number;
+  used?: number;
+}
+
+export interface WorkBuddyCredits {
+  totalRemaining: number;
+  totalLimit?: number;
+  plans: string[];
+  packs: WorkBuddyCreditPack[];
+}
+
+type RecordValue = Record<string, unknown>;
+type CredentialGuard = (credential: UsageCredential) => void;
+
+function record(value: unknown): RecordValue | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as RecordValue
+    : undefined;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function packageQuantity(account: RecordValue): { remaining: number; limit?: number; used?: number } | undefined {
+  const hasCycleValues = ["CycleCapacitySize", "CycleCapacityRemain", "CycleCapacityUsed"]
+    .some((key) => Object.hasOwn(account, key));
+  const remaining = finiteNumber(account[hasCycleValues ? "CycleCapacityRemain" : "CapacityRemain"]);
+  if (remaining === undefined) return undefined;
+
+  const rawLimit = finiteNumber(account[hasCycleValues ? "CycleCapacitySize" : "CapacitySize"]);
+  const rawUsed = finiteNumber(account[hasCycleValues ? "CycleCapacityUsed" : "CapacityUsed"]);
+  const normalizedRemaining = Math.max(0, remaining);
+  const limit = rawLimit !== undefined && rawLimit >= 0 ? rawLimit : undefined;
+  const used = rawUsed !== undefined && rawUsed >= 0
+    ? rawUsed
+    : limit !== undefined && normalizedRemaining <= limit
+      ? limit - normalizedRemaining
+      : undefined;
+  return { remaining: normalizedRemaining, ...(limit !== undefined ? { limit } : {}), ...(used !== undefined ? { used } : {}) };
+}
+
+/** Strictly accepts a successful Billing envelope. Invalid data is unavailable, never zero. */
+export function parseWorkBuddyCredits(envelope: unknown): WorkBuddyCredits | undefined {
+  const root = record(envelope);
+  if (!root || root.code !== 0) return undefined;
+  const data = record(root.data);
+  const response = record(data?.Response);
+  const payload = record(response?.Data);
+  if (!payload || !Array.isArray(payload.Accounts)) return undefined;
+
+  const packs: WorkBuddyCreditPack[] = [];
+  for (const [index, value] of payload.Accounts.entries()) {
+    const account = record(value);
+    if (!account) return undefined;
+    const quantity = packageQuantity(account);
+    if (!quantity) return undefined;
+    const name = typeof account.PackageName === "string" && account.PackageName.trim() !== ""
+      ? account.PackageName.trim()
+      : `Package ${index + 1}`;
+    packs.push({ id: `package:${index}:${name}`, name, ...quantity });
+  }
+
+  const totalRemaining = packs.reduce((sum, pack) => sum + pack.remaining, 0);
+  const hasCompleteLimits = packs.every((pack) => pack.limit !== undefined && pack.remaining <= pack.limit);
+  const totalLimit = hasCompleteLimits
+    ? packs.reduce((sum, pack) => sum + pack.limit!, 0)
+    : undefined;
+  return {
+    totalRemaining,
+    ...(totalLimit !== undefined ? { totalLimit } : {}),
+    plans: [...new Set(packs.map((pack) => pack.name))],
+    packs,
+  };
+}
+
+function usageLimit(pack: WorkBuddyCreditPack, credential: UsageCredential): UsageLimit {
+  const fraction = pack.limit && pack.limit > 0 ? pack.remaining / pack.limit : undefined;
+  return {
+    id: pack.id,
+    label: pack.name,
+    scope: {
+      provider: WORKBUDDY_USAGE_PROVIDER,
+      accountId: credential.accountId,
+      orgId: credential.orgId,
+      tier: pack.name,
+    },
+    amount: {
+      unit: "credits",
+      remaining: pack.remaining,
+      ...(pack.limit !== undefined ? { limit: pack.limit } : {}),
+      ...(pack.used !== undefined ? { used: pack.used } : {}),
+    },
+    status: pack.remaining === 0 ? "exhausted" : fraction !== undefined && fraction <= 0.2 ? "warning" : "ok",
+  };
+}
+
+export function summarizeWorkBuddyUsage(report: UsageReport): WorkBuddyCredits | undefined {
+  if (report.provider !== WORKBUDDY_USAGE_PROVIDER) return undefined;
+  const metadata = report.metadata;
+  const totalRemaining = finiteNumber(metadata?.totalRemaining);
+  const totalLimit = finiteNumber(metadata?.totalLimit);
+  const plans = Array.isArray(metadata?.plans)
+    ? metadata.plans.filter((value): value is string => typeof value === "string")
+    : [];
+  if (totalRemaining === undefined || totalRemaining < 0) return undefined;
+
+  const packs: WorkBuddyCreditPack[] = [];
+  for (const limit of report.limits) {
+    if (limit.amount.unit !== "credits" || !Number.isFinite(limit.amount.remaining)) return undefined;
+    const remaining = Math.max(0, limit.amount.remaining!);
+    packs.push({
+      id: limit.id,
+      name: limit.label,
+      remaining,
+      ...(limit.amount.limit !== undefined ? { limit: limit.amount.limit } : {}),
+      ...(limit.amount.used !== undefined ? { used: limit.amount.used } : {}),
+    });
+  }
+  return { totalRemaining, ...(totalLimit !== undefined ? { totalLimit } : {}), plans, packs };
+}
+
+export function createWorkBuddyUsageProvider(validateCredential: CredentialGuard): UsageProvider {
+  return {
+    id: WORKBUDDY_USAGE_PROVIDER,
+    retainLastGoodOnFailure: false,
+    validatesCredentials: true,
+    supports: ({ provider, credential }) => provider === WORKBUDDY_USAGE_PROVIDER
+      && credential.type === "oauth"
+      && Boolean(credential.accessToken && credential.accountId),
+    async fetchUsage(params, ctx): Promise<UsageReport | null> {
+      if (params.provider !== WORKBUDDY_USAGE_PROVIDER || params.credential.type !== "oauth") return null;
+      try {
+        validateCredential(params.credential);
+        const envelope = await fetchWorkBuddyBillingEnvelope(params.credential, ctx.fetch, params.signal);
+        const credits = parseWorkBuddyCredits(envelope);
+        if (!credits) return null;
+        return {
+          provider: WORKBUDDY_USAGE_PROVIDER,
+          fetchedAt: Date.now(),
+          limits: credits.packs.map((pack) => usageLimit(pack, params.credential)),
+          metadata: {
+            source: "workbuddy-billing",
+            accountId: params.credential.accountId,
+            ...(params.credential.orgId ? { orgId: params.credential.orgId } : {}),
+            totalRemaining: credits.totalRemaining,
+            ...(credits.totalLimit !== undefined ? { totalLimit: credits.totalLimit } : {}),
+            plans: credits.plans,
+          },
+        };
+      } catch (error) {
+        ctx.logger?.warn("WorkBuddy usage request unavailable", {
+          provider: WORKBUDDY_USAGE_PROVIDER,
+          error: error instanceof Error ? error.name : "unknown",
+        });
+        return null;
+      }
+    },
+  };
+}

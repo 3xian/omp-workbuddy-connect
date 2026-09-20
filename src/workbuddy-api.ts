@@ -281,3 +281,38 @@ export async function refreshPluginToken(
   throwIfCancelled(options.signal);
   return envelopeData(envelope, response);
 }
+
+function formatBillingTimestamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+export async function fetchWorkBuddyBillingEnvelope(
+  credential: { accessToken?: string; accountId?: string },
+  fetcher: Fetch,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const accessToken = credential.accessToken?.trim();
+  const accountId = credential.accountId?.trim();
+  if (!accessToken || !accountId) throw new Error("WorkBuddy Billing credential identity is incomplete");
+  const now = new Date();
+  const response = await fetcher(`${WORKBUDDY_API_BASE}/billing/meter/get-user-resource`, {
+    method: "POST",
+    headers: {
+      ...WORKBUDDY_PROTOCOL_HEADERS,
+      Authorization: `Bearer ${accessToken}`,
+      "X-User-Id": accountId,
+    },
+    body: JSON.stringify({
+      PageNumber: 1,
+      PageSize: 100,
+      ProductCode: "p_tcaca",
+      Status: [0, 3],
+      PackageEndTimeRangeBegin: formatBillingTimestamp(now),
+      PackageEndTimeRangeEnd: formatBillingTimestamp(new Date(now.getTime() + 365 * 101 * 24 * 60 * 60 * 1000)),
+    }),
+    signal,
+  });
+  if (!response.ok) throw new Error(`WorkBuddy Billing HTTP ${response.status}`);
+  return response.json();
+}

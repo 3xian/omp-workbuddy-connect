@@ -53,13 +53,13 @@
 
 ## 5. M4 — Commands、Credits 与可选 UI
 
-- [ ] 5.1 按 M0 ADR 接通 WorkBuddy UsageProvider，设置 `retainLastGoodOnFailure: false`，从宿主 credential 的 accountId 发送 Billing `X-User-Id`，不读旧文件、不自行 refresh、不在无证据时新增 `X-Enterprise-Id`；成功响应可得账号/积分/套餐。（UX-03；D8）
-- [ ] 5.2 实现 available/unavailable/未查询状态，拒绝把无效响应解析为零积分或沿用 last-good 旧值；验证 genuine zero、success→5xx、超时、慢响应、解析失败都不破坏正常 Chat。（UX-01/03）
-- [ ] 5.3 完成 `/workbuddy` 状态展示和 free/all/logout 用户交互，包含 login/account/credits/plan/scope/model count/model source/provider state；验证各命令输出、当前模型移除提示及 credential 不变/真正删除。（UX-01/02）
-- [ ] 5.4 提取 `src/ui.ts`，以 session_start/turn_start 同步当前模型的 Widget/status，启动只触发非阻塞更新；迁移 session-start 测试到宿主凭据边界，永久验证 Billing 慢及 UI 失败不阻塞启动/Chat。（UX-03/05）
-- [ ] 5.5 实现 stateGeneration 与当前模型/活动会话检查，logout、account switch、scope change、session teardown 失效旧请求；保留退出迟到积分回归，并验证换号、换范围、离开 WorkBuddy、关闭会话均不恢复旧 Widget。（UX-04）
-- [ ] 5.6 所有 UI 操作以 hasUI 隔离，非 UI 认证/注册/hook 正常装配；保留 headless 无 UI 依赖回归，验证没有 select/notify/widget/status 调用也能运行请求与工具。（UX-06、REL-01）
-- [ ] 5.7 验收四个命令、Billing 正常/失败/慢、pending credits logout、scope restart、headless 与无 UI 访问；记录 Widget 下一 turn 才更新的限制后通过 M4。（UX-01–07）
+- [x] 5.1 按 M0 ADR 接通 WorkBuddy UsageProvider，设置 `retainLastGoodOnFailure: false`，从宿主 credential 的 accountId 发送 Billing `X-User-Id`，不读旧文件、不自行 refresh、不在无证据时新增 `X-Enterprise-Id`；成功响应可得账号/积分/套餐。（UX-03；D8）
+- [x] 5.2 实现 available/unavailable/未查询状态，拒绝把无效响应解析为零积分或沿用 last-good 旧值；验证 genuine zero、success→5xx、超时、慢响应、解析失败都不破坏正常 Chat。（UX-01/03）
+- [x] 5.3 完成 `/workbuddy` 状态展示和 free/all/logout 用户交互，包含 login/account/credits/plan/scope/model count/model source/provider state；验证各命令输出、当前模型移除提示及 credential 不变/真正删除。（UX-01/02）
+- [x] 5.4 提取 `src/ui.ts`，以 session_start/turn_start 同步当前模型的 Widget/status，启动只触发非阻塞更新；迁移 session-start 测试到宿主凭据边界，永久验证 Billing 慢及 UI 失败不阻塞启动/Chat。（UX-03/05）
+- [x] 5.5 实现 stateGeneration 与当前模型/活动会话检查，logout、account switch、scope change、session teardown 失效旧请求；保留退出迟到积分回归，并验证换号、换范围、离开 WorkBuddy、关闭会话均不恢复旧 Widget。（UX-04）
+- [x] 5.6 所有 UI 操作以 hasUI 隔离，非 UI 认证/注册/hook 正常装配；保留 headless 无 UI 依赖回归，验证没有 select/notify/widget/status 调用也能运行请求与工具。（UX-06、REL-01）
+- [x] 5.7 验收四个命令、Billing 正常/失败/慢、pending credits logout、scope restart、headless 与无 UI 访问；记录 Widget 下一 turn 才更新的限制后通过 M4。（UX-01–07）
 
 ## 6. M5 — Agent、四层验收与发布证据
 

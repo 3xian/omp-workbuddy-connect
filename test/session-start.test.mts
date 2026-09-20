@@ -1,43 +1,43 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
-// A legacy credential deliberately remains on disk. M1 must ignore it: only
-// the empty OMP AuthStorage below is authoritative, and no Billing call starts.
+// M4 exercises the host credential/UsageProvider boundary. Billing deliberately
+// remains pending while session_start must return immediately.
 const authDir = join(tmpdir(), `workbuddy-session-start-${process.pid}`);
 await mkdir(authDir, { recursive: true });
-await writeFile(join(authDir, ".workbuddy-auth.json"), JSON.stringify({
-  version: 1,
-  credential: {
-    accessToken: "test-token",
-    refreshToken: "",
-    expiresAtMs: Date.now() + 60 * 60 * 1000,
-    domain: "",
-    uid: "test-user",
-  },
-}));
 const originalAgentDir = process.env.PI_CODING_AGENT_DIR;
 process.env.PI_CODING_AGENT_DIR = authDir;
 
-const authStorage = await AuthStorage.create(join(authDir, "auth.db"));
+let fetchCalls = 0;
+let releaseBilling!: (response: Response) => void;
+const authStorage = await AuthStorage.create(join(authDir, "auth.db"), {
+  usageFetch: async () => {
+    fetchCalls += 1;
+    return new Promise<Response>((resolve) => {
+      releaseBilling = resolve;
+    });
+  },
+});
+await authStorage.set("workbuddy", {
+  type: "oauth",
+  access: "host-access",
+  refresh: "host-refresh",
+  expires: Date.now() + 60 * 60 * 1000,
+  accountId: "host-account",
+});
 const modelRegistry = new ModelRegistry(authStorage, join(authDir, "models.yml"), {
   cacheDbPath: join(authDir, "models.db"),
 });
-const originalFetch = globalThis.fetch;
-let fetchCalls = 0;
 try {
-  globalThis.fetch = async () => {
-    fetchCalls += 1;
-    return new Response(null, { status: 500 });
-  };
 
   const ext: any = await import("../extensions/workbuddy.ts");
   const handlers: Record<string, Function[]> = {};
   const pi: any = {
     on: (name: string, fn: Function) => { (handlers[name] ??= []).push(fn); },
-    registerProvider: () => {},
+    registerProvider: (name: string, config: unknown) => modelRegistry.registerProvider(name, config as never),
     unregisterProvider: () => {},
     registerCommand: () => {},
   };
@@ -47,6 +47,7 @@ try {
 
   const ui = { setWidget() {}, setStatus() {}, notify() {} };
   const context = {
+    hasUI: true,
     model: { provider: "workbuddy" },
     ui,
     modelRegistry,
@@ -59,12 +60,15 @@ try {
   if (result === Symbol.for("timed-out")) {
     throw new Error("session_start is blocked by the WorkBuddy network request");
   }
-  await Promise.resolve();
-  if (fetchCalls !== 0) throw new Error(`legacy credential triggered ${fetchCalls} network request(s)`);
-  console.log("OK: session_start returns without waiting for WorkBuddy network");
+  for (let attempt = 0; attempt < 50 && fetchCalls === 0; attempt += 1) await sleep(1);
+  if (fetchCalls !== 1) throw new Error(`host UsageProvider started ${fetchCalls} Billing request(s)`);
+  releaseBilling(Response.json({
+    code: 0,
+    data: { Response: { Data: { Accounts: [] } } },
+  }));
+  console.log("OK: session_start returns without waiting for host Billing");
 } finally {
   authStorage.close();
-  globalThis.fetch = originalFetch;
   if (originalAgentDir === undefined) {
     delete process.env.PI_CODING_AGENT_DIR;
   } else {

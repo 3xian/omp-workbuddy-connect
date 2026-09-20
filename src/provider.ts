@@ -1,6 +1,7 @@
-import type { AuthStorage, Model, OAuthAccess, OAuthCredentials } from "@oh-my-pi/pi-ai";
+import type { AuthStorage, Model, OAuthAccess, OAuthCredentials, UsageCredential } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext, ProviderConfig } from "@oh-my-pi/pi-coding-agent";
 import { loginWorkBuddy, refreshWorkBuddyOAuth, validateRequestCredential, validateStoredCredential } from "./auth.ts";
+import { createWorkBuddyUsageProvider } from "./credits.ts";
 import {
   WORKBUDDY_API_BASE,
   WORKBUDDY_ORIGIN,
@@ -57,12 +58,6 @@ function validateResolvedIdentity(access: OAuthAccess, binding: RuntimeBinding):
   return access;
 }
 
-export interface WorkBuddyBillingAccess {
-  accessToken: string;
-  uid: string;
-  enterpriseId?: string;
-  email?: string;
-}
 
 export interface WorkBuddyProviderController {
   bindContext(context: ExtensionContext): void;
@@ -70,8 +65,6 @@ export interface WorkBuddyProviderController {
   config(models: ProviderModels): ProviderConfig;
   logout(): Promise<void>;
   shutdown(): void;
-  /** Temporary legacy Billing bridge; M4 replaces this with the host UsageProvider. */
-  resolveBillingAccess(signal?: AbortSignal): Promise<WorkBuddyBillingAccess>;
 }
 
 export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): WorkBuddyProviderController {
@@ -158,6 +151,22 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
     });
   }
 
+  function validateBillingCredential(credential: UsageCredential): void {
+    const currentBinding = requireBinding();
+    const account = validateSingleStoredAccount(currentBinding);
+    if (
+      credential.type !== "oauth"
+      || !credential.accessToken
+      || !credential.accountId
+      || credential.accountId !== account.accountId
+      || credential.orgId !== account.orgId
+    ) {
+      throw identityError("Billing credential does not match the sole stored account");
+    }
+  }
+
+  const usage = createWorkBuddyUsageProvider(validateBillingCredential);
+
   return {
     bindContext(context) {
       binding = {
@@ -177,6 +186,7 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
         baseUrl: WORKBUDDY_API_BASE,
         api: "openai-completions",
         headers: WORKBUDDY_FIXED_HEADERS,
+        usage,
         oauth: {
           name: "WorkBuddy AI",
           login: async (callbacks) => {
@@ -217,27 +227,6 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
       binding = undefined;
       lifecycleAbort.abort("WorkBuddy extension shutdown");
       authenticationAbort.abort("WorkBuddy extension shutdown");
-    },
-    async resolveBillingAccess(signal) {
-      const currentBinding = requireBinding();
-      validateSingleStoredAccount(currentBinding);
-      const requestSignal = combinedSignal(signal);
-      const resolved = await currentBinding.authStorage.getOAuthAccess(
-        WORKBUDDY_PROVIDER,
-        currentBinding.sessionId,
-        { signal: requestSignal },
-      );
-      requestSignal.throwIfAborted();
-      const latestBinding = requireBinding();
-      if (latestBinding !== currentBinding) throw identityError("session changed during credential resolution");
-      if (!resolved) throw identityError("no usable OAuth credential");
-      const access = validateResolvedIdentity(resolved, latestBinding);
-      return {
-        accessToken: access.accessToken,
-        uid: access.accountId!,
-        ...(access.orgId ? { enterpriseId: access.orgId } : {}),
-        ...(access.email ? { email: access.email } : {}),
-      };
     },
   };
 }

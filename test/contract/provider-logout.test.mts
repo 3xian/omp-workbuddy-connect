@@ -28,7 +28,9 @@ await writeFile(productConfigPath, JSON.stringify({
   }],
 }));
 
-const authStorage = await AuthStorage.create(join(temp, "auth.db"));
+const authStorage = await AuthStorage.create(join(temp, "auth.db"), {
+  usageFetch: (input, init) => globalThis.fetch(input, init),
+});
 const registry = new ModelRegistry(authStorage, join(temp, "models.yml"), {
   cacheDbPath: join(temp, "models.db"),
 });
@@ -84,6 +86,7 @@ const ui = {
   async select() { return undefined; },
 };
 const ctx = {
+  hasUI: true,
   model: { provider: "workbuddy" },
   modelRegistry: registry,
   sessionManager: { getSessionId: () => "logout-contract" },

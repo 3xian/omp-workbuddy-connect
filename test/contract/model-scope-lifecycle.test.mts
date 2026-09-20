@@ -84,6 +84,7 @@ const pi: any = {
 const widgets: Array<string[] | undefined> = [];
 const notifications: Array<{ message: string; type?: string }> = [];
 const ctx: any = {
+  hasUI: true,
   model: undefined,
   modelRegistry: registry,
   sessionManager: { getSessionId: () => "scope-contract" },
