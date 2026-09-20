@@ -55,8 +55,8 @@
 
 - [x] 5.1 按 M0 ADR 接通 WorkBuddy UsageProvider，设置 `retainLastGoodOnFailure: false`，从宿主 credential 的 accountId 发送 Billing `X-User-Id`，不读旧文件、不自行 refresh、不在无证据时新增 `X-Enterprise-Id`；成功响应可得账号/积分/套餐。（UX-03；D8）
 - [x] 5.2 实现 available/unavailable/未查询状态，拒绝把无效响应解析为零积分或沿用 last-good 旧值；验证 genuine zero、success→5xx、超时、慢响应、解析失败都不破坏正常 Chat。（UX-01/03）
-- [x] 5.3 完成 `/workbuddy` 按需详情和 free/all/logout 用户交互，详情包含脱敏 account、credits/plan、scope/model count/model source/provider state；scope action 不查询 Billing，使用一次性通知且不挂载常驻详情。（UX-01/02）
-- [x] 5.4 提取 `src/ui.ts`；默认不挂载 Widget 或 WorkBuddy status line，session/turn 不主动查询 Billing，显式 `/workbuddy` 临时显示紧凑 Widget，下一 turn 收起并取消待处理刷新。（UX-03/05）
+- [x] 5.3 完成 `/workbuddy` 按需详情和 free/all/logout 用户交互，详情包含脱敏 account、credits/plan、scope/model count/model source/provider state，模型名单最多前四项加剩余数量；scope action 不查询 Billing，使用一次性通知且不挂载常驻详情。（UX-01/02）
+- [x] 5.4 提取 `src/ui.ts`；默认不挂载 Widget 或 WorkBuddy status line，session/turn 不主动查询 Billing，显式 `/workbuddy` 临时显示紧凑 Widget，下一 turn 收起并使待处理详情刷新失效，迟到结果不得重绘。（UX-03/05）
 - [x] 5.5 实现 stateGeneration 与当前模型/活动会话检查，下一 turn、logout、account switch、scope change、session teardown 失效旧请求；验证迟到积分不恢复已收起或退出后的 Widget。（UX-04）
 - [x] 5.6 所有 UI 操作以 hasUI 隔离，非 UI 认证/注册/hook 正常装配；保留 headless 无 UI 依赖回归，验证没有 select/notify/widget/status 调用也能运行请求与工具。（UX-06、REL-01）
 - [x] 5.7 验收四个命令、Billing 正常/失败/慢、pending credits logout、scope restart、next-turn dismiss、headless 与无 UI 访问后通过 M4。（UX-01–07）

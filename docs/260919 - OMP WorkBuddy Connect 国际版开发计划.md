@@ -278,21 +278,21 @@ model.provider === "workbuddy"
  目标：管理功能正确，并与核心调用解耦。
 
 
- 1. /workbuddy 展示登录状态、账号、积分、套餐、scope、模型数和 Provider 状态。
- 2. /workbuddy free|all：
+ 1. `/workbuddy` 按需展示脱敏账号、积分/套餐、scope/模型数/来源和 Provider 状态。
+ 2. `/workbuddy free|all`：
    - 构建新目录；
    - 更新 Provider 和 hook 的 ID 集合；
    - 持久化 scope；
-   - 同步 Widget；
-   - 不改 credential。
+   - 清除旧详情并发送一次性通知；
+   - 不查询 Billing、不改 credential。
  3. 对当前模型被移出 scope 的情况明确提示，不自动切换到付费模型。
- 4. /workbuddy logout 调用认证删除路径，清理 Widget/status。
+ 4. `/workbuddy logout` 调用认证删除路径，清理 Widget/status key。
  5. 积分认证从 OMP 获取，不创建第二套刷新器。
  6. 积分查询失败显示 unavailable，而不是零积分。
- 7. session_start/turn_start 更新显示，启动不等待积分网络请求。
- 8. ctx.hasUI === false 时跳过 UI。
- 9. 防止迟到的积分响应在 logout 或切换模型后恢复旧 Widget。
- 10. 设置路径使用宿主目录规则，尊重 PI_CODING_AGENT_DIR。
+ 7. `session_start` / `session_switch` 只绑定 runtime 并清理旧显示；`turn_start` 收起显式详情并使迟到结果失效；三者均不查询 Billing。
+ 8. `ctx.hasUI === false` 时跳过 UI。
+ 9. WorkBuddy 不挂载常驻 status line，不使用 timer。
+ 10. 设置路径使用宿主目录规则，尊重 `PI_CODING_AGENT_DIR`。
 
 
  - 四个必需命令全部可用；

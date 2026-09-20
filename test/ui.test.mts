@@ -16,14 +16,14 @@ interface PendingBilling {
 const temp = await mkdtemp(join(tmpdir(), "workbuddy-ui-"));
 const productConfig = join(temp, "product-config.json");
 await writeFile(productConfig, JSON.stringify({
-  models: [{
-    id: "ui-model",
-    name: "UI Model",
+  models: ["UI Model", "UI Model 2", "UI Model 3", "UI Model 4", "UI Model 5", "UI Model 6"].map((name, index) => ({
+    id: index === 0 ? "ui-model" : `ui-model-${index + 1}`,
+    name,
     credits: "x1.00",
     maxInputTokens: 32_000,
     maxOutputTokens: 4_096,
     supportsReasoning: false,
-  }],
+  })),
 }));
 await writeFile(join(temp, ".workbuddy-settings.json"), JSON.stringify({ scope: "all" }));
 const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
@@ -140,6 +140,8 @@ try {
   assert(accountALines.some((line) => line === "积分  13"), "account A credits were not rendered");
   assert(accountALines.length === 7, "compact detail exceeded seven logical lines");
   assert(accountALines.some((line) => line.includes("Free Plan Subscription 9 / 100  |  Bonus Pack 4 / 20")), "multiple packs were not consolidated");
+  assert(accountALines.some((line) => line === "范围  all · 6 模型 · desktop-cache"), "detail rendered the wrong all-scope model count");
+  assert(accountALines.some((line) => line === "模型  UI Model · x1.00 | UI Model 2 · x1.00 | UI Model 3 · x1.00 | UI Model 4 · x1.00 | … +2"), "detail did not truncate a long model list");
   assert(statuses.at(-1) === undefined, "explicit status mounted a WorkBuddy status line");
 
   await turnStart({}, ctx);

@@ -55,6 +55,34 @@ PASS: plugin removed; subsequent plugin list was empty
 
 This verifies GitHub resolution, installation, discovery, health checks, and uninstall against the committed production implementation. The published `#v1.1.5` tag was subsequently installed, diagnosed, and uninstalled successfully with the same result. Both executions placed external Bun `1.3.14` on `$PATH`: OMP 18.2.6 Plugin Manager invokes `bun` for GitHub install/uninstall even when OMP itself is a compiled binary. The M5 OAuth/restart evidence used the same production implementation through an official local install.
 
+## v1.1.6 Post-release UI Patch Evidence
+
+`v1.1.6` points to `bf08c15223f0516f521534889ae14a98b467b574`. This patch changed only the optional management surface:
+
+- no persistent WorkBuddy Widget or status line;
+- no Billing request from `session_start`, `session_switch`, or `turn_start`;
+- `/workbuddy` is the sole automatic Billing/detail entry and renders a compact command-scoped Widget;
+- `/workbuddy free` and `/workbuddy all` perform the transactional scope change and emit a one-shot notification without Billing;
+- the next `turn_start` clears detail and invalidates its generation, so a late Billing result cannot repaint UI;
+- no timer or Chat/Auth/Provider/Gateway path was added.
+
+| v1.1.6 verification | Result |
+|---|---|
+| `npm test` | PASS — 19/19 permanent regression scripts |
+| `npm run typecheck` | PASS |
+| Real OMP `18.2.6` TUI smoke | PASS — seven-line `/workbuddy` detail; no WorkBuddy status line |
+| GitHub tag install | PASS — manifest version `1.1.6` |
+| `omp plugin doctor --json` | PASS — plugin status `ok` |
+| Isolated verification profile cleanup | PASS |
+
+The M0–M5 Auth, Model, Gateway, Billing, Agent, and live-service evidence below is the frozen `v1.1.5` release record and is inherited because those paths did not change. Those live scenarios were not all re-executed solely for the UI patch. The `v1.1.5` Widget timing limitation below is historical and is superseded for `v1.1.6` by this command-scoped UI addendum.
+
+### v1.1.7 Documentation and Compactness Polish
+
+`v1.1.7` preserves the v1.1.6 runtime boundary and adds four scoped corrections: shared host Usage requests are described as display-invalidated rather than guaranteed network-cancelled; V2 and original lifecycle requirements now match command-scoped UI; the stale `session_start` comment is corrected; and the model row shows at most four names plus `… +N`.
+
+Verification repeated on OMP `18.2.6`: `npm test` passed all 19 permanent scripts, `npm run typecheck` passed, and an isolated real TUI rendered the seven-line Widget with no WorkBuddy status line. The synthetic six-model UI regression rendered four names plus `… +2`. Auth, Provider, Gateway, and Chat production paths are unchanged and inherit the live evidence below.
+
 ## Release Matrix
 
 | Domain / case | Result | Execution evidence | Implementation / durable evidence |
@@ -125,13 +153,13 @@ Controlled HTTP faults are deterministic executions of the production UsageProvi
 
 Detailed AUTH/MODEL/GATE/UX mappings remain in `docs/omp-port/requirement-implementation-test-matrix.md`; M5 changes update its REL rows rather than duplicating all earlier evidence here.
 
-## Known limitations
+## v1.1.5 Historical Known Limitations
 
 1. Officially verified only on OMP `18.2.6` and WorkBuddy international `https://www.workbuddy.ai`.
 2. Exactly one stored WorkBuddy account is supported. Zero/multiple rows, missing identity, or identity mismatch fail closed; no credential rotation is attempted.
-3. Widget/status may update on the next `turn_start` after model selection.
+3. Historical v1.1.5 UI: Widget/status could update on the next `turn_start` after model selection. Superseded by the v1.1.6 command-scoped UI addendum above.
 4. Dynamic model metadata comes from the Desktop product cache. Builtin fallback supports `all` only; it is not free evidence.
 5. v1 does not import Desktop credentials, add a custom Provider transport, use an online dynamic-catalog endpoint, or provide immediate model-selector UI refresh.
-6. OMP 18.2.6 exposes aggregate usage refresh. The Widget filters to WorkBuddy after the host fetch, but another configured provider may also refresh when its cache expires.
+6. OMP 18.2.6 exposes aggregate usage refresh. The historical v1.1.5 Widget filtered to WorkBuddy after the host fetch; v1.1.6+ performs the same filtering only for explicit `/workbuddy`. Another configured provider may also refresh when its usage cache expires.
 7. v1 distribution is intentionally GitHub-tag-only. OMP Marketplace catalog publication and npm registry publication are deferred.
 8. GitHub install and uninstall require an external `bun` executable on `$PATH` because OMP 18.2.6 Plugin Manager shells out to Bun. This prerequisite belongs to the host distribution path, not the extension runtime.

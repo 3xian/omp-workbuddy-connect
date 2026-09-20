@@ -23,7 +23,7 @@ bun --version
 其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。然后通过固定 GitHub tag 安装：
 
 ```bash
-omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.6
+omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.7
 omp
 ```
 
@@ -76,7 +76,7 @@ omp plugin uninstall omp-workbuddy-connect
 管理面完全可选；Billing、Widget 或 TUI 故障不会阻塞登录、Chat 或工具调用。
 
 - **默认界面** — 不挂载 WorkBuddy Widget，也不占用 OMP status line；`session_start` / `turn_start` 不主动查询 Billing。
-- **`/workbuddy`** — 强制刷新并临时显示紧凑详情：脱敏账号、积分/套餐、scope/模型数/目录来源和 Provider 状态。下一次 `turn_start` 自动清除，不使用计时器。
+- **`/workbuddy`** — 强制刷新并临时显示紧凑详情：脱敏账号、积分/套餐、scope/模型数/目录来源和 Provider 状态。模型名单最多显示前四项及剩余数量；完整选择使用 `/model`。下一次 `turn_start` 自动清除，不使用计时器。
 - **`/workbuddy free`** — 切到有明确免费证据的模型范围，以一次性通知报告结果；不查询 Billing，也不挂载常驻详情。
 - **`/workbuddy all`** — 切到当前插件可识别的全部模型，以一次性通知报告结果；不查询 Billing，也不挂载常驻详情。
 - **`/workbuddy logout`** — 失效异步 UI、删除 OMP WorkBuddy credential，并清除 Widget/status。
@@ -117,7 +117,7 @@ npm run typecheck
 - 不复用旧 Pi/Fork、DSH 或 Desktop credential；安装后必须执行 `/login workbuddy`。
 - `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源。
 - 旧 scope 设置不会导入；用 `/workbuddy free` 或 `/workbuddy all` 明确选择。
-- 包版本保持 `1.1.6`；“v1”是功能发布定义，不会把 manifest 版本倒退到 `1.0.0`。
+- 包版本保持 `1.1.7`；“v1”是功能发布定义，不会把 manifest 版本倒退到 `1.0.0`。
 
 ## v1 限制
 

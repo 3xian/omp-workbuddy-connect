@@ -149,7 +149,7 @@ export default async function (pi: ExtensionAPI) {
 
   pi.on("session_start", (_event, ctx) => {
     provider.bindContext(ctx);
-    // Optional Billing/UI starts in the background and never delays the session.
+    // Bind request runtime and clear stale command-scoped UI; startup never requests Billing.
     ui.beginSession(ctx);
   });
 

@@ -74,7 +74,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 | 8.6 | Credits 使用 OMP 凭据、失败不影响 Chat | UX-03 | D4/D8 | 5.1/5.2 |
 | 8.7 | 四类事件失效 generation，迟到结果不回写 | UX-04 | D9 | 5.5 |
 | 8.8 | 三类取消、六类错误、polling Retry-After、one-shot 429 | AUTH-09 | D10 | 2.9/2.10 |
-| 8.9 | session_start/turn_start，接受下一 turn 更新 | UX-05 | D9 | 5.4 |
+| 8.9 | command-scoped UI；session/turn 清理且 zero Billing；迟到结果不重绘 | UX-05 | D9 | 5.4 |
 | 8.10 | 无 UI 不影响 auth/model/payload/transport | UX-06；REL-01 | D9/D11 | 1.6；5.6；6.2 |
 | 8.11 | commands/credits/slow/stale/restart/headless M4 gate | UX-01–07 | D8–D10 | 5.7 |
 | 9.1 | Main chat/thinking/tool/streaming/refresh | REL-01 | D12 | 6.1 |
@@ -160,7 +160,7 @@ V2 作为冻结的历史规划输入保留其 `credential generation` 原文。�
 6. **隔离分层**：modifier 对所有非 WorkBuddy 不变；payload hook 使用 request-bound `ctx.model.provider`，当前与历史同 ID 的其他 Provider 也不变；活动 scope/切换期 fail-closed 由 WorkBuddy `resolveHeaders` 承担。
 7. **ADR 不被偷换成延期或必做**：1.7/1.8 有选择证据，3.6/5.1 有选定路径实施及验收，未选路径无空壳实现。
 8. **M0 不被规划检查冒充完成**：已记录精确提交但尚有工作区差异、宿主实验待运行；coverage.md 不是六项 M0 交付中的运行证明。
-9. **工期与版本不混用**：M0 后重估；功能 v1 不把 manifest 1.1.6 自动降级。
+9. **工期与版本不混用**：M0 后重估；功能 v1 不把 manifest 1.1.7 自动降级。
 10. **必需内容不被 P1 隐藏**：管理命令、Credits、main/subagent/headless、声明 Vision 均在发布矩阵，不作为可裁剪后续项。
 
 ## 尚需执行的证据，不是规划遗漏

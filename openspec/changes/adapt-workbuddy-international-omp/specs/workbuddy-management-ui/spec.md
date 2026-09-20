@@ -7,7 +7,7 @@
 ## ADDED Requirements
 
 ### Requirement: UX-01 Management command reports truthful state
-`/workbuddy` SHALL 按需显示 account、credits、plan、scope、model count、model source 和 provider state。详情 SHALL 使用紧凑 Widget，不得占用 OMP status line。没有当前有效积分结果时 SHALL 显示 unavailable/查询失败，不把异常伪装成零积分，也不得在请求失败后把宿主 last-good cache 当作当前结果；身份必须脱敏，昵称缺失可使用脱敏账号。
+`/workbuddy` SHALL 按需显示 account、credits、plan、scope、model count、model source 和 provider state。详情 SHALL 使用紧凑 Widget，不得占用 OMP status line；模型名单最多展示前四项和剩余数量，完整模型选择留给 `/model`。没有当前有效积分结果时 SHALL 显示 unavailable/查询失败，不把异常伪装成零积分，也不得在请求失败后把宿主 last-good cache 当作当前结果；身份必须脱敏，昵称缺失可使用脱敏账号。
 
 #### Scenario: Status with available credits
 - **WHEN** 已登录用户执行 `/workbuddy` 且积分接口成功
@@ -51,7 +51,7 @@
 - **THEN** 后续结果不会在已结束会话或非 WorkBuddy 会话中重新显示 Widget
 
 ### Requirement: UX-05 Command-scoped lifecycle display
-WorkBuddy SHALL 默认不挂载 Widget 或 status line。只有显式 `/workbuddy` SHALL 显示详情；下一次 `turn_start` SHALL 同步清除该 Widget 并取消待处理详情刷新，不使用计时器。`session_start` 与 `session_switch` SHALL 清除旧显示且不主动刷新 Billing。
+WorkBuddy SHALL 默认不挂载 Widget 或 status line。只有显式 `/workbuddy` SHALL 显示详情；下一次 `turn_start` SHALL 同步清除该 Widget 并使待处理详情刷新失效，迟到 Billing 结果不得恢复 UI，不使用计时器。调用方 AbortSignal 不保证终止宿主共享的 in-flight Usage 请求。`session_start` 与 `session_switch` SHALL 清除旧显示且不主动刷新 Billing。
 
 #### Scenario: Show and dismiss WorkBuddy detail
 - **WHEN** 用户执行 `/workbuddy`，随后开始下一次 turn

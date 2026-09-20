@@ -180,7 +180,10 @@ export class WorkBuddyUiController {
     );
     const account = accounts.length === 1 && accounts[0]?.accountId ? accounts[0] : undefined;
     const source = `${view.source}${view.fallbackReason ? ` · ${FALLBACK_REASON_LABELS[view.fallbackReason]}` : ""}`;
-    const names = view.models.map((model) => model.name).join("  |  ");
+    const visibleNames = view.models.slice(0, 4).map((model) => model.name);
+    const hiddenModelCount = view.models.length - visibleNames.length;
+    if (hiddenModelCount > 0) visibleNames.push(`… +${hiddenModelCount}`);
+    const names = visibleNames.join(" | ");
     const lines = [
       "WorkBuddy AI · 国际版",
       `账号  ${redactIdentity(account?.email || account?.accountId)}`,
