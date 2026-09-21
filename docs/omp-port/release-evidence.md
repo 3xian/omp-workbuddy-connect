@@ -1,8 +1,18 @@
-# WorkBuddy OMP v1 Release Evidence
+# WorkBuddy OMP Release Evidence
 
-Status: **v1.1.8-rc.1 approved with a documented concurrent credential-replacement limitation; stable publication remains BLOCKED by AUTH-04**
+Current status: **dual-realm M3 execution completed on OMP 18.2.7, but publication is BLOCKED by REL-04 diagnostic identity redaction; package remains v1.1.8-rc.3**
 
 This report contains redacted outcomes only. OAuth tokens, refresh tokens, Authorization values, account identifiers, organization identifiers, OAuth state values, and raw request bodies are intentionally omitted.
+
+## Dual-realm M3 addendum
+
+The 2026-09-21 M3 run completed fresh OAuth, restart, forced refresh, scope switching, concurrent Chat, cancellation, scoped logout, main/Task/headless, three real models per realm, reasoning budget edges, tools, vision, Billing/UI behavior, package lifecycle, and the permanent regression suite on official OMP `18.2.7`.
+
+Functional gates passed for both `workbuddy` and `workbuddy-cn`. Publication did not pass: OMP `18.2.7` removes Authorization from automatic HTTP 400 request dumps but persists the request's raw `X-User-Id`. That host-owned diagnostic violates REL-04 identity redaction. The isolated profile and attachment were removed; no secret or identity artifact was committed. README support claims and package metadata therefore remain international-only at `1.1.8-rc.3`.
+
+The full redacted matrix, exact runtime baseline, observed MiniMax availability failure, cache checksums, and release decision are recorded in `openspec/changes/add-workbuddy-cn-realm/m3-evidence.md`.
+
+## Historical v1 evidence
 
 ## Candidate and environment
 

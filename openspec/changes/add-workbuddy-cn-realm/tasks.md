@@ -38,9 +38,10 @@
 
 > M3 host baseline gate：开始正式矩阵前先升级到当时最新稳定版官方 OMP，锁定并记录精确版本，随后只对该版本执行完整双 realm release matrix；项目不维护旧 OMP 版本矩阵。若验收期间 OMP 再发布新版，在发布前更新到新版并重跑受影响合同。
 
-- [ ] 4.1 补充最小永久回归：双 AuthStorage、endpoint/header、相同 ID payload/token clamp、cache/settings/scope、Usage/UI generation、logout/cancel 和 retained model 隔离；运行串行测试脚本并确认资源完整释放。
-- [ ] 4.2 执行官方 OMP integration matrix，覆盖两个 realm 同时登录、重启、强制刷新、scope 切换、并发请求、取消、logout、main/Task/headless 与第三方同 ID Provider；复核中国站拒绝/超时/429 分类与 Retry-After 边界，验证可观察的每次 transport 前身份和 realm 绑定正确。当前宿主不给 `resolveHeaders` request-attempt identity 时，明确验证并发布“先完成/取消活动请求，再 logout/login 换号”的支持边界，不把不可证明的并发换号原子性伪装成通过。
-- [ ] 4.3 执行中国站真实 OAuth、Chat streaming、reasoning、单/连续/多工具、声明的 vision、至少三个代表模型和 main/Task/headless 矩阵，记录精确客户端/Gateway/account/model 版本及脱敏证据；覆盖 reasoning 消耗 output budget、低预算 `finish_reason=length` 且 content 为空的合法流，以及充足预算正常完成。mock 不计为通过。
+- [x] 4.1 补充最小永久回归：双 AuthStorage、endpoint/header、相同 ID payload/token clamp、cache/settings/scope、Usage/UI generation、logout/cancel 和 retained model 隔离；运行串行测试脚本并确认资源完整释放。
+- [x] 4.2 执行官方 OMP integration matrix，覆盖两个 realm 同时登录、重启、强制刷新、scope 切换、并发请求、取消、logout、main/Task/headless 与第三方同 ID Provider；复核中国站拒绝/超时/429 分类与 Retry-After 边界，验证可观察的每次 transport 前身份和 realm 绑定正确。当前宿主不给 `resolveHeaders` request-attempt identity 时，明确验证并发布“先完成/取消活动请求，再 logout/login 换号”的支持边界，不把不可证明的并发换号原子性伪装成通过。
+- [x] 4.3 执行中国站真实 OAuth、Chat streaming、reasoning、单/连续/多工具、声明的 vision、至少三个代表模型和 main/Task/headless 矩阵，记录精确客户端/Gateway/account/model 版本及脱敏证据；覆盖 reasoning 消耗 output budget、低预算 `finish_reason=length` 且 content 为空的合法流，以及充足预算正常完成。mock 不计为通过。
 - [ ] 4.4 审查源码、网络、日志、设置和诊断附件，验证 Token/Authorization/pending code 不泄露、只访问目标 realm 官方 endpoint、两个 realm 与 Desktop 数据互不修改。
-- [ ] 4.5 完整重跑国际站 release matrix；中国站与国际站 gate 均通过后再更新 README、安装/迁移/限制说明和包版本，否则文档与发布元数据保持仅国际站承诺。
-- [ ] 4.6 删除临时探针和失去用途的硬编码/共享状态，检查没有跨站 fallback、重复客户端、空实现或通用 Provider 框架，并以类型检查、完整测试和两站 release evidence 作为最终验收。
+  - BLOCKED：OMP `18.2.7` 的 HTTP 400 诊断附件会删除 Authorization，但仍持久化原始 `X-User-Id`；详见 `m3-evidence.md`。扩展内无安全且符合架构的修复点。
+- [x] 4.5 完整重跑国际站 release matrix；中国站与国际站 gate 均通过后再更新 README、安装/迁移/限制说明和包版本，否则文档与发布元数据保持仅国际站承诺。
+- [x] 4.6 删除临时探针和失去用途的硬编码/共享状态，检查没有跨站 fallback、重复客户端、空实现或通用 Provider 框架，并以类型检查、完整测试和两站 release evidence 作为最终验收。
