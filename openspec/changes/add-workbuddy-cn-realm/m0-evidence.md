@@ -4,7 +4,7 @@
 
 ## 1. 结论
 
-**M0 准入状态：PASS；生产发布状态：仍未批准。** 当前证据已冻结中国站官方客户端的目录来源、核心 OAuth 路由、refresh、Chat streaming endpoint、请求 header 最小成功集合和 realm 差异，并用授权账号完成不落盘 credential 的隔离 live probe。Provider 客户端的拒绝、超时、429、取消、restart 与 logout 已移入 3.2/4.2，在这些发布 gate 通过前不得注册生产 `workbuddy-cn`。
+**M0 准入状态：PASS；生产发布状态：仍未批准。** 当前证据已冻结中国站官方客户端的目录来源、核心 OAuth 路由、refresh、stream-only Chat 约束、隔离探针成功使用的 Chat URL 与最小 header 集合，并用授权账号完成不落盘 credential 的 live probe。Chat URL/header 目前属于“隔离探针已观察”，不是官方 OMP 出站抓包确认的生产常量；3.6 前必须用脱敏 OMP 请求记录复核。Provider 客户端的拒绝、超时、429、取消、restart 与 logout 已移入 3.2/4.2，在这些发布 gate 通过前不得注册生产 `workbuddy-cn`。
 
 因此：
 
@@ -77,10 +77,10 @@ M0 1.1 的版本、类型、永久测试与当前真实国际站 smoke 均已复
 | token fields | `accessToken/domain/expiresIn/refreshExpiresIn/refreshToken/scope/sessionState/tokenType` | 已观察（live） | 只记录 key 与存在性；credential 全程在内存，验证后重置运行时销毁。 |
 | auth reject | 非 `11217` poll 错误终止 | 已观察（静态） | 具体中国站业务码与用户文案未知。 |
 | HTTP 429 | 未知 | 未知 | 没有真实响应与 Retry-After 证据；不通过压测故意触发。 |
-| Chat endpoint | `POST https://copilot.tencent.com/v2/chat/completions` | 已观察（live） | 非 stream 返回 HTTP 400/业务码 11101；`stream:true` 返回 HTTP 200 SSE。 |
-| Chat Origin/Referer | live probe 均未发送 | 已观察（live） | 授权 Chat 成功，说明该 CLI 请求不依赖浏览器 Origin/Referer；生产实现仍需抓包核对官方客户端完整 header 集。 |
-| Chat headers | Bearer、URL-encoded `X-User-Id`、`X-No-Enterprise-Id: 1`、token 返回的 `X-Domain`、`X-Product: SaaS`、`X-Requested-With: XMLHttpRequest` | 已观察（live） | 使用该集合成功完成 Chat；所有身份值已脱敏。 |
-| Chat response | SSE `data:` events + `[DONE]`；delta 有 content/reasoning/tool_calls，usage 有 numeric credit | 已观察（live） | `fast-model` reasoning 可见，finish_reason=stop，最终文本精确为 `CN_M0_OK`。 |
+| Chat endpoint candidate | `POST https://copilot.tencent.com/v2/chat/completions` | 已观察（隔离 live） | 同一授权探针中，非 stream 返回 HTTP 400/业务码 11101，`stream:true` 返回 HTTP 200 SSE。该完整 URL 是成功探针事实，但尚非官方 OMP/官方客户端请求记录确认的生产常量；3.6 前必须复核。 |
+| Chat Origin/Referer | 隔离 live probe 均未发送 | 已观察（隔离 live） | 授权 Chat 成功，只能证明该最小探针不依赖浏览器 Origin/Referer；不能证明官方客户端不会发送，生产 descriptor 仍需脱敏 OMP 请求记录核对。 |
+| Chat headers candidate | Bearer、URL-encoded `X-User-Id`、`X-No-Enterprise-Id: 1`、token 返回的 `X-Domain`、`X-Product: SaaS`、`X-Requested-With: XMLHttpRequest` | 已观察（隔离 live） | 使用该集合成功完成 Chat；只记录 header 名与来源，所有身份值已脱敏。成为生产常量前仍需 OMP 出站复核。 |
+| Chat response | SSE `data:` events + `[DONE]`；delta 有 content/reasoning/tool_calls，usage 有 numeric credit | 已观察（隔离 live） | `fast-model` 在 `max_tokens=64` 时 reasoning 消耗输出预算并以 `finish_reason=length` 截断、content 为空；提高到 256 后 `finish_reason=stop`，最终文本精确为 `CN_M0_OK`。实现不得丢弃 reasoning，也不得把低预算截断误判为空响应。 |
 | Catalog | `GET https://copilot.tencent.com/v3/config`；落盘 `~/.workbuddy/cache/acc-product-config-v3.json` | 已观察（运行时） | 官方日志记录 fetch success，缓存包含 50 个模型。 |
 | Billing endpoint/headers/body | 未知 | 未知 | 未发现足以批准 UsageProvider 的中国站契约证据。 |
 | 国际站 fallback | live probe 仅请求 `copilot.tencent.com` | 已观察（本探针） | 尚未在生产 OMP CN Provider 中证明，因此生产 CN Provider 仍保持未注册。 |
@@ -103,10 +103,16 @@ M0 1.1 的版本、类型、永久测试与当前真实国际站 smoke 均已复
 - 用户授权成功：第二次 poll 在 1 秒内返回业务码 0，包含 access/refresh/domain/expiry 字段；
 - current account：HTTP 200/业务码 0，返回 durable uid；
 - refresh：HTTP 200/业务码 0，access 与 refresh 均返回；
-- Chat：确认 `/v2/chat/completions` 只支持 stream；SSE reasoning/content/usage/[DONE] 完整，`fast-model` 最终返回 `CN_M0_OK`；
+- Chat：确认隔离探针中的 `/v2/chat/completions` 只支持 stream；SSE reasoning/content/usage/[DONE] 完整。`fast-model` 在 64 token 输出预算下 reasoning 被 `length` 截断且 content 为空，在 256 下最终返回 `CN_M0_OK`；完整 URL/header 仍须由脱敏 OMP 出站记录复核后才能成为生产常量；
 - 探针只访问 `copilot.tencent.com` API；credential 不落盘，完成后通过重置 JS runtime 销毁。
 
 探针只输出 envelope key、状态码、字段存在性和非敏感模型响应，不输出 state、URL 参数值、token、uid、domain 值或账号数据。
+
+### 5.1 M2 前置身份决策
+
+- **domain restart recovery：未闭环，属于 M2 生产装配 blocker。** CN token/refresh response 的 `domain` 是 Chat/refresh 的 `X-Domain` 来源；当前 OMP `OAuthCredentials` 没有专用 `domain` 字段。不得把值写入插件自建 credential 文件，也不得在没有语义证据时挪用 `enterpriseUrl`、`apiEndpoint` 等宿主字段。3.2 必须证明：要么宿主支持的 credential 字段能按原语义持久化并在 restart 后恢复该值，要么用只记录 claim keys 与相等性、不记录 claim values 的脱敏 probe 验证 `hostname(jwt.iss) === token-domain`，再允许从同一 access token 确定性恢复；该等式目前不是事实。两条路径都失败则 CN Provider 不进入生产装配。
+- **durable uid authority：当前以 `/v2/plugin/account` 的 `data.uid` 为权威。** poll token response 没有已观察的 durable uid，因此 CN login 必须在 token success 后完成 account finalize，再构造并交付 OMP OAuth credential。JWT `uid`/`sub` 只有在独立验证其与 account uid 一致后才能作为 restart reconstruction 候选；probe 只允许记录 claim key 和相等性，不记录 claim value。refresh 默认保留已持久化 `accountId`，发现身份矛盾时 fail closed。
+- 上述两项不否定 M0 对服务协议的准入结论，但在 3.2 验证通过前禁止生产 `workbuddy-cn` 注册。
 
 后续 3.2/4.2 必须覆盖：
 
@@ -124,7 +130,7 @@ M0 1.1 的版本、类型、永久测试与当前真实国际站 smoke 均已复
 - 中国站缓存：`~/.workbuddy/cache/acc-product-config-v3.json`；官方运行日志记录来源为 `https://copilot.tencent.com/v3/config`。
 - 国际站缓存：`~/.workbuddy-ai/cache/acc-product-config-v3.json`，SHA-256 `f8805736077d73549ef88f6615b7e246a6548b311f1b526c0c673ea020e89027`。
 - 中国站缓存有 50 个模型；50 个均有非空 ID，41 个有正数 input/output budget，39 个声明图像、31 个声明 reasoning、39 个声明 tool call，32 个有非空 `credits`。
-- 9 个条目缺少有效 input/output budget，其中包括 completion/image 专用条目；它们不得注册为已验证 Chat 模型。能力字段为 null 时按未知处理，不补默认 true。
+- **Catalog eligibility 与 release validation 分离。** 目标 realm 缓存中具备合法 ID、Chat 类型、有效 input/output budget 和必要 schema 的条目可进入目录候选；9 个缺少有效预算或属于 completion/image 专用类型的条目不可注册为 Chat 模型。能力字段为 null 时按未知处理，不补默认 true。目录合格不等于 release-validated。
 
 ### 6.2 当前缓存的 realm 差异
 
@@ -149,7 +155,7 @@ M0 1.1 的版本、类型、永久测试与当前真实国际站 smoke 均已复
 | `deepseek-v4.1-flash` | `x0.03`；1M / 128k | `x0.00`；1M / 128k | 同 ID 的免费结论相反，绝不能跨站复用。 |
 | `glm-5.3` | `x0.79`；1M / 64k | `x0.79`；1M / 48k | 展示倍率相同也不代表预算相同。 |
 
-至少三个 M2 候选模型可从中国站缓存取得完整基础 metadata：`fast-model`、`balanced-model`、`deep-model`。`fast-model` 已通过真实 streaming Chat；另外两个仍只有目录证据。三者在 vision/tool 与更多响应语义完成真实验收前，不得声明完整生产能力。
+Release validation 只选择代表模型覆盖真实 Chat/reasoning/tools/vision，不要求逐一 live 测试所有目录合格模型。当前代表候选为 `fast-model`、`balanced-model`、`deep-model`：三者均有完整基础 metadata，`fast-model` 已通过真实 streaming Chat，另外两个仍只有目录证据。任何模型未经对应能力 gate 前，不得声明其 reasoning/tools/vision 已生产验证。
 
 ### 6.4 费用处理决定
 
@@ -180,4 +186,4 @@ M0 1.1 的版本、类型、永久测试与当前真实国际站 smoke 均已复
 | 中国站 builtin | BLOCKED，因此明确禁用 |
 | 仓库无猜测 CN 运行时值 | PASS：`src/`、`extensions/`、`package.json` 未出现 `workbuddy-cn`、`workbuddy.cn`、`copilot.tencent.com` 或 `WORKBUDDY_CN` |
 
-最终决定：M0 六项全部完成，可进入 M1 的国际站无行为迁移；M2 只能使用本文已冻结值，且必须保持 Billing/Usage 与 builtin 禁用。3.2/4.2 的中国站客户端与发布 gate 全部通过前，不得宣布或发布生产 `workbuddy-cn`。
+最终决定：M0 六项全部完成，可进入 M1 的国际站无行为迁移。M2 只能把本文“已观察”值作为非生产候选，并保持 Billing/Usage 与 builtin 禁用；Chat URL/header 需在 3.6 前由脱敏 OMP 出站记录复核，domain restart recovery 与 account finalize 需在 3.2 闭环。3.2/4.2 的中国站客户端与发布 gate 全部通过前，不得宣布或发布生产 `workbuddy-cn`。

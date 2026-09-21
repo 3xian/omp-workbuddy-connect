@@ -13,24 +13,57 @@
 - **WHEN** 某一 realm 成功登录后重启 OMP，且该 Provider 的宿主凭据仍有效
 - **THEN** 该 realm 的 Chat 与可选积分使用恢复的同一宿主账号，无需重新登录或读取其他 realm/旧文件
 
+### Requirement: AUTH-02 Validated login and identity semantics
+每个 WorkBuddy realm 的 OAuth 登录 SHALL 在返回宿主持久化前校验非空 access、refresh、有效 expiry 和 durable uid，并映射到 access、refresh、expires、accountId。国际站保持既有 Plugin Auth/JWT 证据路径；中国站 poll token success 后 MUST 调用已验证的 `/v2/plugin/account`，以 `data.uid` finalize durable accountId。中国站 JWT `uid`/`sub` 只有在独立脱敏验证其与 account uid 一致后 MAY 作为 restart reconstruction 候选；email、nickname、name、enterprise 字段均不得替代 accountId。
+
+#### Scenario: Complete login response
+- **WHEN** 目标 realm 的 Plugin Auth 与其 identity finalize 返回有效 credential、durable subject 和明确真实 email，可选地返回 enterpriseId
+- **THEN** OMP 获得映射正确的 OAuth credential，email 保持原语义；enterpriseId 存在时映射 orgId，不存在时省略 orgId
+
+#### Scenario: Missing or invalid login fields
+- **WHEN** 目标 realm 完成其 identity finalize 后仍无法提供 durable uid/sub，或 access/refresh/expiry 无效
+- **THEN** 登录失败，不返回可持久化的部分成功 credential，并提示重新登录；email/name 与另一个 realm identity 不得作为 fallback
+
+#### Scenario: Nickname without email
+- **WHEN** 官方响应只有 nickname 而没有真实 email
+- **THEN** nickname 不写入 OAuth email，重启后允许用账号标识展示，不为保留昵称新增凭据文件
+
+#### Scenario: CN token succeeds before account finalize
+- **WHEN** 中国站 poll 返回有效 token bundle，但尚未完成 account 请求，或 account response 缺少有效 `data.uid`
+- **THEN** 登录不得向 OMP 返回可持久化 credential，Chat 请求数为零，且不从另一个 realm、昵称、email 或未验证 JWT claim 补 identity
+
+#### Scenario: CN account finalize succeeds
+- **WHEN** 中国站 token bundle 有效且同一授权流程的 `/v2/plugin/account` 返回 durable uid
+- **THEN** 该 uid 映射为 accountId，token bundle 的 access/refresh/expiry 与它一起交给目标 Provider 的 AuthStorage；另一个 realm 的 credential 不变
+
+#### Scenario: JWT identity is evaluated as reconstruction evidence
+- **WHEN** 实现评估 access token 的 `uid`/`sub` 是否可用于 restart reconstruction
+- **THEN** probe 只记录 claim key、issuer hostname 与 account uid 的相等性，不记录 claim value；未经一致性证据不得启用该 fallback
+
 ### Requirement: AUTH-04 Durable credential identity binding
-每个 WorkBuddy Chat transport attempt 的 Authorization、X-User-Id SHALL 属于目标 Provider 同一个唯一 stored OAuth durable credential row。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送目标 realm 已验证的 no-enterprise marker，不得伪造组织。Authorization SHALL 仅由宿主原生 AuthStorage resolver 解析。Header 与 Bearer 的解析 MUST 共享宿主提供的 request-attempt identity 或由同一个原子 credential resolution 产生；分别读取“当前唯一账号”不构成同源证明。目标 Provider 的 `getApiKey(credentials)` SHALL 在返回 access 前验证宿主选择的 accountId/可选 orgId。401 retry 是新的 transport attempt：同账号 refresh 时 durable identity MUST 保持一致；用户明确换号后 MAY 使用新 row，但该 retry 内 Bearer 与 Headers 仍 MUST 原子同源。固定 Headers SHALL 由目标 realm descriptor 提供其已验证的 Origin/Referer/domain/product 等协议值，MUST NOT 使用另一个 realm 的固定值或未验证的 credential domain 改写路由。
+在当前宿主支持契约内，每个 WorkBuddy Chat transport attempt 的 Authorization、X-User-Id SHALL 来自目标 Provider 的同一个唯一 stored OAuth durable credential row。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送目标 realm 已验证的 no-enterprise marker。Authorization 仅由宿主 AuthStorage resolver 解析；`getApiKey(credentials)` 在返回 access 前验证宿主选择的 accountId/可选 orgId。固定 Header 与 domain policy 均来自目标 realm descriptor：fixed 值不得跨 realm 复用，credential-derived 值必须从同一 durable row 的已验证持久状态或确定性 reconstruction 获得。
+
+当宿主向 Header resolver 暴露 request-attempt identity 或原子 Bearer-plus-Headers API 时，Bearer 与 identity Headers MUST 使用该原子来源。当前已验证的 pinned OMP 18.2.6 contract 中，`Model.resolveHeaders(signal)` 不暴露 request session/attempt；扩展 SHALL 对唯一 stored row 在 resolver 内捕获并复核 credentialId/accountId/orgId/domain，检测到变化时在 HTTP 前失败，但 MUST NOT 把这项检查宣称为独立 Bearer/Header lookup 的原子同源证明。当前产品支持边界是串行换号：活动请求先完成或取消，再执行 logout/login；并发 credential replacement 不受支持，且不得用全局 lifecycle session、pending queue、锁或另一个 realm 推断本次请求身份。其他宿主版本必须单独核对 API contract，不能由 smoke 结果推定。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户在任一 WorkBuddy realm 首次登录后发出模型请求
-- **THEN** 实际出站请求的 Bearer、用户 ID 和可选企业语义属于目标 Provider 的同一 durable credential ID，并只携带该 realm 已验证的固定 Headers
+- **THEN** 实际出站请求使用目标 Provider 唯一 durable row 的账号 identity 与 realm policy；在支持边界内的序列化请求中，捕获/复核不一致会在 Chat HTTP 前 fail closed
 
 #### Scenario: Refresh, retry, and account switch
-- **WHEN** 单账号发生 forced refresh 或 401 retry，或 A logout 后 B 在已有会话登录
-- **THEN** forced refresh/401 retry 可更换 Bearer，但每次出站的 Bearer 与身份 Headers 仍属于目标 Provider 的同一 durable credential row；切换到 B 后不再使用 A row，迟到 A 结果不会恢复旧身份
+- **WHEN** 单账号发生 forced refresh 或 401 retry，或活动请求结束/取消后 A logout、B login
+- **THEN** refresh/retry 保留同一 durable identity；B 登录后的新 attempt 不使用 A identity，迟到 A 结果不恢复旧身份
 
 #### Scenario: Account changes between Bearer and Header resolution
-- **WHEN** 宿主已为请求选择 A Bearer，但在 identity Headers 解析前 storage 切换到 B，或并发 B 请求改变选择
-- **THEN** A 请求必须在任何 Chat HTTP 前失败；不得发送 B Headers 与 A Bearer，也不得用全局 pending cache 或另一个 realm 猜测请求归属
+- **WHEN** resolver 捕获目标 Provider 的唯一 row 后、返回 Headers 前检测到 credentialId/accountId/orgId/domain 改变
+- **THEN** 请求在任何 Chat HTTP 前失败，不发送混合身份，也不回退另一个 realm
+
+#### Scenario: Host cannot expose the Bearer-selected request identity
+- **WHEN** 当前 OMP 在 Bearer selection 与 `resolveHeaders` 之间发生扩展无法观察的并发 credential replacement
+- **THEN** release evidence 明确标记该场景不可证明且在支持边界外，要求先完成或取消活动请求再换号；不得把 serial probe、last lifecycle session 或 sole-row 假设报告为完整原子性通过
 
 #### Scenario: Request session differs from lifecycle binding
 - **WHEN** 同一 Provider 服务 main、Task 或 child 等多个 session，实际请求由 session B 的 AuthStorage resolver 选择 Bearer，而最后一次 lifecycle binding 属于 session A
-- **THEN** Header identity MUST 与请求 session B 的 Bearer 同源；不得读取全局 last-bound session A 或另一个 Provider 的 `active` row 冒充当前请求证明
+- **THEN** Header resolver 不得读取全局 last-bound session A 或另一个 Provider 的 active row；它只执行目标 Provider 的唯一 stored-row 捕获/复核，并明确保留宿主无法关联本次 Bearer identity 的支持边界
 
 #### Scenario: Persisted credential before session binding
 - **WHEN** OMP 重启时目标 Provider 的 AuthStorage 已持久化一个完整 credential，Provider 在 `session_start` 绑定前注册并投影模型
@@ -79,12 +112,31 @@
 ## ADDED Requirements
 
 ### Requirement: AUTH-10 Realm-bound authentication protocol
-每次登录、轮询、刷新和 Chat attempt SHALL 使用目标 Provider 已验证的 endpoint、Origin/Referer、product/domain、Plugin Auth headers、refresh source 与 pending/status 语义。凭据、pending code、AbortSignal 和异步结果 MUST NOT 在 `workbuddy` 与 `workbuddy-cn` 之间复用或回退。
+每次登录、轮询、刷新和 Chat attempt SHALL 使用目标 Provider 已验证的 API origin/path、start request shape 与 nonce policy、poll interval/deadline、Origin/Referer、product/domain policy、Plugin Auth headers、refresh source 与 pending/status 语义；token success 后 SHALL 执行该 realm 的 identity finalize。凭据、pending code、AbortSignal 和异步结果 MUST NOT 在 `workbuddy` 与 `workbuddy-cn` 之间复用或回退。
 
 #### Scenario: Concurrent login in both realms
 - **WHEN** 国际站和中国站登录流程同时处于 polling 或 refresh
 - **THEN** 每个流程只访问自身 endpoint、使用自身 protocol headers 和取消边界，并将结果写入自身 AuthStorage namespace
 
+#### Scenario: Realms use different start and polling contracts
+- **WHEN** 国际站与中国站分别发起登录
+- **THEN** 国际站保留既有 query/body nonce、platform 与 2 秒/15 分钟行为，中国站使用已观察的 body `{}`、platform `workbuddy` 与 1 秒/5 分钟行为；任一 realm 不借用另一方的 request shape 或 deadline
+
 #### Scenario: Realm protocol is unavailable
 - **WHEN** 中国站协议字段尚未通过证据准入或响应不满足其已验证 schema
 - **THEN** 中国站认证失败并保持未登录，不尝试国际站 endpoint、header、response parser 或 credential fallback
+
+### Requirement: AUTH-11 Credential-derived domain persistence
+需要 credential-derived `X-Domain` 的 realm SHALL 在 login/refresh response 中验证非空 domain，并确保它能随同一 OMP OAuth durable row 在 restart 后恢复。实现 MAY 使用语义匹配且经宿主 round-trip 验证的标准 credential 字段，或使用经脱敏证据证明的确定性 token claim reconstruction；MUST NOT 创建插件 sidecar credential、读取 Desktop credential、借用另一个 realm domain，或挪用语义无关的宿主字段。恢复机制未通过真实 restart Chat 前，目标 Provider 不得进入生产装配。
+
+#### Scenario: JWT issuer is evaluated as a domain reconstruction candidate
+- **WHEN** 中国站评估从 access token 恢复 domain
+- **THEN** 脱敏 probe 只记录 claim keys 和 `hostname(jwt.iss) === token-domain` 的布尔结果，不记录 claim/domain 值；只有等式经真实 token 证明且 issuer URL 校验安全后才可启用 reconstruction，否则保持未支持
+
+#### Scenario: Restart restores credential-derived domain
+- **WHEN** 中国站登录成功、OMP restart 后使用持久化 credential 发起 Chat
+- **THEN** `X-Domain` 与该 durable row 的登录/refresh domain 一致，accountId 仍来自已 finalize identity，不重新读取 Desktop 或插件 sidecar 文件
+
+#### Scenario: Domain is missing or cannot be reconstructed
+- **WHEN** login/refresh 缺少有效 domain，或 restart 后不能从宿主持久状态/已验证 token claim 恢复
+- **THEN** 中国站 fail closed 并发送零个 Chat HTTP 请求，提示重新登录或保持 Provider 未生产注册；不得回退固定 CN/Intl domain

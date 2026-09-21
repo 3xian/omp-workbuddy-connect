@@ -9,6 +9,8 @@
 > - 底层认证、Provider、模型、Payload、UI 等逻辑尽量复用
 > - 仅把真正的站点差异抽成轻量 `WorkBuddySite` 配置
 > - 小团队快速迭代优先，不引入没有现实收益的抽象和基础设施
+>
+> **Protocol details superseded:** 本文保留里程碑与历史设计背景；具体 endpoint/header/auth/model 协议以 [`openspec/changes/add-workbuddy-cn-realm/design.md`](../openspec/changes/add-workbuddy-cn-realm/design.md)、对应 specs/tasks 和 [`m0-evidence.md`](../openspec/changes/add-workbuddy-cn-realm/m0-evidence.md) 为准。发生冲突时不得按本文旧示例实现。
 
 ---
 
@@ -281,123 +283,21 @@ ProviderRegistry
 
 # 4. 核心设计
 
-## 4.1 新增 WorkBuddySite
+## 4.1 站点描述符边界
 
-新增：
+早期 `origin/apiBase/xDomain` 三字段草图已被 M0 证据证伪：CN 的 API origin、Chat/Auth paths、Web login origin、credential-derived domain、start request shape、poll timing 和 account finalize 是独立维度，不能通过替换 base URL 表达。
 
-```text
-src/site.ts
-```
+最终 `SiteDescriptor` 只按真实调用点表达不可变协议差异；不得包含 credential、scope、generation、registry 或 session，也不得扩展成 Adapter/Strategy 框架。字段与验收以当前 OpenSpec design/specs 为准。
 
-建议定义：
+## 4.2 国际版迁移边界
 
-```ts
-export interface WorkBuddySite {
-  id: "intl" | "cn";
+M1 只把现有国际站常量机械迁入 descriptor/runtime closure，Provider ID、命令、OAuth request shape、poll timing、缓存/settings、Usage、UI 和 Gateway workaround 均保持现有行为。任何行为差异先修复，不与 CN 实现一起解释为预期变更。
 
-  providerId: string;
-  displayName: string;
-  commandName: string;
+## 4.3 国内版证据边界
 
-  origin: string;
-  apiBase: string;
-  xDomain: string;
+不再保留旧版推测 CN API base、固定 `X-Domain` 或 CN builtin 示例。CN API/Auth/Catalog、隔离探针 Chat candidate、credential-derived domain、account finalize、stream-only 约束、无 UsageProvider/无 builtin 决定，全部以 change-local `m0-evidence.md` 为准。
 
-  authPlatform: string;
-  authOrigins: readonly string[];
-
-  productConfigEnv: string;
-  productConfigPath: string;
-
-  settingsFile: string;
-
-  usageMode: "resource" | "none";
-}
-```
-
----
-
-## 4.2 国际版配置
-
-建议保留现有行为：
-
-```ts
-export const WORKBUDDY_INTL: WorkBuddySite = {
-  id: "intl",
-
-  providerId: "workbuddy",
-  displayName: "WorkBuddy AI",
-  commandName: "workbuddy",
-
-  origin: "https://www.workbuddy.ai",
-  apiBase: "https://www.workbuddy.ai/v2",
-  xDomain: "www.workbuddy.ai",
-
-  authPlatform: "CLI",
-  authOrigins: [
-    "https://www.workbuddy.ai",
-  ],
-
-  productConfigEnv: "WORKBUDDYAI_PRODUCT_CONFIG",
-  productConfigPath:
-    "~/.workbuddy-ai/cache/acc-product-config-v3.json",
-
-  settingsFile: ".workbuddy-settings.json",
-
-  usageMode: "resource",
-};
-```
-
-要求：
-
-> PR1 完成后，国际版行为必须与改造前一致。
-
----
-
-## 4.3 国内版配置
-
-国内版先按已知协议设计，但所有协议参数在正式合入前必须经真实账号验证。
-
-示意：
-
-```ts
-export const WORKBUDDY_CN: WorkBuddySite = {
-  id: "cn",
-
-  providerId: "workbuddy-cn",
-  displayName: "WorkBuddy CN",
-  commandName: "workbuddy-cn",
-
-  origin: "https://www.workbuddy.cn",
-  apiBase: "https://www.workbuddy.cn/v2",
-  xDomain: "www.workbuddy.cn",
-
-  authPlatform: "workbuddy",
-  authOrigins: [
-    "https://www.workbuddy.cn",
-  ],
-
-  productConfigEnv: "WORKBUDDY_CN_PRODUCT_CONFIG",
-  productConfigPath:
-    "~/.workbuddy/cache/acc-product-config-v3.json",
-
-  settingsFile: ".workbuddy-cn-settings.json",
-
-  usageMode: "none",
-};
-```
-
-注意：
-
-- `authPlatform`
-- `apiBase`
-- `authOrigins`
-- Desktop cache 路径
-- Billing 能力
-
-必须以真实 CN 客户端 / Gateway 证据为准。
-
----
+隔离探针成功使用的 Chat URL/header 在生产装配前仍须由脱敏 OMP 出站记录复核；domain restart recovery 与 durable uid finalize 未闭环前不得注册生产 `workbuddy-cn`。
 
 # 5. 安全边界
 
