@@ -101,10 +101,11 @@ omp plugin uninstall omp-workbuddy-connect
 
 ```bash
 npm test
+npm run test:fast
 npm run typecheck
 ```
 
-`npm test` 顺序执行 20 个永久回归脚本，避免全局 fetch、AuthStorage 与 runtime fixture 并发互扰。真实双 realm OAuth、Chat、Refresh、Vision、Tools、国际站 Billing、main、Task runtime 与 headless 的发布证据不由 Mock 替代，记录于 `docs/omp-port/release-evidence.md`。
+`npm test` 是发布权威入口：顺序执行 20 个永久回归脚本，每个脚本使用独立 Bun 进程，避免全局 fetch、AuthStorage、runtime fixture 和计时敏感场景互相争用。`npm run test:fast` 是开发期实验入口：默认以 4 个 worker 并发运行已分类的普通脚本，再串行运行 OAuth、Billing timeout、session-start、native transport 和真实 Task subprocess 场景；可用 `WORKBUDDY_TEST_CONCURRENCY=<n>` 调整并发度。fast 结果不能替代 RC 的串行 `npm test`。真实双 realm OAuth、Chat、Refresh、Vision、Tools、国际站 Billing、main、Task runtime 与 headless 的发布证据不由 Mock 替代，记录于 `docs/omp-port/release-evidence.md`。
 
 ## 与上游的差异
 

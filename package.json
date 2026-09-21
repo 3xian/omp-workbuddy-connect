@@ -23,6 +23,7 @@
   },
   "scripts": {
     "test": "bun test/run-all.mts",
+    "test:fast": "bun test/run-fast.mts",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
