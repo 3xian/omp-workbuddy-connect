@@ -43,13 +43,15 @@ const serialNames = new Set([
 
 const discoveredNames = files.map((file) => basename(file));
 const duplicateNames = discoveredNames.filter((name, index) => discoveredNames.indexOf(name) !== index);
+const overlapping = [...parallelNames].filter((name) => serialNames.has(name));
 const classifiedNames = new Set([...parallelNames, ...serialNames]);
 const unclassified = discoveredNames.filter((name) => !classifiedNames.has(name));
 const missing = [...classifiedNames].filter((name) => !discoveredNames.includes(name));
-if (duplicateNames.length > 0 || unclassified.length > 0 || missing.length > 0) {
+if (duplicateNames.length > 0 || overlapping.length > 0 || unclassified.length > 0 || missing.length > 0) {
   throw new Error(
     `invalid fast-runner classification: duplicates=[${duplicateNames.join(", ")}] `
-      + `unclassified=[${unclassified.join(", ")}] missing=[${missing.join(", ")}]`,
+      + `overlapping=[${overlapping.join(", ")}] unclassified=[${unclassified.join(", ")}] `
+      + `missing=[${missing.join(", ")}]`,
   );
 }
 const parallel = files.filter((file) => parallelNames.has(basename(file)));
