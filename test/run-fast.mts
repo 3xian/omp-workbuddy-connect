@@ -1,4 +1,5 @@
 import { readdir } from "node:fs/promises";
+import { availableParallelism } from "node:os";
 import { basename, join } from "node:path";
 
 const roots = ["test", join("test", "contract")];
@@ -55,7 +56,8 @@ const parallel = files.filter((file) => parallelNames.has(basename(file)));
 const serial = files.filter((file) => serialNames.has(basename(file)));
 
 const requestedConcurrency = process.env.WORKBUDDY_TEST_CONCURRENCY;
-const parsedConcurrency = requestedConcurrency === undefined ? 4 : Number(requestedConcurrency);
+const defaultConcurrency = Math.min(4, availableParallelism());
+const parsedConcurrency = requestedConcurrency === undefined ? defaultConcurrency : Number(requestedConcurrency);
 if (!Number.isInteger(parsedConcurrency) || parsedConcurrency < 1) {
   throw new Error(`WORKBUDDY_TEST_CONCURRENCY must be a positive integer, received ${requestedConcurrency}`);
 }
@@ -66,9 +68,11 @@ interface Result {
   exitCode: number;
   stdout: string;
   stderr: string;
+  elapsedMs: number;
 }
 
 async function run(file: string): Promise<Result> {
+  const startedAt = Date.now();
   const child = Bun.spawn([process.execPath, file], {
     stdin: "ignore",
     stdout: "pipe",
@@ -79,7 +83,7 @@ async function run(file: string): Promise<Result> {
     new Response(child.stderr).text(),
     child.exited,
   ]);
-  return { file, exitCode, stdout, stderr };
+  return { file, exitCode, stdout, stderr, elapsedMs: Date.now() - startedAt };
 }
 
 async function runConcurrent(batch: readonly string[], limit: number): Promise<Result[]> {
@@ -122,5 +126,11 @@ if (failures.length > 0) {
   );
 }
 
-const elapsedMs = Date.now() - startedAt;
-console.log(`OK: ${files.length} permanent regression scripts passed in ${elapsedMs}ms using the hybrid fast runner`);
+const totalElapsedMs = Date.now() - startedAt;
+const slowest = [...results]
+  .sort((left, right) => right.elapsedMs - left.elapsedMs)
+  .slice(0, 3)
+  .map((result) => `${result.file} ${result.elapsedMs}ms`)
+  .join(", ");
+console.log(`OK: ${files.length} permanent regression scripts passed in ${totalElapsedMs}ms using the hybrid fast runner`);
+console.log(`slowest: ${slowest}`);
