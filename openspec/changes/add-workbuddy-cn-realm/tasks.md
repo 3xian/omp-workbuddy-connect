@@ -21,7 +21,7 @@
 - [x] 2.5 从入口提取每 realm 独立装配闭包并仅装配 `workbuddy`，验证 registry、credential authority、AbortController、scope、目录与 UI 状态均非全局共享，官方 OMP 可正常加载。
 - [x] 2.6 运行完整国际站 unit、真实类型 contract、官方 runtime integration 和 live OAuth/Chat/refresh/tools/Usage 冒烟；任何行为差异修复后再进入中国站接入。
 
-> M1 于 2026-09-21 验收：`npm run typecheck` 零错误，`npm test` 的 19 个永久回归脚本全部通过；官方 OMP 18.2.7 直接加载当前源码后完成脱敏的国际站 OAuth、Hy3 Chat、真实 Read tool、强制 refresh 后 Chat 与 Usage Widget 冒烟，随后通过 Provider 命令清除隔离凭据。运行未记录 Token、Authorization、OAuth state 或完整账号标识。
+> M1 于 2026-09-21 验收：`npm run typecheck` 零错误，`npm test` 的 19 个永久回归脚本全部通过；官方 OMP 18.2.7 直接加载当前源码后完成脱敏的国际站 OAuth、Hy3 Chat、真实 Read tool、强制 refresh 后 Chat 与 Usage Widget 冒烟，随后通过 Provider 命令清除隔离凭据。运行未记录 Token、Authorization、OAuth state 或完整账号标识。Canonical evidence：[`m1-evidence.md`](./m1-evidence.md)。
 
 ## 3. M2 — 接入证据支持的中国站 realm
 
