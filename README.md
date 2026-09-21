@@ -1,8 +1,8 @@
 # OMP WorkBuddy Connect
 
-> **main 开发版本为 v1.2.0-rc.2（未发布）；最新已发布双 realm RC 为 v1.2.0-rc.1，验收版本为 OMP 18.2.7**
+> **最新已发布双 realm RC 为 v1.2.0-rc.2；生产路径沿用 v1.2.0-rc.1 在 OMP 18.2.7 上的验收结果**
 >
-> `v1.2.0-rc.1` 的国际站与中国站单账号、串行换号和完整功能矩阵均已通过。并发 credential replacement
+> `v1.2.0-rc.2` 增加开发期 hybrid test runner，未修改 `src/` 或 `extensions/`。国际站与中国站的单账号、串行换号和完整功能矩阵已通过。并发 credential replacement
 > 的 Bearer/Header 原子关联及 OMP 本地诊断 identity 保留是 RC 已知限制。正式证据见 `docs/omp-port/release-evidence.md`。
 
 ## 当前版本
@@ -23,7 +23,7 @@ bun --version
 其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。稳定版仍可固定安装 `v1.1.7`；安装最新已发布的双 realm RC 使用：
 
 ```bash
-omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.2.0-rc.1
+omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.2.0-rc.2
 omp
 ```
 
@@ -123,7 +123,7 @@ npm run typecheck
 - 不复用旧 Pi/Fork、DSH 或 Desktop credential；按目标 realm 分别执行 `/login workbuddy` 或 `/login workbuddy-cn`。
 - `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源；既有国际站 credential 仍只属于 `workbuddy`。
 - 旧 scope 设置不会跨 realm 导入；分别用 `/workbuddy free|all` 与 `/workbuddy-cn free|all` 明确选择。
-- 当前 main 的包版本为未发布的 `1.2.0-rc.2`；最新已发布双 realm RC 为 `v1.2.0-rc.1`，稳定版仍为 `v1.1.7`。
+- 当前最新已发布双 realm RC 为 `v1.2.0-rc.2`；稳定版仍为 `v1.1.7`。
 
 ## v1 限制
 
