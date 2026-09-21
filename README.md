@@ -1,8 +1,8 @@
 # OMP WorkBuddy Connect
 
-> **v1.2.0-rc.1 dual-realm release candidate，按当前最新稳定版 OMP 验收（本次为 18.2.7）**
+> **main 开发版本为 v1.2.0-rc.2（未发布）；最新已发布双 realm RC 为 v1.2.0-rc.1，验收版本为 OMP 18.2.7**
 >
-> 国际站与中国站的单账号、串行换号和完整功能矩阵均已通过。并发 credential replacement
+> `v1.2.0-rc.1` 的国际站与中国站单账号、串行换号和完整功能矩阵均已通过。并发 credential replacement
 > 的 Bearer/Header 原子关联及 OMP 本地诊断 identity 保留是 RC 已知限制。正式证据见 `docs/omp-port/release-evidence.md`。
 
 ## 当前版本
@@ -20,7 +20,7 @@ brew install oven-sh/bun/bun
 bun --version
 ```
 
-其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。稳定版仍可固定安装 `v1.1.7`；测试当前双 realm RC 使用：
+其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。稳定版仍可固定安装 `v1.1.7`；安装最新已发布的双 realm RC 使用：
 
 ```bash
 omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.2.0-rc.1
@@ -123,11 +123,11 @@ npm run typecheck
 - 不复用旧 Pi/Fork、DSH 或 Desktop credential；按目标 realm 分别执行 `/login workbuddy` 或 `/login workbuddy-cn`。
 - `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源；既有国际站 credential 仍只属于 `workbuddy`。
 - 旧 scope 设置不会跨 realm 导入；分别用 `/workbuddy free|all` 与 `/workbuddy-cn free|all` 明确选择。
-- 当前双 realm RC 包版本为 `1.2.0-rc.1`；稳定版仍为 `v1.1.7`。
+- 当前 main 的包版本为未发布的 `1.2.0-rc.2`；最新已发布双 realm RC 为 `v1.2.0-rc.1`，稳定版仍为 `v1.1.7`。
 
 ## v1 限制
 
-- 每次发布只验收当时最新稳定版官方 OMP；当前双 realm RC 已验证 OMP `18.2.7`、国际站 `https://www.workbuddy.ai` 与中国站 `https://copilot.tencent.com`。
+- 每次发布只验收当时最新稳定版官方 OMP；已发布的 `v1.2.0-rc.1` 验证了 OMP `18.2.7`、国际站 `https://www.workbuddy.ai` 与中国站 `https://copilot.tencent.com`。
 - 每个 realm 仅支持一个已存储账号；零个或多个账号、缺失身份或身份错配均拒绝。中国站 live matrix 使用 personal/no-enterprise 账号，不扩大为企业账号完整验证。
 - RC 支持稳定单账号和串行换号。换号前必须完成或 Ctrl-C 取消目标 realm 的在途请求，再执行 `/workbuddy logout` + `/login workbuddy`，或 `/workbuddy-cn logout` + `/login workbuddy-cn`。
 - 当前验证的 OMP 不向 `Model.resolveHeaders()` 暴露当前 request-attempt 已选中的 OAuth identity；其他 session/process 在 Bearer 与 Header 构造窗口内并发替换 credential 时，插件不能原子证明两者属于同一 durable row。
