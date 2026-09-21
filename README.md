@@ -1,13 +1,13 @@
 # OMP WorkBuddy Connect
 
-> **v1 release gate passed for OMP 18.2.6**
+> **v1.1.8-rc.1 release candidate for OMP 18.2.6**
 >
-> M0–M5 已完成。正式验收环境、逐项 Release Matrix 与脱敏证据见
-> `docs/omp-port/release-evidence.md`；兼容范围仅限本文明确列出的宿主版本与国际版端点。
+> 正常单账号、串行换号与完整功能回归已通过；并发 credential replacement 的
+> Bearer/Header 原子关联是 RC 已知限制。正式证据见 `docs/omp-port/release-evidence.md`。
 
 ## 当前版本
 
-WorkBuddy AI 国际版 provider for OMP。认证、模型目录、scope、Gateway 兼容、工具、Credits 与可选管理面均通过 v1 验收。
+WorkBuddy AI 国际版 provider for OMP。当前 RC 保留 v1.1.7 的功能边界，并验证认证、模型目录、scope、Gateway、工具、Credits、main、Task 与 headless 路径。
 
 移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
@@ -20,10 +20,10 @@ brew install oven-sh/bun/bun
 bun --version
 ```
 
-其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。然后通过固定 GitHub tag 安装：
+其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。稳定版仍可固定安装 `v1.1.7`；测试当前 RC 使用：
 
 ```bash
-omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.7
+omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.8-rc.1
 omp
 ```
 
@@ -117,16 +117,17 @@ npm run typecheck
 - 不复用旧 Pi/Fork、DSH 或 Desktop credential；安装后必须执行 `/login workbuddy`。
 - `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源。
 - 旧 scope 设置不会导入；用 `/workbuddy free` 或 `/workbuddy all` 明确选择。
-- 包版本保持 `1.1.7`；“v1”是功能发布定义，不会把 manifest 版本倒退到 `1.0.0`。
+- 当前 RC 包版本为 `1.1.8-rc.1`；稳定版仍为 `v1.1.7`。
 
 ## v1 限制
 
 - 仅验证官方 OMP `18.2.6` 与 WorkBuddy 国际版 `https://www.workbuddy.ai`。
-- 仅支持一个已存储 WorkBuddy Account；零个或多个账号、缺失身份或身份错配均在 transport 前拒绝。
+- 仅支持一个已存储 WorkBuddy Account；零个或多个账号、缺失身份或身份错配均拒绝。
+- RC 支持稳定单账号和串行换号。换号前必须完成或取消在途 WorkBuddy 请求，再依次执行 `/workbuddy logout` 与 `/login workbuddy`。
+- OMP 18.2.6 不向 `Model.resolveHeaders()` 暴露当前 request-attempt 已选中的 OAuth identity；其他 session/process 在 Bearer 与 Header 构造窗口内并发替换 credential 时，插件不能原子证明两者属于同一 durable row。
 - WorkBuddy 不提供常驻 Widget/status；运行 `/workbuddy` 可临时查看详情，下一次 `turn_start` 自动收起。
 - 模型目录只读 `~/.workbuddy-ai/cache/acc-product-config-v3.json` 的产品元数据；不读取 Desktop credential。缓存失效时 `all` 使用内置 fallback，`free` 不把 fallback 或缺少 multiplier 的模型猜成免费。
-- WorkBuddy 身份 Header 在请求边界从 OMP AuthStorage 原子解析；同 ID 的其他 Provider 不经过 WorkBuddy payload 或身份逻辑。
-- v1 不包含多账号轮换、Desktop credential import、自定义 Chat transport、在线动态目录端点或即时 model-select UI。
+- 同 ID 的其他 Provider 不经过 WorkBuddy payload 或身份逻辑。v1 不包含多账号轮换、Desktop credential import、自定义 Chat transport、在线动态目录端点或即时 model-select UI。
 - OMP 18.2.6 的 Usage API 是跨 Provider 聚合刷新；`/workbuddy` 只展示 WorkBuddy 报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
 
 ## License

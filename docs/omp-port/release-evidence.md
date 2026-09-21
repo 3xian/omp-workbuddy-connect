@@ -1,6 +1,6 @@
 # WorkBuddy OMP v1 Release Evidence
 
-Status: **HISTORICAL PASS for v1.1.5–v1.1.7; post-merge publication BLOCKED by AUTH-04 multi-session API gap**
+Status: **v1.1.8-rc.1 approved with a documented concurrent credential-replacement limitation; stable publication remains BLOCKED by AUTH-04**
 
 This report contains redacted outcomes only. OAuth tokens, refresh tokens, Authorization values, account identifiers, organization identifiers, OAuth state values, and raw request bodies are intentionally omitted.
 
@@ -83,15 +83,19 @@ The M0–M5 Auth, Model, Gateway, Billing, Agent, and live-service evidence belo
 
 Verification repeated on OMP `18.2.6`: `npm test` passed all 19 permanent scripts, `npm run typecheck` passed, and an isolated real TUI rendered the seven-line Widget with no WorkBuddy status line. The synthetic six-model UI regression rendered four names plus `… +2`. Auth, Provider, Gateway, and Chat production paths are unchanged and inherit the live evidence below.
 
-### Post-merge AUTH-04 reassessment
+### v1.1.8-rc.1 AUTH-04 reassessment
 
 The sole-account optimization and zero duplicate OAuth resolution remain. Full transport inspection confirms Bearer-before-Header order and per-retry Header resolution, but a follow-up review found that `Model.resolveHeaders(signal)` receives no request session. The extension lifecycle's last `session_start`/`session_switch` session is not necessarily the main/Task/child session whose `AuthStorage.resolver()` selected the Bearer.
 
 The rejected active-row implementation was additionally backed by a fake that ignored `sessionId`. It has been removed. Current code retains valid sole-row capture/recheck behavior and makes same-AuthStorage binding idempotent across sessions. A real AuthStorage regression now binds lifecycle session A, replaces A with B, resolves B for request session B, and confirms the retained model uses B without consulting session A's stale pin.
 
-These checks are not an atomic Bearer/Header proof. No new release tag may rely on this matrix until OMP provides request-scoped identity to Header resolution or an atomic Bearer-plus-Headers contract.
+These checks are not an atomic Bearer/Header proof. The RC supports stable single-account use and serialized account replacement; a stable tag remains blocked until OMP provides request-scoped identity to Header resolution or the unsupported concurrent-mutation boundary is adopted as a permanent product constraint.
 
 AUTH-04 is intentionally specified per transport attempt. A later retry may use a newly selected account after explicit replacement, but only if that retry's Bearer and Headers are atomically same-row; the current host gap prevents proving this condition.
+
+RC operators must finish or cancel active WorkBuddy requests before account replacement, then use `/workbuddy logout` followed by `/login workbuddy`. Concurrent replacement from another OMP session or process is outside the RC support contract.
+
+RC verification on OMP dependencies `18.2.6`: `bun test/run-all.mts` passed 19/19 scripts, `bun run typecheck` passed, strict OpenSpec validation passed, and `npm pack --dry-run --json` produced `omp-workbuddy-connect@1.1.8-rc.1` with the expected 12-file runtime artifact.
 
 ## Release Matrix
 
