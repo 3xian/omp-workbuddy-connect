@@ -140,17 +140,19 @@ try {
   assert(JSON.parse(await readFile(settingsPath, "utf8")).scope === "all", "registration failure persisted an uncommitted scope");
   assert(notifications.at(-1)?.type === "error", "registration failure was falsely reported as success");
 
-  const committedSettings = await readFile(settingsPath, "utf8");
-  await chmod(temp, 0o500);
-  try {
-    await command("free", ctx);
-  } finally {
-    await chmod(temp, 0o700);
+  if (process.platform !== "win32") {
+    const committedSettings = await readFile(settingsPath, "utf8");
+    await chmod(temp, 0o500);
+    try {
+      await command("free", ctx);
+    } finally {
+      await chmod(temp, 0o700);
+    }
+    assert(registry.find("workbuddy", "contract-paid"), "settings failure did not restore the previous provider");
+    assert(await readFile(settingsPath, "utf8") === committedSettings, "settings failure changed committed bytes");
+    assert(notifications.at(-1)?.type === "error", "settings failure was falsely reported as success");
+    assert(unregisterCalls === 0, "non-empty rollback unnecessarily tore down the provider");
   }
-  assert(registry.find("workbuddy", "contract-paid"), "settings failure did not restore the previous provider");
-  assert(await readFile(settingsPath, "utf8") === committedSettings, "settings failure changed committed bytes");
-  assert(notifications.at(-1)?.type === "error", "settings failure was falsely reported as success");
-  assert(unregisterCalls === 0, "non-empty rollback unnecessarily tore down the provider");
 
   const paidModel = contractModels.find(
     (model) => typeof model === "object" && model !== null && "id" in model && model.id === "contract-paid",

@@ -61,6 +61,7 @@ omp plugin uninstall omp-workbuddy-connect
 ## 模型与推理档
 
 每个 realm 默认 scope 均为 `free`。只有对应 Desktop 产品目录中带明确零 multiplier credits 证据的模型会显示；`0`、`0.0`、`x0`、`x0.00` 等规范零值会归一为免费证据，非零、缺失或格式错误均不是免费。有效缓存（包括 `models: []`）是权威结果，不会被另一 realm 扩宽。
+模型名称仅在目录 multiplier 语法可识别时追加 ` · <multiplier>`；缺失、空白、`x?`、格式错误以及没有价格证据的内置 fallback 均只显示裸模型名，避免把占位值误呈现为价格。
 
 国际站读取 `~/.workbuddy-ai/cache/acc-product-config-v3.json`；缓存整体不可用时，`all` 可使用维护的国际站内置目录，但 fallback 不构成免费证据。中国站仅读取 `~/.workbuddy/cache/acc-product-config-v3.json`，没有跨站或内置 fallback；缓存缺失、损坏或没有有效模型时明确显示 unavailable/empty。reasoning、图片能力和推理档均来自目标 realm 的目录。
 
@@ -108,12 +109,12 @@ npm run typecheck
 ## 与上游的差异
 
 - 直接 `pi.registerProvider`，去掉 DSH 的 shim 与 loopback 端口转发。
-- 内置模型仅作为产品目录不可用时的 fallback，不是免费模型证明。
+- 仅国际站维护内置模型，且只在国际站产品目录整体不可用时作为 `all` fallback；它不是免费模型证明。中国站没有内置或跨站 fallback。
 - 推理档由 OMP canonical `thinking` metadata 驱动；宿主根据 `efforts`、`requiresEffort` 和 Gateway compat 生成 `reasoning_effort`。
 - 选 Default（auto）时不主动选择 effort；选择具体档位、required off 和 optional off 均由 OMP transport 根据模型 metadata 处理。
-- Deepseek-V4.1-Flash 的目录与请求有效输出上限均为 16k（`FLASH_MAX_TOKENS`）：已记录的 Gateway 行为显示更大预算可能陷入重复推理循环。产品目录原始 `maxOutputTokens` 可以更高，但不会作为实际请求上限公开。
+- 国际站 Deepseek-V4.1-Flash 的目录与请求有效输出上限均钳制为 16k（`FLASH_MAX_TOKENS`）：已记录的 Gateway 行为显示更大预算可能陷入重复推理循环。该 override 不作用于中国站同名模型。
 - 插件当前不清理 assistant reasoning/history；OMP 原生 history 与 tool association 保持不变。只有真实 WorkBuddy Gateway 拒绝证据可复现时，才增加最小兼容转换。
-- WorkBuddy Gateway 的 `tool_choice` 只接受字符串；插件仅把 OMP 原生 named-choice 对象复制为函数名字符串。该差异来自隔离 live gate 的可复现 `400` / code `11101`，其他 tool/prompt/history 字段不改写。
+- 国际站 Gateway 的 `tool_choice` 只接受字符串；插件仅对 `workbuddy` 把 OMP 原生 named-choice 对象复制为函数名字符串。该差异来自隔离 live gate 的可复现 `400` / code `11101`；`workbuddy-cn` 及其他 tool/prompt/history 字段不改写。
 - 不按模型名称猜测 reasoning effort，也不为缺少可信能力信息的模型生成全档默认。
 
 ## 迁移

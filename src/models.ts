@@ -273,7 +273,9 @@ export function buildOmpModels(site: SiteDescriptor, config: ProductConfig, scop
       const defaultLevel = model.defaultEffort as OmpThinking["defaultLevel"];
       return {
         id: model.id,
-        name: `${model.name} · ${model.creditsRaw ?? "x?"}`,
+        name: model.freeEvidence === "unknown" || !model.creditsRaw
+          ? model.name
+          : `${model.name} · ${model.creditsRaw}`,
         reasoning: model.supportsReasoning,
         ...(hasCanonicalThinking
           ? {

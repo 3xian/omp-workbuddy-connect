@@ -41,6 +41,7 @@ npx openspec validate adapt-workbuddy-international-omp --strict
 ```
 
 The repository tests are executable `.test.mts` contract scripts rather than `bun:test` declarations, so Bun reports zero formal test cases; their seventeen explicit `OK:` contracts and process exit status are the acceptance signal. Plain `bun test test` succeeds without cross-file environment leakage.
+> Erratum (2026-09-21): `bun test <dir>` runs every discovered file in one sequential process; a Bun 1.3.14 probe observed the same PID and shared `globalThis`/`process.env` state across files. The 17/17 result therefore relied on each script restoring owned state in `finally`, not process isolation. Current `npm test` uses `test/run-all.mts`, which starts one Bun process per script and keeps execution serial.
 
 ## Request-bound isolation
 

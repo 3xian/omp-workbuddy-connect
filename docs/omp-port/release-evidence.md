@@ -11,6 +11,7 @@ The 2026-09-21 M3 run completed fresh OAuth, restart, forced refresh, scope swit
 Functional gates passed for both `workbuddy` and `workbuddy-cn`. Credential/secret privacy and cross-realm isolation also passed: the inspected artifact contained no Authorization, access/refresh token, API key, credential, pending code, cross-realm identity, or third-party upload. OMP `18.2.7` did retain the request's raw `X-User-Id` in one host-owned local HTTP 400 dump. This is classified as a disclosed host-local privacy limitation, not an authentication-secret leak; README tells operators where these private local files live and how to handle them. The isolated acceptance profile and attachment were removed.
 
 RC risk acceptance therefore approves `v1.2.0-rc.1`; stable publication remains pending RC observation and final review. The full redacted matrix, exact runtime baseline, observed MiniMax availability failure, exact Task models, cache checksums, and release decision are recorded in `openspec/changes/add-workbuddy-cn-realm/m3-evidence.md`.
+The final local lifecycle check reported the `omp-workbuddy-connect` plugin itself as `ok` at `v1.2.0-rc.1`. OMP also emitted `package_manifest: warning — Not created yet` for the fresh isolated profile; install and uninstall still exited successfully. This host-profile warning is recorded rather than misreported as a completely warning-free doctor result.
 
 ## Historical v1 evidence
 

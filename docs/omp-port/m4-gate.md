@@ -71,5 +71,6 @@ npx openspec validate adapt-workbuddy-international-omp --strict
 ```
 
 These repository tests are executable `.test.mts` scripts rather than `bun:test` declarations; Bun's summary therefore reports zero formal test cases. The nineteen explicit `OK:` contracts and process exit status are the acceptance signal.
+> Erratum (2026-09-21): the `npx bun test test` command above ran the discovered files in one sequential process, as measured in `m3-gate.md`. The recorded 19/19 result stands; current isolation-sensitive validation uses serial `npm test` (`test/run-all.mts`), which starts one Bun process per script.
 
 M4 validated the management protocol and lifecycle locally against OMP 18.2.6 without fabricating the then-pending live results. The subsequent authenticated Billing and complete release matrix passed at M5 and are archived in `release-evidence.md`.

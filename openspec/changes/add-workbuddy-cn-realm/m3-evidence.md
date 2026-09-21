@@ -106,7 +106,7 @@ RC 风险接受：该现象属于官方宿主在本机保留账号标识，不�
 
 ## 8. 发布决策
 
-- 官方 local install、plugin doctor 和 uninstall：PASS；发布准备版本 `1.2.0-rc.1`。
+- 官方 local install 与 uninstall：PASS；`plugin doctor` 中 `omp-workbuddy-connect` 为 `ok`，新隔离 profile 同时报 `package_manifest: Not created yet` 非阻塞 warning；发布准备版本 `1.2.0-rc.1`。
 - 中国站功能 gate：PASS。
 - 国际站回归 gate：PASS。
 - Credential/secret privacy 与跨 realm 隔离：PASS。

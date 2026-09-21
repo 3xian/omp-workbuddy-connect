@@ -24,7 +24,23 @@ const usageFetch: typeof fetch = async (_input, init) => {
   if (mode === "malformed") return Response.json({ code: 0, data: { Response: { Data: {} } } });
   if (mode === "slow") {
     return new Promise<Response>((_resolve, reject) => {
-      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+      const signal = init?.signal;
+      if (!signal) {
+        reject(new Error("Billing request was issued without an abort signal"));
+        return;
+      }
+      if (signal.aborted) {
+        reject(signal.reason);
+        return;
+      }
+      const watchdog = setTimeout(
+        () => reject(new Error("Billing request was never aborted by the host timeout")),
+        3_000,
+      );
+      signal.addEventListener("abort", () => {
+        clearTimeout(watchdog);
+        reject(signal.reason);
+      }, { once: true });
     });
   }
   const remaining = mode === "zero" ? 0 : 5;

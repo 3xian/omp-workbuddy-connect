@@ -5,7 +5,7 @@
 ### Requirement: REL-04 Credential privacy and official endpoints
 系统 SHALL 不在日志、仓库、项目目录或第三方服务泄露 access、refresh、完整 Authorization、API key 或 credential，不修改或清除 Desktop 登录状态。网络 SHALL 仅访问请求目标 realm 功能所需且已经证据确认的官方 endpoints；国际站与中国站 credential、headers 和 pending code MUST NOT 交叉发送。扩展自有输出中的 identity SHALL 脱敏。若验收时最新稳定版 OMP 独立生成的本地 HTTP 诊断保留账号标识、且没有公开 Provider API 可声明额外敏感 Header，RC MAY 在确认附件不含认证秘密、不上传第三方、不跨 realm，并于 README 和 release evidence 明示本地隐私限制后发布；不得把该风险描述为完全脱敏。
 
-#### Scenario: Extension error logging contains sensitive upstream content
+#### Scenario: Error logging contains sensitive upstream content
 - **WHEN** 任一 realm 的 OAuth、refresh、Billing 或 Chat 错误含认证秘密或身份
 - **THEN** 扩展输出保留有用状态、realm 和错误分类但移除 Token/Authorization，身份脱敏，扩展生成的诊断附件亦遵守同一规则
 

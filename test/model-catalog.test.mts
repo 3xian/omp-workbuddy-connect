@@ -103,6 +103,9 @@ assert(optional.thinking.defaultLevel === undefined, "unsupported product defaul
 const unknownReasoning = all.find((model) => model.id === "unknown-reasoning");
 assert(unknownReasoning?.reasoning === true, "reasoning capability was dropped");
 assert(unknownReasoning.thinking === undefined, "missing effort evidence defaulted to every effort");
+assert(required.name === "Free Required · x0.00", `declared free multiplier was not shown: ${required.name}`);
+assert(optional?.name === "paid-optional · x1.25", `declared paid multiplier was not shown: ${optional?.name}`);
+assert(unknownReasoning.name === "unknown-reasoning", `missing multiplier leaked a placeholder: ${unknownReasoning.name}`);
 
 assert(creditsAreFree("x0.00") && creditsAreFree("0.0"), "explicit zero-credit evidence was rejected");
 assert(!creditsAreFree(undefined) && !creditsAreFree("x1.00"), "unknown or paid credits were treated as free");
@@ -111,6 +114,7 @@ const priceFormats = parseProductConfig(JSON.stringify({
     { id: "garbage-price", credits: "garbage", maxInputTokens: 10, maxOutputTokens: 5 },
     { id: "unknown-price", credits: "x?", maxInputTokens: 10, maxOutputTokens: 5 },
     { id: "credit-suffix", credits: "x3.33 credits", maxInputTokens: 10, maxOutputTokens: 5 },
+    { id: "blank-price", credits: "   ", maxInputTokens: 10, maxOutputTokens: 5 },
   ],
 }));
 assert(priceFormats, "price format catalog was rejected");
@@ -118,8 +122,14 @@ assert(
   priceFormats.models[0]?.creditsRaw === "garbage"
     && priceFormats.models[0].freeEvidence === "unknown"
     && priceFormats.models[1]?.freeEvidence === "unknown"
-    && priceFormats.models[2]?.freeEvidence === "non-zero",
+    && priceFormats.models[2]?.freeEvidence === "non-zero"
+    && priceFormats.models[3]?.freeEvidence === "unknown",
   "malformed or observed credit formats were classified incorrectly",
+);
+const priceFormatNames = buildOmpModels(WORKBUDDY_INTL, priceFormats, "all").map((model) => model.name);
+assert(
+  priceFormatNames.join("|") === "garbage-price|unknown-price|credit-suffix · x3.33 credits|blank-price",
+  `model names exposed unrecognized multipliers: ${priceFormatNames.join("|")}`,
 );
 assert(freeModelIds(catalog).join(",") === "free-required", "free IDs did not use explicit cache evidence");
 assert(buildOmpModels(WORKBUDDY_INTL, catalog, "free").map((model) => model.id).join(",") === "free-required", "free scope leaked paid or unknown models");
@@ -142,7 +152,12 @@ try {
   assert(missing.source === "builtin-fallback", "missing cache did not select builtin fallback");
   assert(missing.fallbackReason === "missing", "missing cache reason was lost");
   assert(buildOmpModels(WORKBUDDY_INTL, missing, "free").length === 0, "builtin zero cost or stale credits claimed free status");
-  assert(buildOmpModels(WORKBUDDY_INTL, missing, "all").length === 3, "builtin fallback catalog was unavailable in all scope");
+  const fallbackModels = buildOmpModels(WORKBUDDY_INTL, missing, "all");
+  assert(fallbackModels.length === 3, "builtin fallback catalog was unavailable in all scope");
+  assert(
+    fallbackModels.map((model) => model.name).join("|") === "Deepseek-V4.1-Flash|Hy4 preview|Hy3",
+    `builtin fallback displayed an unproven multiplier: ${fallbackModels.map((model) => model.name).join("|")}`,
+  );
 
   const unreadablePath = join(temp, "cache-directory");
   await mkdir(unreadablePath);
@@ -202,4 +217,4 @@ assert(
   "international model override leaked into another realm",
 );
 
-console.log("OK: model parsing, thinking, vision, budgets, and truthful free scope");
+console.log("OK: model parsing, thinking, vision, budgets, truthful free scope, and recognized multiplier display");
