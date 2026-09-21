@@ -65,7 +65,7 @@ omp plugin uninstall omp-workbuddy-connect
 
 国际站读取 `~/.workbuddy-ai/cache/acc-product-config-v3.json`；缓存整体不可用时，`all` 可使用维护的国际站内置目录，但 fallback 不构成免费证据。中国站仅读取 `~/.workbuddy/cache/acc-product-config-v3.json`，没有跨站或内置 fallback；缓存缺失、损坏或没有有效模型时明确显示 unavailable/empty。reasoning、图片能力和推理档均来自目标 realm 的目录。
 
-| 模型 | 上下文 / 有效输出上限 | OMP canonical effort |
+| 国际站内置 fallback 模型 | 上下文 / 有效输出上限 | OMP canonical effort |
 | --- | --- | --- |
 | Deepseek-V4.1-Flash | 1M / 16k | low · medium · high · xhigh · max |
 | Hy4 preview | 1M / 64k | high |
