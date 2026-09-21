@@ -48,7 +48,7 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 - **THEN** 输出保留传入宿主 credential 的 refresh、accountId 和已有可选 orgId；不是从旧文件或其他账号补值
 
 ### Requirement: AUTH-04 Durable credential identity binding
-每次 WorkBuddy Chat 的 Authorization、X-User-Id SHALL 属于同一个唯一 stored OAuth account identity。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送官方 `X-No-Enterprise-Id: 1`，不得伪造组织。Authorization SHALL 仅由宿主原生 AuthStorage resolver 解析；WorkBuddy `getApiKey(credentials)` SHALL 在返回 access 前验证宿主选择的 accountId/可选 orgId 等于唯一 stored account。账号 Headers SHALL 在请求边界通过 `listOAuthAccounts()` 重新读取并验证该唯一 account，不得再次调用 `getOAuthAccess()`，也不得依赖长期静态账号 Header 快照。401 retry 可刷新该唯一 account 的 Bearer，但 accountId 与已有可选 orgId MUST 保持一致。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
+每次 WorkBuddy Chat 的 Authorization、X-User-Id SHALL 属于同一个唯一 stored OAuth durable credential row。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送官方 `X-No-Enterprise-Id: 1`，不得伪造组织。Authorization SHALL 仅由宿主原生 AuthStorage resolver 解析。Header 与 Bearer 的解析 MUST 共享宿主提供的 request-attempt identity 或由同一个原子 credential resolution 产生；分别读取“当前唯一账号”不构成同源证明。WorkBuddy `getApiKey(credentials)` SHALL 在返回 access 前验证宿主选择的 accountId/可选 orgId。401 retry 可刷新同一 durable row 的 Bearer，但 accountId 与已有可选 orgId MUST 保持一致。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户首次登录后发出模型请求
@@ -57,6 +57,10 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 #### Scenario: Refresh, retry, and account switch
 - **WHEN** 单账号发生 forced refresh 或 401 retry，或 A logout 后 B 在已有会话登录
 - **THEN** forced refresh/401 retry 可更换 Bearer，但每次出站的 Bearer 与用户/可选企业身份仍属于同一 durable credential row；切换到 B 后不再使用 A row，迟到 A 结果不会恢复旧身份
+
+#### Scenario: Account changes between Header and Bearer resolution
+- **WHEN** A 的身份 Headers 已解析，但在宿主选择 Bearer 前 storage 切换到 B，或并发 B 请求改变 session selection
+- **THEN** A 请求必须在任何 Chat HTTP 前失败；不得发送 A Headers 与 B Bearer，也不得用全局 pending cache 猜测请求归属
 
 #### Scenario: Persisted credential before session binding
 - **WHEN** OMP 重启时 AuthStorage 已持久化一个完整 WorkBuddy credential，Provider 在 `session_start` 绑定前注册并投影模型

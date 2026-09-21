@@ -122,6 +122,8 @@ try {
   assert(notifications.at(-1)?.type === "error", "failed logout was not surfaced as an error");
   assert(!notifications.at(-1)?.message.includes("已断开"), "failed logout reported success");
 
+  const keyAfterFailure = await registry.getApiKey(retained, "logout-contract");
+  assert(keyAfterFailure === "access-a", "failed host deletion did not restore the prior Bearer");
   const headersAfterFailure = await retained.resolveHeaders();
   assert(
     headersAfterFailure?.["X-User-Id"] === "account-a"

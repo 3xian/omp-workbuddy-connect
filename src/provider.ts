@@ -25,6 +25,7 @@ type Fetch = typeof globalThis.fetch;
 
 interface RuntimeBinding {
   authStorage: StoredAuth;
+  sessionId: string;
 }
 
 function identityError(reason: string): Error {
@@ -36,6 +37,15 @@ function requireSingleStoredAccount(binding: RuntimeBinding) {
   if (accounts.length !== 1) throw identityError(`expected one stored account, found ${accounts.length}`);
   const account = accounts[0]!;
   if (!account.accountId) throw identityError("stored account identity is incomplete");
+  return account as typeof account & { accountId: string };
+}
+
+function requireSelectedStoredAccount(binding: RuntimeBinding) {
+  const accounts = binding.authStorage.listOAuthAccounts(WORKBUDDY_PROVIDER, binding.sessionId);
+  if (accounts.length !== 1) throw identityError(`expected one stored account, found ${accounts.length}`);
+  const account = accounts[0]!;
+  if (!account.accountId) throw identityError("stored account identity is incomplete");
+  if (!account.active) throw identityError("stored account is not selected for the current session");
   return account as typeof account & { accountId: string };
 }
 
@@ -115,17 +125,27 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
           const accessRevision = requireModelAccess(model.id);
           const requestSignal = combinedSignal(signal);
           const currentBinding = requireBinding();
+          const selectedAccount = requireSelectedStoredAccount(currentBinding);
           const preserved = await previous?.(requestSignal);
           requestSignal.throwIfAborted();
           requireModelAccess(model.id, accessRevision);
           if (requireBinding() !== currentBinding) {
             throw identityError("session changed during header resolution");
           }
-          const account = requireSingleStoredAccount(currentBinding);
+          const currentAccount = requireSelectedStoredAccount(currentBinding);
+          if (
+            currentAccount.credentialId !== selectedAccount.credentialId
+            || currentAccount.accountId !== selectedAccount.accountId
+            || currentAccount.orgId !== selectedAccount.orgId
+          ) {
+            throw identityError("selected account changed during header resolution");
+          }
           return {
             ...preserved,
-            "X-User-Id": account.accountId,
-            ...(account.orgId ? { "X-Enterprise-Id": account.orgId } : { "X-No-Enterprise-Id": "1" }),
+            "X-User-Id": selectedAccount.accountId,
+            ...(selectedAccount.orgId
+              ? { "X-Enterprise-Id": selectedAccount.orgId }
+              : { "X-No-Enterprise-Id": "1" }),
           };
         },
       };
@@ -152,6 +172,7 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
     bindContext(context) {
       binding = {
         authStorage: context.modelRegistry.authStorage,
+        sessionId: context.sessionManager.getSessionId(),
       };
     },
     setModelAccess(activeIds, transitioning) {

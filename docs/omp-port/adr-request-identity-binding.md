@@ -1,11 +1,11 @@
 # ADR: WorkBuddy Request Identity Binding
 
-Status: Accepted — M0–M5 gates passed; Task, headless, tool/reasoning, and release E2E evidence is archived in `release-evidence.md`
+Status: Accepted — session-selected durable row is captured and revalidated for every transport attempt
 
 Verified host: OMP 18.2.6 at `78b753124d11f8dd3ae73e2524125890ff7c977e`
 
 Date: 2026-09-20
-Updated: 2026-09-21 — header identity now uses the sole stored account and no longer performs a second OAuth access resolution
+Updated: 2026-09-21 — post-merge hardening binds Headers to the host-selected session row without duplicate OAuth resolution
 
 ## Context
 
@@ -19,10 +19,10 @@ The first modifier probe proved that static identity values in `model.headers` b
 
 OMP 18.2.6 exposes four relevant public capabilities:
 
-1. `Model.resolveHeaders(signal)`, awaited by `stream()` / `streamSimple()` immediately before provider dispatch;
-2. the host `AuthStorage` resolver, which owns the request's Bearer selection and invokes WorkBuddy `getApiKey(credentials)`;
-3. `AuthStorage.listOAuthAccounts(provider)`, which returns the current stored row identities without running OAuth selection;
-4. `ExtensionAPI.setModel(model)`, a possible explicit rebind fallback.
+1. production `streamSimple()` resolves the `AuthStorage` API-key callback before each transport attempt;
+2. `AuthStorage` records that selected credential as the session's active row before the attempt continues;
+3. `Model.resolveHeaders(signal)` then runs for that attempt, including a 401 retry;
+4. `AuthStorage.listOAuthAccounts(provider, sessionId)` exposes the selected durable `credentialId`, account identity, and `active` marker without another token resolution.
 
 `before_provider_headers` remains unsupported and must not be restored.
 
@@ -30,7 +30,7 @@ OMP 18.2.6 exposes four relevant public capabilities:
 
 The first isolated probe established capability preservation: `modifyModels()` installed a WorkBuddy-only resolver, composed the model's existing fixed-header resolver, and `stream()` awaited it exactly once before transport.
 
-The original probe used the built-in `openai-completions` transport against a local HTTP server, an actual headless extension session, public `AuthStorage.resolver()` for host Bearer retries, and a header resolver backed by `getOAuthAccess()`. The 2026-09-21 cutover retained the same real-AuthStorage transport contract while replacing that second OAuth resolution with a sole-account lookup; `test/provider.test.mts` additionally proves that `resolveHeaders()` never calls `getOAuthAccess()`.
+The isolated probe uses the built-in `openai-completions` transport, public `AuthStorage.resolver()` for host Bearer selection/retry, and the production Header resolver. The 2026-09-21 cutover removed the second `getOAuthAccess()` call; post-merge hardening restores `sessionId`, requires the one stored row to be active for that session, captures its durable identity before composing prior Headers, and revalidates it afterward.
 
 Captured outbound attempts:
 
@@ -44,28 +44,27 @@ Captured outbound attempts:
 
 The abort scenario resolved B row 2, then aborted inside `resolveHeaders`; zero HTTP requests reached the transport. The old A model object safely produced B identity because it retained a dynamic resolver rather than static account headers.
 
-This proves request-boundary account identity remains aligned with the host Bearer's durable OAuth row across normal, forced refresh, one 401 retry, sequential account switch, and abort under the v1 single-stored-account invariant. It does not claim the access token is unchanged across a retry.
+These observations prove the supported production order: the host selects Bearer A, marks A active, and only then resolves A identity Headers. A concurrent switch to B changes the active durable row; the in-flight A Header resolver detects that change and fails before HTTP. A 401 retry resolves its Bearer and reruns identity Headers as a new attempt.
 
 ## Decision
 
-Use one host-owned OAuth resolution for Bearer and a lightweight request-boundary lookup for identity headers:
+Use the host-selected session row as the request-attempt binding:
 
 ```text
 AuthStorage resolver
-  -> select/refresh the sole OAuth credential
-  -> WorkBuddy getApiKey(credentials)
-  -> validate selected accountId/orgId against the sole stored account
+  -> select/refresh one OAuth credential
+  -> WorkBuddy getApiKey(credentials) validates the sole stored identity
+  -> record the selected durable row as active for sessionId
 
-modifyModels()
-  -> preserve/compose the model's existing resolveHeaders
-  -> listOAuthAccounts(workbuddy)
-  -> require exactly one row with accountId
-  -> materialize X-User-Id and exactly one of X-Enterprise-Id / X-No-Enterprise-Id
+Model.resolveHeaders()
+  -> require exactly one stored row and require that row active for sessionId
+  -> capture credentialId/accountId/orgId
+  -> compose the previous resolver
+  -> re-read and compare credentialId/accountId/orgId
+  -> materialize X-User-Id and one enterprise semantic
 ```
 
-The resolver must compose, not replace, the existing resolver because Provider fixed headers may already be represented by `resolveHeaders` rather than `model.headers`. It must read the stored identity for every request; a long-lived module-level account cache remains prohibited.
-
-`getOAuthAccess(provider, sessionId, options)` remains a valid host API, but WorkBuddy does not call it from `resolveHeaders()`. Doing so would repeat credential selection, external-change checks, preparation, persistence bookkeeping, and session-sticky updates after the host already resolved the Bearer.
+This avoids duplicate token selection while preserving a request-attempt durable-row proof. The pre/post comparison is required because the composed resolver is asynchronous and another request may select a different row while it is pending. No module-global pending cache or lock is needed.
 
 ## Extension binding and lifecycle
 
@@ -75,21 +74,21 @@ The resolver must compose, not replace, the existing resolver because Provider f
 
 ## Durable identity boundary
 
-The host resolves Bearer through its canonical `AuthStorage` path. WorkBuddy `getApiKey(credentials)` validates that selected credential's `accountId` and optional `orgId` against the sole stored row before returning access. Header resolution independently requires that same sole row and does not perform another token selection. On 401, the host may refresh the row's Bearer without rerunning headers; the captured retry changed A2 to A3 while retaining account A and org A. Therefore the invariant is the sole durable credential identity, not access-token generation.
+The boundary is one durable OAuth credential row: Bearer, `accountId`, and optional `orgId` come from that row; refresh may rotate only the access token. `getApiKey(credentials)` validates the host-selected credential against the sole stored row. The subsequent Header resolver requires that same row to be active for the bound session and rechecks its durable ID and identity after every asynchronous Header step.
 
-Sequential A→B switching deletes A before storing B. Even a retained model object reads B dynamically on its next request. Zero or multiple stored WorkBuddy OAuth credentials are rejected before Chat dispatch.
+The real transport contract covers first request, same-row forced refresh, 401 retry with per-attempt Header resolution, sequential A→B, optional enterprise, and multiple-row rejection. The provider regression covers an A resolver paused after capture while a concurrent B request selects B: B succeeds and A fails before transport.
 
-The actual OMP Task executor lifecycle contract is verified by the synthetic host/runtime harness in `test/contract/task-runtime-contract.test.mts` and summarized in `headless-behavior.md`. `test/contract/persisted-credential-restart.test.mts` follows restart order—persist A → register → `session_start` bind → fresh `find()` → request-boundary resolution—and separately asserts that the pre-bind projection remains visible with its resolver installed; it then emits `session_switch` and resolves B from the retained model. `test/contract/request-identity-binding.test.mts` exercises the same register → bind → find → built-in `openai-completions` order through normal, forced-refresh, 401-retry, retained-model A→B, and two-row fail-closed paths. The M1 live gate additionally configured `modelRoles.task = workbuddy/hy3` and completed a non-canned request in a fresh authenticated B subagent. Full Task tool calling, reasoning, streaming-detail, and release-matrix E2E remain M5.
+Directly invoking `resolveHeaders()` without a preceding host credential selection is intentionally rejected. Production authenticated Chat must use the host `AuthStorage.resolver()` path.
 
-## Rejected fallback
+## Rejected fallbacks
 
-`ExtensionAPI.setModel(freshModel)` is public but is not required for identity correctness with the selected dynamic resolver. Rebinding every main/child/resume/task/headless model would add a broader lifecycle surface while still requiring request-boundary validation. Keep `setModel` only as a documented fallback if future OMP behavior invalidates resolver preservation.
+Static model Headers cannot survive account changes. A second `getOAuthAccess()` inside `resolveHeaders()` repeats OAuth work and is unnecessary after the host has selected and pinned the attempt's row. `ExtensionAPI.setModel(freshModel)` cannot protect an already retained model. Module-global pending-row correlation is unnecessary and would add concurrency risk.
 
 ## Consequences
 
-- M0 task 1.5 established the request-boundary identity contract; the 2026-09-21 optimization keeps host `AuthStorage` as the sole Bearer authority and removes WorkBuddy's duplicate `getOAuthAccess()` call.
-- Static identity injection into long-lived `model.headers` and long-lived plugin identity caches are prohibited.
-- The resolver must compose the model's existing resolver so fixed provider headers survive.
-- `getApiKey()` and `resolveHeaders()` independently enforce the sole-account boundary; the former validates the selected credential, while the latter reads the current stored identity.
-- Modifier exceptions cannot enforce safety: invalid or ambiguous identity should remove WorkBuddy rows from the projected catalog, while `getApiKey` and the request resolver independently fail closed.
-- No OMP patch, private API, custom Chat transport, or global fetch interception is needed.
+- AUTH-04 is enforced at the supported `streamSimple()` attempt boundary with the session-selected durable row.
+- First request and every 401 retry must select Bearer before resolving identity Headers; permanent real-transport assertions protect this order.
+- A selected row change during asynchronous Header composition fails before HTTP.
+- Same-row token rotation passes because `credentialId`, `accountId`, and optional `orgId` remain stable.
+- Header resolution performs zero `getOAuthAccess()` calls.
+- Static identity caches, private host APIs, global fetch interception, and a custom Chat transport remain prohibited.

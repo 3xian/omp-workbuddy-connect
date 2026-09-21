@@ -64,6 +64,19 @@ controller.bindContext({
   sessionManager: { getSessionId: () => SESSION },
 } as unknown as ExtensionContext);
 const retainedModel = currentModel();
+const originalResolveHeaders = retainedModel.resolveHeaders;
+if (!originalResolveHeaders) throw new Error("production WorkBuddy model has no identity header resolver");
+let headerResolutionCount = 0;
+let firstHeaderSawActiveCredential: boolean | undefined;
+retainedModel.resolveHeaders = async (signal?: AbortSignal) => {
+  headerResolutionCount += 1;
+  if (firstHeaderSawActiveCredential === undefined) {
+    firstHeaderSawActiveCredential = authStorage
+      .listOAuthAccounts(WORKBUDDY_PROVIDER, SESSION)
+      .some((account) => account.active);
+  }
+  return originalResolveHeaders(signal);
+};
 
 interface Attempt {
   authorization: string | null;
@@ -156,6 +169,7 @@ try {
   const normal = attempts.at(-1)!;
   assert(normal.authorization === "Bearer access-a1", `normal bearer: ${normal.authorization}`);
   assert(normal.userId === "account-a" && normal.orgId === "org-a", `normal identity mismatch: ${JSON.stringify(normal)}`);
+  assert(firstHeaderSawActiveCredential === true, "host did not select the request credential before resolving identity headers");
   assert(normal.origin === "https://www.workbuddy.ai", "fixed Origin missing");
   assert(normal.domain === "www.workbuddy.ai" && normal.product === "SaaS", "fixed WorkBuddy headers missing");
 
@@ -166,12 +180,17 @@ try {
   assert(forced.userId === "account-a" && forced.orgId === "org-a", "forced refresh changed identity");
 
   failNextWith401 = true;
+  const retryHeaderStart = headerResolutionCount;
   const retryStart = attempts.length;
   await request(retainedModel);
   const retry = attempts.slice(retryStart);
   assert(retry.length === 2, `expected 401 plus retry, saw ${retry.length}`);
   assert(retry[0]?.authorization === "Bearer access-a2" && retry[0]?.status === 401, "401 first attempt mismatch");
   assert(retry[1]?.authorization === "Bearer access-a3" && retry[1]?.status === 200, "401 refresh bearer mismatch");
+  assert(
+    headerResolutionCount === retryHeaderStart + 2,
+    `401 attempt and retry did not each resolve identity headers: ${headerResolutionCount - retryHeaderStart}`,
+  );
   assert(retry.every((attempt) => attempt.userId === "account-a" && attempt.orgId === "org-a"), "401 retry crossed identity");
 
   await authStorage.remove(WORKBUDDY_PROVIDER);
@@ -202,7 +221,7 @@ try {
   assert(withoutEnterprise.orgId === null, "optional enterprise path fabricated an organization");
   assert(withoutEnterprise.noEnterprise === "1", "optional enterprise path omitted X-No-Enterprise-Id");
 
-  console.log("OK: production normal, refresh, 401 identity, A→B, optional enterprise, and fail-closed boundaries");
+  console.log("OK: host Bearer-before-Header order, per-retry Headers, refresh identity, A→B, and fail-closed boundaries");
 } finally {
   unregisterOAuthProvider(WORKBUDDY_PROVIDER);
   authStorage.close();

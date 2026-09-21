@@ -11,7 +11,7 @@ Tasks 4.1–4.7 are complete:
 - only one WorkBuddy-specific payload transform remains, backed by a redacted live Gateway failure;
 - `src/payload.ts` is otherwise a copy-on-write compatibility boundary;
 - the actual extension hook uses the request-bound `ctx.model.provider`, leaves current/historical same-ID foreign payloads unchanged, and changes only WorkBuddy named `tool_choice`;
-- active scope, transition, and retained-model fail-closed checks live in WorkBuddy `resolveHeaders`, before prior resolver/credential/HTTP work;
+- active scope, transition, and retained-model fail-closed checks live in WorkBuddy `resolveHeaders`, after host credential selection but before the prior resolver and HTTP transport;
 - reasoning, ordinary content, tool calls, `tool_call_id`, and tool results survive the native Agent loop;
 - a synthetic standard-capability model completes named/auto, fragmented-argument, sequential and same-turn parallel tool calls through the real OMP Agent;
 - the real OMP `openai-completions` implementation owns reasoning/text/tool streaming, usage, `[DONE]`, HTTP diagnostics, abort, and Retry-After-aware retry;
@@ -44,7 +44,7 @@ The repository tests are executable `.test.mts` contract scripts rather than `bu
 
 ## Request-bound isolation
 
-OMP 18.2.6 passes the exact request Model to `before_provider_request` as `ctx.model`. The hook now gates only on `ctx.model.provider === "workbuddy"`; current and historical same-ID foreign Providers are unchanged. The host catches ordinary hook exceptions and continues with the original payload, so the hook cannot enforce fail closed. WorkBuddy model `resolveHeaders` owns active-scope, transition, and revision checks and stops retained models before the previous resolver, credential resolution, or HTTP transport.
+OMP 18.2.6 passes the exact request Model to `before_provider_request` as `ctx.model`. The hook gates only on `ctx.model.provider === "workbuddy"`; current and historical same-ID foreign Providers are unchanged. The host catches ordinary hook exceptions and continues with the original payload, so the hook cannot enforce fail closed. WorkBuddy model `resolveHeaders` owns active-scope, transition, and revision checks. On the authenticated `streamSimple()` path, host credential selection precedes that resolver; invalid retained models still stop before the previous resolver and HTTP transport.
 
 ## Task 4.7 — live acceptance
 

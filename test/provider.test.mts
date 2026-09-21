@@ -79,6 +79,15 @@ controller.bindContext({
   sessionManager: { getSessionId: () => "session-a" },
 } as unknown as ExtensionContext);
 assert(oauth.getApiKey(credentials) === "access-a", "getApiKey did not return validated host access");
+let unselectedRejected = false;
+try {
+  await projectedWorkBuddy.resolveHeaders();
+} catch (error) {
+  unselectedRejected = error instanceof Error && error.message.includes("not selected");
+}
+assert(unselectedRejected, "resolveHeaders accepted an account the host had not selected for the session");
+assert(previousResolverCalls === 0, "unselected account reached the previous resolver");
+accounts[0]!.active = true;
 const headers = await projectedWorkBuddy.resolveHeaders();
 assert(previousResolverCalls === 1, "existing resolver was not composed exactly once");
 assert(headers?.["X-Existing"] === "preserved", "existing resolver headers were lost");
@@ -102,11 +111,34 @@ try {
 }
 assert(sessionRaceRejected, "session switch during header resolution did not fail closed");
 headerGate = undefined;
-markHeaderStarted = undefined;
 controller.bindContext({
   modelRegistry: { authStorage },
   sessionManager: { getSessionId: () => "session-a" },
 } as unknown as ExtensionContext);
+
+let releaseAccountRace!: () => void;
+headerGate = new Promise<void>((resolve) => { releaseAccountRace = resolve; });
+const accountRaceStarted = new Promise<void>((resolve) => { markHeaderStarted = resolve; });
+const inFlightAccountA = projectedWorkBuddy.resolveHeaders();
+await accountRaceStarted;
+accounts = [{ position: 0, credentialId: 21, accountId: "account-b", orgId: "org-b", active: true }];
+const concurrentAccountB = projectedWorkBuddy.resolveHeaders();
+releaseAccountRace();
+const accountBHeaders = await concurrentAccountB;
+assert(
+  accountBHeaders?.["X-User-Id"] === "account-b" && accountBHeaders["X-Enterprise-Id"] === "org-b",
+  "concurrent B request did not retain its selected durable row",
+);
+let accountRaceRejected = false;
+try {
+  await inFlightAccountA;
+} catch (error) {
+  accountRaceRejected = error instanceof Error && error.message.includes("selected account changed");
+}
+assert(accountRaceRejected, "A request survived a concurrent switch to selected account B");
+accounts = [{ position: 0, credentialId: 11, accountId: "account-a", orgId: "org-a", active: true }];
+headerGate = undefined;
+markHeaderStarted = undefined;
 const resolverCallsBeforeScopeChecks = previousResolverCalls;
 controller.setModelAccess(new Set(["hy3"]), true);
 let transitionRejected = false;

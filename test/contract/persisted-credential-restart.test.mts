@@ -82,8 +82,8 @@ try {
   await start({}, context("session-a", preBindModel));
   const retainedModel = registry.find("workbuddy", "hy3");
   assert(retainedModel, "persisted account disappeared after session_start binding");
-  const headersA = await registry.resolveModelHeaders(retainedModel);
   const keyA = await registry.getApiKey(retainedModel, "session-a");
+  const headersA = await registry.resolveModelHeaders(retainedModel);
   assert(keyA === "access-a", `persisted host access was not restored: ${keyA}`);
   assert(headersA?.["X-User-Id"] === "account-a" && headersA["X-Enterprise-Id"] === "org-a", "persisted identity headers mismatch");
 
@@ -99,8 +99,8 @@ try {
   const sessionSwitch = handlers.session_switch?.[0];
   assert(sessionSwitch, "extension did not register session_switch binding");
   await sessionSwitch({}, context("session-b", retainedModel));
-  const headersB = await retainedModel.resolveHeaders();
   const keyB = await registry.getApiKey(retainedModel, "session-b");
+  const headersB = await retainedModel.resolveHeaders();
   assert(keyB === "access-b", `switched host access was stale: ${keyB}`);
   assert(headersB?.["X-User-Id"] === "account-b" && headersB["X-Enterprise-Id"] === "org-b", "retained model kept the old session identity");
 

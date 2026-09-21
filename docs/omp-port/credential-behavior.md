@@ -32,7 +32,7 @@ The official `/login` controller delegates to `session.modelRegistry.authStorage
 
 The v1 rule uses `listOAuthAccounts("workbuddy").length`: zero rows means logged out, one row is admissible, and more than one stored OAuth credential must fail closed. It must never silently choose, rotate, or delete one of several rows.
 
-`getOAuthCredential(provider)` is not session-aware and must not be used as the request identity source. `getOAuthAccess(provider, sessionId, options)` remains the host's public token-plus-identity selection API, but WorkBuddy no longer calls it from `resolveHeaders()`: the host Bearer resolver performs the authoritative selection, `getApiKey(credentials)` validates that selection against the sole stored account, and headers use `listOAuthAccounts(provider)` to read that account's current identity.
+`getOAuthCredential(provider)` is not session-aware and must not be used as the request identity source. The production `streamSimple()` path asks `AuthStorage.resolver()` to select Bearer first; AuthStorage records that durable row for the session, then `resolveHeaders()` can require the sole `listOAuthAccounts(provider, sessionId)` row to be active. Header resolution does not call `getOAuthAccess()` again.
 
 ## Public deletion and restart paths
 
@@ -41,6 +41,8 @@ The v1 rule uses `listOAuthAccounts("workbuddy").length`: zero rows means logged
 - Durable reload: `await authStorage.reload()` or a newly created `AuthStorage` bound to the same SQLite path.
 - Session-specific selection: `authStorage.pinSessionOAuthAccount("workbuddy", sessionId, credentialId)`.
 - Host request token resolution: `authStorage.resolver("workbuddy", context)` / `getApiKey(...)`; WorkBuddy header identity: validated sole row from `listOAuthAccounts("workbuddy")`.
+
+OMP 18.2.6 reruns the authenticated model's Header resolver for each `streamSimple()` attempt, including the observed 401 retry. Capturing and rechecking active `credentialId`/account/org around asynchronous Header composition detects a concurrent session-row switch without token duplication.
 
 These paths are provider-scoped. No global credential deletion or private database mutation is required.
 

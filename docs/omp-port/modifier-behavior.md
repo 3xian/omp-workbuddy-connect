@@ -23,7 +23,7 @@ Production consequence: invalid or ambiguous identity should make the modifier r
 
 ## Request-boundary atomicity follow-up
 
-The original isolated probe installed a WorkBuddy-only `resolveHeaders` through `modifyModels()`, explicitly composing the model's existing resolver with lifecycle-captured `AuthStorage.getOAuthAccess()`. It then used the built-in `openai-completions` transport against a local HTTP server, with `AuthStorage.resolver()` supplying the host Bearer. The 2026-09-21 cutover retained the observed transport contract but replaced the duplicate header-path OAuth selection with a validated sole-account lookup.
+The original isolated probe installed a WorkBuddy-only `resolveHeaders` backed by `AuthStorage.getOAuthAccess()`. The 2026-09-21 cutover replaced that duplicate selection with a sole-account lookup. Post-merge hardening uses the runtime `sessionId` to require the host-selected active row and rechecks its durable ID/account/org after composed Header work.
 
 Captured outbound attempts kept Bearer and identity on one durable row:
 
@@ -33,25 +33,18 @@ Captured outbound attempts kept Bearer and identity on one durable row:
 - logout A → login B through a retained old model object: `access-b1`, B identity, row 2;
 - abort during header resolution: B was selected, but zero requests reached transport.
 
-This verifies resolver preservation, fixed-header composition, lifecycle AuthStorage capture, host refresh/retry interaction, dynamic account switching, and abort-before-transport under the v1 single-stored-account invariant.
+This verifies resolver preservation, fixed-header composition, host Bearer-before-Header order, per-attempt 401 Headers, dynamic account switching, and abort-before-transport under the v1 single-account invariant.
 
 ## Selected public path
 
-- Request-boundary materialization: `Model.resolveHeaders(signal)`.
 - Host Bearer selection and refresh: `AuthStorage.resolver(provider, context)`.
-- Selected credential guard: WorkBuddy `getApiKey(credentials)` compares account/org identity with the sole stored row.
-- Header identity: `AuthStorage.listOAuthAccounts(provider)` must return exactly one row with `accountId`.
+- Attempt-bound Header materialization: `Model.resolveHeaders(signal)`.
+- Selected credential guard: WorkBuddy `getApiKey(credentials)` compares account/org with the sole stored row.
+- Header identity: `AuthStorage.listOAuthAccounts(provider, sessionId)` must return exactly one active row with `accountId`.
+- Race guard: capture and recheck `credentialId`, `accountId`, and optional `orgId` around prior resolver awaits.
 - Catalog installation point: WorkBuddy-only `oauth.modifyModels()`.
-- `ExtensionAPI.setModel(model)` remains a fallback if future OMP behavior invalidates resolver preservation; it is not needed for the selected path.
 - Static catalog refresh and lookup remain useful evidence paths, but old `Model` objects are not mutated.
 
 ## M0 result
 
-**Request-boundary credential identity is preserved under the v1 single-account invariant without duplicate OAuth selection.** Static identity values in a retained A `Model` remain rejected. The accepted path is:
-
-```text
-host AuthStorage resolver -> getApiKey identity guard
-modifyModels -> compose resolveHeaders -> sole stored account -> identity headers
-```
-
-The separate Task executor experiment remains task 1.6b. Live authenticated WorkBuddy Chat and production fail-closed implementation remain later gates. See `adr-request-identity-binding.md`.
+**Request-attempt credential identity is preserved under the v1 single-account invariant without duplicate OAuth selection.** The host selects and pins the Bearer row before each attempt's Header resolver. A concurrent row switch during asynchronous Header composition rejects the stale attempt before HTTP; same-row access-token refresh preserves the durable identity.

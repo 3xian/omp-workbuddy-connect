@@ -37,7 +37,7 @@
 
 #### Scenario: Retained WorkBuddy model leaves active scope
 - **WHEN** 已解析的 WorkBuddy Model 在 scope 切换中或已不属于活动集合
-- **THEN** 其 `resolveHeaders` 在既有 resolver、凭据解析和 HTTP transport 前 fail closed，WorkBuddy Chat 请求数为零
+- **THEN** 宿主可先完成当前 attempt 的凭据选择，但其 `resolveHeaders` SHALL 在既有 resolver 和 HTTP transport 前 fail closed，WorkBuddy Chat 请求数为零
 
 ### Requirement: GATE-04 Reasoning cleanup preserves tool history
 有证据需要 reasoning replay 清理时，系统 SHALL 仅清理 Gateway 不接受的 assistant reasoning 表达，保留普通内容、assistant tool calls、tool_call_id、工具结果及关联，不破坏下一轮消息历史。
