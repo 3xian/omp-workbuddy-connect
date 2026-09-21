@@ -3,10 +3,10 @@
 ## MODIFIED Requirements
 
 ### Requirement: HOST-02 Native unmodified host support
-扩展 SHALL 使用原生 OMP manifest、包和 Provider/OAuth API，在未修改的官方 OMP 18.2.6 中安装和加载。国际站 Provider 标识 SHALL 保持 `workbuddy`，Chat base URL SHALL 保持 `https://www.workbuddy.ai/v2`；中国站 Provider 标识 SHALL 为 `workbuddy-cn`，且其 Chat base URL、OAuth 端点和固定协议值 SHALL 仅采用真实中国站证据确认的值。两个 Provider 均不得要求宿主补丁、legacy Pi shim、跨站代理或自定义 Chat transport。
+扩展 SHALL 使用原生 OMP manifest、包和 Provider/OAuth API，在验收时最新稳定版、未修改的官方 OMP 中安装和加载。国际站 Provider 标识 SHALL 保持 `workbuddy`，Chat base URL SHALL 保持 `https://www.workbuddy.ai/v2`；中国站 Provider 标识 SHALL 为 `workbuddy-cn`，且其 Chat base URL、OAuth 端点和固定协议值 SHALL 仅采用真实中国站证据确认的值。两个 Provider 均不得要求宿主补丁、legacy Pi shim、跨站代理或自定义 Chat transport。
 
 #### Scenario: Official host loads the extension
-- **WHEN** 在官方 OMP 18.2.6 安装并启动已通过中国站准入的扩展
+- **WHEN** 在验收时最新稳定版官方 OMP 安装并启动已通过中国站准入的扩展
 - **THEN** 两个 Provider 均可加载，类型检查为零错误，且没有 extension load error、unknown provider field、unknown event 或 module resolution error
 
 #### Scenario: International-only routing

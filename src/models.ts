@@ -75,19 +75,26 @@ function positiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
-/** Product credits are multiplier strings; every canonical numeric zero spelling is explicit free evidence. */
+const CREDIT_MULTIPLIER = /^x?(0|[1-9]\d*)(?:\.(\d+))?(?:\s+credits)?$/u;
+
+function classifyCredits(credits: string): FreeEvidence {
+  const match = CREDIT_MULTIPLIER.exec(credits.trim());
+  if (!match) return "unknown";
+  const [, integer, fraction] = match;
+  return integer === "0" && (!fraction || /^0+$/u.test(fraction))
+    ? "explicit-zero"
+    : "non-zero";
+}
+
+/** Product credits are multiplier strings; only canonical numeric zero is explicit free evidence. */
 export function creditsAreFree(credits: string | undefined): boolean {
-  if (credits === undefined) return false;
-  return /^x?0(?:\.0+)?$/u.test(credits.trim());
+  return credits !== undefined && classifyCredits(credits) === "explicit-zero";
 }
 
 function priceEvidence(value: unknown): { creditsRaw?: string; freeEvidence: FreeEvidence } {
   if (typeof value !== "string" || value.trim() === "") return { freeEvidence: "unknown" };
   const creditsRaw = value.trim();
-  return {
-    creditsRaw,
-    freeEvidence: creditsAreFree(creditsRaw) ? "explicit-zero" : "non-zero",
-  };
+  return { creditsRaw, freeEvidence: classifyCredits(creditsRaw) };
 }
 
 function isEffort(value: unknown): value is Effort {

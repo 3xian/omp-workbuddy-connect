@@ -199,7 +199,7 @@ for (const orgId of [undefined, "", "   "]) {
   assert(noEnterpriseHeaders.get("x-no-enterprise-id") === null, "refresh sent a Chat-only no-enterprise marker");
 }
 
-const cnJwt = (issuer: string) => `x.${Buffer.from(JSON.stringify({ iss: issuer })).toString("base64url")}.y`;
+const cnJwt = (issuer: string, claims: Record<string, unknown> = {}) => `x.${Buffer.from(JSON.stringify({ iss: issuer, ...claims })).toString("base64url")}.y`;
 assert(
   credentialDomain(WORKBUDDY_CN, cnJwt("https://copilot.tencent.com")) === "copilot.tencent.com",
   "CN domain was not reconstructed from the persisted access token issuer",
@@ -250,6 +250,81 @@ assert(
     && cnLoginRequests.length === 3,
   "CN login persisted before durable account finalize",
 );
+let releaseConcurrentPolls!: () => void;
+const bothConcurrentPolls = new Promise<void>((resolve) => { releaseConcurrentPolls = resolve; });
+let concurrentPollsStarted = 0;
+const concurrentUrls = { intl: [] as string[], cn: [] as string[] };
+function concurrentLoginFetch(site: "intl" | "cn"): typeof fetch {
+  return async (input) => {
+    const url = String(input);
+    concurrentUrls[site].push(url);
+    if (url.includes("/auth/state")) {
+      return Response.json({
+        code: 0,
+        data: {
+          state: `${site}-state`,
+          authUrl: site === "intl"
+            ? "https://www.workbuddy.ai/login"
+            : "https://copilot.tencent.com/login",
+        },
+      });
+    }
+    if (url.includes("/auth/token?")) {
+      concurrentPollsStarted += 1;
+      if (concurrentPollsStarted === 2) releaseConcurrentPolls();
+      await bothConcurrentPolls;
+      return site === "intl"
+        ? Response.json({
+            code: 0,
+            data: {
+              accessToken: "intl-access",
+              refreshToken: "intl-refresh",
+              expiresIn: 3600,
+              uid: "intl-account",
+            },
+          })
+        : Response.json({
+            code: 0,
+            data: {
+              accessToken: cnJwt("https://copilot.tencent.com"),
+              refreshToken: "cn-refresh",
+              expiresIn: 3600,
+              domain: "copilot.tencent.com",
+            },
+          });
+    }
+    assert(site === "cn" && url.endsWith("/v2/plugin/account"), `concurrent login crossed realm endpoint: ${url}`);
+    return Response.json({ code: 0, data: { uid: "cn-account" } });
+  };
+}
+const intlLoginAbort = new AbortController();
+const cnLoginAbort = new AbortController();
+const [concurrentIntl, concurrentCn] = await Promise.all([
+  loginWorkBuddy(WORKBUDDY_INTL, {
+    signal: intlLoginAbort.signal,
+    onAuth() {},
+    async onPrompt() { return ""; },
+  }, concurrentLoginFetch("intl")),
+  loginWorkBuddy(WORKBUDDY_CN, {
+    signal: cnLoginAbort.signal,
+    onAuth() {},
+    async onPrompt() { return ""; },
+  }, concurrentLoginFetch("cn")),
+]);
+assert(
+  concurrentIntl.accountId === "intl-account"
+    && concurrentCn.accountId === "cn-account"
+    && concurrentPollsStarted === 2,
+  "concurrent realm logins shared state or identity",
+);
+assert(
+  concurrentUrls.intl.every((url) => url.startsWith("https://www.workbuddy.ai/"))
+    && concurrentUrls.cn.every((url) => url.startsWith("https://copilot.tencent.com/"))
+    && concurrentUrls.intl.some((url) => url.includes("state=intl-state"))
+    && concurrentUrls.cn.some((url) => url.includes("state=cn-state")),
+  "concurrent realm login crossed endpoint or poll state",
+);
+
 
 let missingCnUidRejected = false;
 try {
@@ -291,7 +366,7 @@ const cnRefreshed = await refreshWorkBuddyOAuth(WORKBUDDY_CN, cnPrevious, async 
   return Response.json({
     code: 0,
     data: {
-      accessToken: cnJwt("https://copilot.tencent.com"),
+      accessToken: cnJwt("https://copilot.tencent.com", { sub: "unrelated-sso-subject" }),
       refreshToken: "refresh-cn-2",
       expiresIn: 3600,
       domain: "copilot.tencent.com",
@@ -299,6 +374,23 @@ const cnRefreshed = await refreshWorkBuddyOAuth(WORKBUDDY_CN, cnPrevious, async 
   });
 }, 2_000);
 assert(cnRefreshed.accountId === "account-cn", "CN refresh lost finalized durable uid");
+
+let explicitCnUidMismatchRejected = false;
+try {
+  await refreshWorkBuddyOAuth(WORKBUDDY_CN, cnPrevious, async () => Response.json({
+    code: 0,
+    data: {
+      accessToken: cnJwt("https://copilot.tencent.com"),
+      refreshToken: "refresh-cn-2",
+      expiresIn: 3600,
+      domain: "copilot.tencent.com",
+      uid: "different-account",
+    },
+  }), 2_000);
+} catch {
+  explicitCnUidMismatchRejected = true;
+}
+assert(explicitCnUidMismatchRejected, "CN refresh accepted an explicit conflicting account uid");
 assert(
   new Headers(cnRefreshRequest?.headers).get("x-domain") === "copilot.tencent.com"
     && cnRefreshRequest?.body === "{}",

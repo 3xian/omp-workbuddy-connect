@@ -323,6 +323,9 @@ export async function fetchWorkBuddyBillingEnvelope(
   fetcher: Fetch,
   signal?: AbortSignal,
 ): Promise<unknown> {
+  if (!site.usage.enabled || !site.usage.billingPath.trim()) {
+    throw new Error(`${site.label} Billing is disabled`);
+  }
   const accessToken = credential.accessToken?.trim();
   const accountId = credential.accountId?.trim();
   if (!accessToken || !accountId) throw new Error(`${site.label} Billing credential identity is incomplete`);

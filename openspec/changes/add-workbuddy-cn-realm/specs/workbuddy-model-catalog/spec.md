@@ -68,12 +68,12 @@
 - **THEN** 系统保留该值为来源元数据并标记计费语义未确认，不据此承诺实际费用
 
 ### Requirement: MODEL-10 Catalog eligibility is distinct from release validation
-模型是否进入某 realm 的 catalog SHALL 由该 realm 来源中的合法 model ID、Chat 类型、有效 input/output budget 和必要 schema 决定；未知 capability 保持未知而不补 true。发布验证 SHALL 选择代表模型对真实 Chat、reasoning、tools 与声明的 vision 做 gate，不得把“未逐一 live 测试”作为排除其他 catalog-eligible 模型的理由，也不得把 catalog metadata 当作对应能力已实测。
+模型是否进入某 realm 的 catalog SHALL 由该 realm 来源可证明的字段决定。当前中国站 cache 未提供可靠的 Chat type 或 agent-membership 字段，因此 structural Chat candidate 以合法 model ID、有效 input/output budget 和必要 schema 为准；若后续来源明确标记非 Chat 类型则 MUST 排除，不得猜测不存在的 type 字段。未知 capability 保持未知而不补 true。发布验证 SHALL 选择代表模型对真实 Chat、reasoning、tools 与声明的 vision 做 gate，不得把“未逐一 live 测试”作为排除其他 catalog-eligible 模型的理由，也不得把 catalog metadata 当作对应能力已实测。
 
 #### Scenario: Many cache models are schema-valid
-- **WHEN** 中国站缓存包含多个满足 Chat schema 与预算要求的模型，而 release matrix 只对三个代表模型做 live gate
+- **WHEN** 中国站缓存包含多个满足 structural candidate schema 与预算要求、且未被来源明确标记为非 Chat 的模型，而 release matrix 只对三个代表模型做 live gate
 - **THEN** 所有 catalog-eligible 模型可按各自 scope 出现在目录中；只有通过 live gate 的具体能力可标记为 release-validated
 
-#### Scenario: Cache row lacks required Chat metadata
-- **WHEN** 条目缺少合法 ID、有效 input/output budget、必要 schema，或明确属于非 Chat 类型
+#### Scenario: Cache row is structurally ineligible or explicitly non-Chat
+- **WHEN** 条目缺少合法 ID、有效 input/output budget、必要 schema，或来源明确将其标记为非 Chat 类型
 - **THEN** 该条目不注册为 Chat 模型，即使它有名称、credits 或与另一 realm 的 model ID 相同

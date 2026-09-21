@@ -97,11 +97,20 @@ function verifiedResponseDomain(site: SiteDescriptor, data: JsonRecord, accessTo
   return reconstructed;
 }
 
-function responseIdentity(data: JsonRecord): { uid?: string; enterpriseId?: string } {
+function explicitResponseIdentity(data: JsonRecord): { uid?: string; enterpriseId?: string } {
+  return {
+    uid: optionalString(data.uid),
+    enterpriseId: optionalString(data.enterpriseId) ?? optionalString(data.enterprise_id),
+  };
+}
+
+function loginIdentity(site: SiteDescriptor, data: JsonRecord): { uid?: string; enterpriseId?: string } {
+  const explicit = explicitResponseIdentity(data);
+  if (explicit.uid || site.auth.finalizeIdentity !== "token-response") return explicit;
   const claims = jwtPayload(data.accessToken);
   return {
-    uid: optionalString(data.uid) ?? optionalString(claims.uid) ?? optionalString(claims.sub),
-    enterpriseId: optionalString(data.enterpriseId) ?? optionalString(data.enterprise_id),
+    ...explicit,
+    uid: optionalString(claims.uid) ?? optionalString(claims.sub),
   };
 }
 
@@ -116,7 +125,7 @@ export function credentialFromLoginResponse(
   data: JsonRecord,
   now = Date.now(),
 ): WorkBuddyCredential {
-  const identity = responseIdentity(data);
+  const identity = loginIdentity(site, data);
   if (!identity.uid) {
     throw new Error(`${site.providerId} credential is missing uid (${identityShape(data)})`);
   }
@@ -212,7 +221,7 @@ export async function refreshWorkBuddyOAuth(
   const orgId = optionalString(credentials.orgId);
   const domain = site.domainPolicy.kind === "jwt-issuer" ? credentialDomain(site, credentials.access) : undefined;
   const data = await refreshPluginToken(site, credentials.refresh, orgId, domain, fetcher, { signal });
-  const returnedIdentity = responseIdentity(data);
+  const returnedIdentity = explicitResponseIdentity(data);
   if (returnedIdentity.uid && returnedIdentity.uid !== credentials.accountId) {
     throw new Error(`${site.providerId} refresh returned a different account identity; run /login ${site.commandName} again`);
   }

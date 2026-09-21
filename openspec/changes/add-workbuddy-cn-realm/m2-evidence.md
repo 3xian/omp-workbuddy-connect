@@ -13,7 +13,7 @@
 - OAuth start/token/account/refresh 路径来自 M0 冻结证据。
 - start 使用 `platform=workbuddy`、body `{}`、无 nonce、1 秒 poll、5 分钟 deadline、pending code `11217`。
 - poll token success 后，必须以同一 access token 与验证后的 domain 调用 `/v2/plugin/account`；仅 account `uid` 成为 OMP `accountId`。
-- access JWT 仅使用 `iss` claim；要求安全 HTTPS issuer 且 `hostname(iss) === token response domain`。插件不保存 sidecar credential，不挪用宿主无关字段。
+- access JWT 只批准 `iss` 用于 domain reconstruction；JWT `uid/sub` 不构成 durable account identity。要求安全 HTTPS issuer 且 `hostname(iss) === token response domain`。插件不保存 sidecar credential，不挪用宿主无关字段。
 - refresh 从持久化 access token 重新构造 domain，要求新 token issuer、新 response domain 与旧 domain 一致。
 - Chat 的 `X-Domain` 在 credential validation/projection 时从同一宿主持久化 access token 重建；缺失、非法或身份不匹配时 fail closed。
 - 中国站目录仅读取 `~/.workbuddy/cache/acc-product-config-v3.json` 或 `WORKBUDDY_CN_PRODUCT_CONFIG`；缺失、损坏或无有效模型时返回 unavailable/empty，不借用国际站 builtin。
@@ -36,6 +36,8 @@
 | forced refresh | PASS；secret stdout 仅计数字节数，不归档内容 |
 | refresh 后 Chat | PASS；`M2_CN_REFRESH_OK` |
 | CN logout 后调用 | PASS；明确 `No API key found for workbuddy-cn`，Chat HTTP 为零 |
+
+本次 CN live account 没有 enterprise identity，最终 Chat 验证的是 `X-No-Enterprise-Id: 1` 路径。企业账号的 `enterpriseId/orgId` 语义尚未单独 live 验证，M3/release 文档不得扩大声明。
 
 不安全 issuer（非 HTTPS、userinfo、显式 port、缺失/非法 URL）、response domain 不相等、account uid 缺失和 refresh domain 改变均有永久 fail-closed 回归。
 
@@ -64,6 +66,7 @@ refererPresent=false
 同一隔离 OMP profile 同时保存国际站和中国站 credential，并执行：
 
 - 两个 Provider 并发 forced refresh；两者均成功，stdout 仅计数、不记录 credential；
+- deterministic regression 同时运行 Intl/CN login start、不同 state poll、独立 AbortSignal 与 CN account finalize，验证 endpoint、poll state 和身份不串扰；
 - refresh 后并发 Chat：`M2_DUAL_CN_OK` 与 `M2_DUAL_INTL_OK`；
 - `/workbuddy-cn logout` 后国际站仍返回 `M2_CN_LOGOUT_INTL_OK`；
 - 中国站随后因 credential 缺失 fail closed；
@@ -75,7 +78,7 @@ refererPresent=false
 
 ## 6. 目录与 Usage
 
-真实中国站缓存包含 50 条记录，当前 parser 接受 41 个具有合法 ID 和正整数 input/output budget 的 Chat 候选；其余条目因 schema/budget 不完整不注册。catalog eligibility 不等于 M3 release validation。
+真实中国站缓存包含 50 条记录，且未提供可靠的 Chat type 或 agent-membership 字段；当前 parser 接受 41 个具有合法 ID、正整数 input/output budget 和必要 schema 的 structural Chat candidates。其余条目因 schema/budget 不完整不注册；后续来源若明确标记非 Chat，必须排除而不能猜测字段。catalog eligibility 不等于 M3 release validation。
 
 永久回归证明：
 
@@ -83,8 +86,8 @@ refererPresent=false
 - valid empty cache → `empty`；
 - Intl missing cache → 独立 `builtin-fallback`；
 - same-ID 模型不继承 Intl override；
-- `creditsRaw` 原样保留，free 只接受 canonical explicit zero；
-- `usage.enabled=false` 时 aggregate Usage/Billing 调用数为零，UI 显示不可用。
+- `creditsRaw` 原样保留；只有可识别 numeric multiplier 才分类为 `explicit-zero/non-zero`，未知格式保持 `unknown`，free 只接受 canonical explicit zero；
+- `usage.enabled=false` 时 aggregate Usage/Billing 调用数为零，UI 显示不可用；底层 Billing helper 对 disabled 或空 path 额外 fail closed，不会向 realm origin 根路径发送请求。
 
 ## 7. 验证与限制
 

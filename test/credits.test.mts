@@ -6,7 +6,8 @@ import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { createWorkBuddyProvider } from "../src/provider.ts";
 import { parseWorkBuddyCredits, summarizeWorkBuddyUsage } from "../src/credits.ts";
-import { WORKBUDDY_INTL } from "../src/site.ts";
+import { fetchWorkBuddyBillingEnvelope } from "../src/workbuddy-api.ts";
+import { WORKBUDDY_CN, WORKBUDDY_INTL } from "../src/site.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -68,6 +69,20 @@ try {
   const usage = authStorage.usageProviderFor("workbuddy");
   assert(usage?.retainLastGoodOnFailure === false, "UsageProvider retained stale successful credits");
   assert(usage.validatesCredentials === false, "UsageProvider overclaimed credential health validation");
+
+  const callsBeforeDisabled = calls;
+  let disabledBillingRejected = false;
+  try {
+    await fetchWorkBuddyBillingEnvelope(
+      WORKBUDDY_CN,
+      { accessToken: "must-not-send", accountId: "must-not-send" },
+      usageFetch,
+    );
+  } catch (error) {
+    disabledBillingRejected = error instanceof Error && error.message.includes("Billing is disabled");
+  }
+  assert(disabledBillingRejected, "disabled CN Billing did not fail closed");
+  assert(calls === callsBeforeDisabled, "disabled CN Billing reached the realm origin");
 
   const semanticallyInvalidAccounts: unknown[] = [
     { PackageName: "negative remaining", CycleCapacitySize: 10, CycleCapacityRemain: -1 },

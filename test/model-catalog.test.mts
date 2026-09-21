@@ -106,6 +106,21 @@ assert(unknownReasoning.thinking === undefined, "missing effort evidence default
 
 assert(creditsAreFree("x0.00") && creditsAreFree("0.0"), "explicit zero-credit evidence was rejected");
 assert(!creditsAreFree(undefined) && !creditsAreFree("x1.00"), "unknown or paid credits were treated as free");
+const priceFormats = parseProductConfig(JSON.stringify({
+  models: [
+    { id: "garbage-price", credits: "garbage", maxInputTokens: 10, maxOutputTokens: 5 },
+    { id: "unknown-price", credits: "x?", maxInputTokens: 10, maxOutputTokens: 5 },
+    { id: "credit-suffix", credits: "x3.33 credits", maxInputTokens: 10, maxOutputTokens: 5 },
+  ],
+}));
+assert(priceFormats, "price format catalog was rejected");
+assert(
+  priceFormats.models[0]?.creditsRaw === "garbage"
+    && priceFormats.models[0].freeEvidence === "unknown"
+    && priceFormats.models[1]?.freeEvidence === "unknown"
+    && priceFormats.models[2]?.freeEvidence === "non-zero",
+  "malformed or observed credit formats were classified incorrectly",
+);
 assert(freeModelIds(catalog).join(",") === "free-required", "free IDs did not use explicit cache evidence");
 assert(buildOmpModels(WORKBUDDY_INTL, catalog, "free").map((model) => model.id).join(",") === "free-required", "free scope leaked paid or unknown models");
 assert(unknownReasoning.cost.input === 0, "host cost placeholder changed");

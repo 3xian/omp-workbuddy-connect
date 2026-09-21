@@ -2,26 +2,26 @@
 
 ## Purpose
 
-定义 WorkBuddy 国际版扩展在官方 OMP 18.2.6 上的安装、宿主契约、基线可复现性及阶段准入条件，确保适配依赖经过验证的公开能力，而不是 Pi 兼容假设或对宿主的私有修改。
+定义 WorkBuddy 扩展在验收时最新稳定版官方 OMP 上的安装、宿主契约、基线可复现性及阶段准入条件，确保适配依赖经过验证的公开能力，而不是 Pi 兼容假设或对宿主的私有修改。
 
 ## Requirements
 
 ### Requirement: HOST-01 Reproducible development baseline
-交付 SHALL 记录 Fork 仓库、实际开发分支、精确提交，OMP 18.2.6 仓库与精确提交，以及 Fork 所基于的 upstream 精确提交。未提交修改 SHALL 与提交基线分开记录，核心 API 验证依赖 MUST 固定到 18.2.6，不得使用通配版本代替已验证基线。
+交付 SHALL 记录 Fork 仓库、实际开发分支、精确提交，验收时最新稳定版 OMP 的精确版本，以及 Fork 所基于的 upstream 精确提交。未提交修改 SHALL 与提交基线分开记录；每次正式验收开始时 MUST 将核心 API 验证依赖更新并锁定到当时最新稳定版 OMP，不维护旧 OMP 版本矩阵。
 
 #### Scenario: Baseline includes local modifications
 - **WHEN** 开始 M0 且工作区相对记录的 Fork 提交存在修改
 - **THEN** Baseline Manifest 分别记录提交标识与工作区差异证据，不将 HEAD 描述为全部当前代码，也不覆盖用户修改
 
 #### Scenario: Development dependency resolution
-- **WHEN** 从锁定依赖安装并执行核心 API 类型验证
-- **THEN** 使用可复现的 OMP 18.2.6 依赖，结果能够关联到宿主和扩展精确提交
+- **WHEN** 正式验收开始并从锁定依赖安装、执行核心 API 类型验证
+- **THEN** 依赖版本等于当时最新稳定版 OMP，结果能够关联到该精确宿主版本和扩展提交
 
 ### Requirement: HOST-02 Native unmodified host support
-扩展 SHALL 使用原生 OMP manifest、包和 Provider/OAuth API，在未修改的官方 OMP 18.2.6 中安装和加载；Provider 标识 SHALL 为 `workbuddy`，Chat base URL SHALL 为 `https://www.workbuddy.ai/v2`。不得要求宿主补丁、legacy Pi shim、国内版端点或自定义 Chat transport。
+扩展 SHALL 使用原生 OMP manifest、包和 Provider/OAuth API，在验收时最新稳定版、未修改的官方 OMP 中安装和加载；Provider 标识 SHALL 为 `workbuddy`，Chat base URL SHALL 为 `https://www.workbuddy.ai/v2`。不得要求宿主补丁、legacy Pi shim、国内版端点或自定义 Chat transport。
 
 #### Scenario: Official host loads the extension
-- **WHEN** 在官方 18.2.6 安装并启动扩展
+- **WHEN** 在验收时最新稳定版官方 OMP 安装并启动扩展
 - **THEN** 类型检查为零错误，且没有 extension load error、unknown provider field、unknown event 或 module resolution error
 
 #### Scenario: International-only routing

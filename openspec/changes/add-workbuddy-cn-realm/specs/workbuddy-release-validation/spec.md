@@ -14,7 +14,7 @@
 - **THEN** 每个请求只访问其官方 endpoint 并携带自身凭据和 headers，没有跨 realm 或第三方凭据上传，Desktop 数据未改变
 
 ### Requirement: REL-06 Honest compatibility and limitations
-发布文档 SHALL 明示官方 OMP 18.2.6 支持范围、国际站 `workbuddy` 与中国站 `workbuddy-cn` 的独立登录/命令/目录/scope、每个 realm 单账号且不接受身份错配、Widget 生命周期、request-bound Provider 隔离、各 realm 的缓存依赖与 model source，以及中国站 Billing 未验证时的 unavailable 状态。真正多账号、自动站点探测、跨站 fallback、Desktop import、自定义 Provider transport 和即时 model-select UI SHALL 不进入关键路径；动态目录与 Usage 增强按各 realm 实证说明。
+发布文档 SHALL 明示本次验收使用的最新稳定版官方 OMP 精确版本、国际站 `workbuddy` 与中国站 `workbuddy-cn` 的独立登录/命令/目录/scope、每个 realm 单账号且不接受身份错配、Widget 生命周期、request-bound Provider 隔离、各 realm 的缓存依赖与 model source，以及中国站 Billing 未验证时的 unavailable 状态。项目不维护旧 OMP 兼容矩阵；每次发布前 MUST 更新并重验届时最新稳定版。真正多账号、自动站点探测、跨站 fallback、Desktop import、自定义 Provider transport 和即时 model-select UI SHALL 不进入关键路径；动态目录与 Usage 增强按各 realm 实证说明。
 
 #### Scenario: User reads installation and migration instructions
 - **WHEN** 用户依据 README 安装、选择 realm 或从旧 Pi/Fork 迁移

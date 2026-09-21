@@ -43,7 +43,7 @@
 ### Requirement: AUTH-04 Durable credential identity binding
 在当前宿主支持契约内，每个 WorkBuddy Chat transport attempt 的 Authorization、X-User-Id SHALL 来自目标 Provider 的同一个唯一 stored OAuth durable credential row。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送目标 realm 已验证的 no-enterprise marker。Authorization 仅由宿主 AuthStorage resolver 解析；`getApiKey(credentials)` 在返回 access 前验证宿主选择的 accountId/可选 orgId。固定 Header 与 domain policy 均来自目标 realm descriptor：fixed 值不得跨 realm 复用，credential-derived 值必须从同一 durable row 的已验证持久状态或确定性 reconstruction 获得。
 
-当宿主向 Header resolver 暴露 request-attempt identity 或原子 Bearer-plus-Headers API 时，Bearer 与 identity Headers MUST 使用该原子来源。当前已验证的 pinned OMP 18.2.6 contract 中，`Model.resolveHeaders(signal)` 不暴露 request session/attempt；扩展 SHALL 对唯一 stored row 在 resolver 内捕获并复核 credentialId/accountId/orgId/domain，检测到变化时在 HTTP 前失败，但 MUST NOT 把这项检查宣称为独立 Bearer/Header lookup 的原子同源证明。当前产品支持边界是串行换号：活动请求先完成或取消，再执行 logout/login；并发 credential replacement 不受支持，且不得用全局 lifecycle session、pending queue、锁或另一个 realm 推断本次请求身份。其他宿主版本必须单独核对 API contract，不能由 smoke 结果推定。
+当宿主向 Header resolver 暴露 request-attempt identity 或原子 Bearer-plus-Headers API 时，Bearer 与 identity Headers MUST 使用该原子来源。当前最新已验证 OMP contract 中，`Model.resolveHeaders(signal)` 不暴露 request session/attempt；扩展 SHALL 对唯一 stored row 在 resolver 内捕获并复核 credentialId/accountId/orgId/domain，检测到变化时在 HTTP 前失败，但 MUST NOT 把这项检查宣称为独立 Bearer/Header lookup 的原子同源证明。当前产品支持边界是串行换号：活动请求先完成或取消，再执行 logout/login；并发 credential replacement 不受支持，且不得用全局 lifecycle session、pending queue、锁或另一个 realm 推断本次请求身份。每次升级到新的最新稳定版 OMP 时必须重新核对 API contract，不能由旧版本或 smoke 结果推定。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户在任一 WorkBuddy realm 首次登录后发出模型请求

@@ -1,6 +1,6 @@
 # OMP WorkBuddy Connect
 
-> **v1.1.8-rc.3 release candidate for OMP 18.2.6**
+> **v1.1.8-rc.3 release candidate，按当前最新稳定版 OMP 验收（本次为 18.2.7）**
 >
 > 正常单账号、串行换号与完整功能回归已通过；并发 credential replacement 的
 > Bearer/Header 原子关联是 RC 已知限制。正式证据见 `docs/omp-port/release-evidence.md`。
@@ -13,7 +13,7 @@ WorkBuddy AI 国际版 provider for OMP。当前 RC 保留 v1.1.7 的功能边�
 
 ## 安装
 
-要求 OMP `18.2.6`，并要求外部 Bun 可执行文件在 `$PATH` 中。OMP Plugin Manager 安装或卸载 GitHub 插件时会调用 `bun`；OMP 自身的编译二进制不能替代这个外部命令。macOS 可先执行：
+要求使用当前最新稳定版 OMP（本次验收版本为 `18.2.7`），并要求外部 Bun 可执行文件在 `$PATH` 中。OMP Plugin Manager 安装或卸载 GitHub 插件时会调用 `bun`；OMP 自身的编译二进制不能替代这个外部命令。macOS 可先执行：
 
 ```bash
 brew install oven-sh/bun/bun
@@ -83,7 +83,7 @@ omp plugin uninstall omp-workbuddy-connect
 
 积分明确区分查询中、可用（含真实 0）和不可用；失败后不沿用 last-good 值。scope 存于 OMP agent 目录的 `.workbuddy-settings.json`；默认目录与 profile 均由 OMP 决定，`PI_CODING_AGENT_DIR` 可覆盖。Headless 模式不会调用 select/notify/widget/status。
 
-非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除 OMP 18.2.6 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
+非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除当前 OMP 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
 
 ## 环境变量
 
@@ -121,14 +121,14 @@ npm run typecheck
 
 ## v1 限制
 
-- 仅验证官方 OMP `18.2.6` 与 WorkBuddy 国际版 `https://www.workbuddy.ai`。
+- 每次发布只验收当时最新稳定版官方 OMP；当前已验证 `18.2.7` 与 WorkBuddy 国际版 `https://www.workbuddy.ai`。
 - 仅支持一个已存储 WorkBuddy Account；零个或多个账号、缺失身份或身份错配均拒绝。
 - RC 支持稳定单账号和串行换号。换号前必须完成或取消在途 WorkBuddy 请求，再依次执行 `/workbuddy logout` 与 `/login workbuddy`。
-- OMP 18.2.6 不向 `Model.resolveHeaders()` 暴露当前 request-attempt 已选中的 OAuth identity；其他 session/process 在 Bearer 与 Header 构造窗口内并发替换 credential 时，插件不能原子证明两者属于同一 durable row。
+- 当前验证的 OMP 不向 `Model.resolveHeaders()` 暴露当前 request-attempt 已选中的 OAuth identity；其他 session/process 在 Bearer 与 Header 构造窗口内并发替换 credential 时，插件不能原子证明两者属于同一 durable row。
 - WorkBuddy 不提供常驻 Widget/status；运行 `/workbuddy` 可临时查看详情，下一次 `turn_start` 自动收起。
 - 模型目录只读 `~/.workbuddy-ai/cache/acc-product-config-v3.json` 的产品元数据；不读取 Desktop credential。缓存失效时 `all` 使用内置 fallback，`free` 不把 fallback 或缺少 multiplier 的模型猜成免费。
 - 同 ID 的其他 Provider 不经过 WorkBuddy payload 或身份逻辑。v1 不包含多账号轮换、Desktop credential import、自定义 Chat transport、在线动态目录端点或即时 model-select UI。
-- OMP 18.2.6 的 Usage API 是跨 Provider 聚合刷新；`/workbuddy` 只展示 WorkBuddy 报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
+- 当前 OMP Usage API 是跨 Provider 聚合刷新；`/workbuddy` 只展示 WorkBuddy 报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
 
 ## License
 

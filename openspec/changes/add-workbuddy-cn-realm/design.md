@@ -103,7 +103,7 @@ Mock 只证明本地边界；中国站发布仍需要真实 OAuth、Chat、reaso
 - **[国际站重构产生隐性行为变化]** → M1 只做 descriptor/闭包迁移，不同时加入 CN；对出站请求、设置路径、目录、Usage 和 UI 做前后对照。
 - **[相同 model ID 导致全局 hook 串扰]** → 所有 dispatch 和 override 以 provider 为第一键，并保留第三方同 ID 原样回归。
 - **[CN 无目录导致 Provider 看似安装但不可用]** → UI 明确报告 unavailable/empty 和原因；不注册伪模型，不回退国际站。
-- **[OMP request identity 能力边界]** → 当前已验证的 pinned OMP 18.2.6 contract 未向 `Model.resolveHeaders` 暴露本次 request session/attempt；扩展只能对唯一 stored row 做 resolver 内前后复核，不能证明 Bearer 与 Headers 在并发换号时原子同源。M1/M3 保留并验证既有产品约束：活动请求先完成或取消，再 logout/login；不得以全局 session、pending queue 或锁伪造证明。实际 `omp/18.2.7` 只完成 smoke，不能替代 API contract 检查。该宿主限制不是 CN 新增 blocker，但发布材料必须明确，不能宣称完整并发原子性。
+- **[OMP request identity 能力边界]** → 当前最新已验证 OMP contract 未向 `Model.resolveHeaders` 暴露本次 request session/attempt；扩展只能对唯一 stored row 做 resolver 内前后复核，不能证明 Bearer 与 Headers 在并发换号时原子同源。M1/M3 保留并验证既有产品约束：活动请求先完成或取消，再 logout/login；不得以全局 session、pending queue 或锁伪造证明。每次升级到新的最新稳定版 OMP 时重新执行类型、runtime 与 live contract 验收，不维护旧版本矩阵。该宿主限制不是 CN 新增 blocker，但发布材料必须明确，不能宣称完整并发原子性。
 - **[双 realm live 验证成本增加]** → 共享确定性测试，但不削减身份、endpoint 和发布矩阵；串行运行避免当前 harness 的共享资源竞争。
 
 ## Migration Plan
