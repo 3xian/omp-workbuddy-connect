@@ -1,4 +1,4 @@
-import type { AuthStorage, Model, OAuthAccess, OAuthCredentials, UsageCredential } from "@oh-my-pi/pi-ai";
+import type { AuthStorage, Model, OAuthCredentials, UsageCredential } from "@oh-my-pi/pi-ai";
 import type { ExtensionContext, ProviderConfig } from "@oh-my-pi/pi-coding-agent";
 import { loginWorkBuddy, refreshWorkBuddyOAuth, validateRequestCredential, validateStoredCredential } from "./auth.ts";
 import { createWorkBuddyUsageProvider } from "./credits.ts";
@@ -19,43 +19,31 @@ export const WORKBUDDY_FIXED_HEADERS = {
   "X-Domain": "www.workbuddy.ai",
 } as const;
 
-type StoredAuth = Pick<AuthStorage, "listOAuthAccounts" | "getOAuthAccess" | "remove">;
+type StoredAuth = Pick<AuthStorage, "listOAuthAccounts" | "remove">;
 type ProviderModels = NonNullable<ProviderConfig["models"]>;
 type Fetch = typeof globalThis.fetch;
 
 interface RuntimeBinding {
   authStorage: StoredAuth;
-  sessionId: string;
 }
 
 function identityError(reason: string): Error {
   return new Error(`workbuddy authentication rejected: ${reason}; keep exactly one account and run /login workbuddy again`);
 }
 
-function validateSingleStoredAccount(binding: RuntimeBinding, credentials?: OAuthCredentials) {
+function requireSingleStoredAccount(binding: RuntimeBinding) {
   const accounts = binding.authStorage.listOAuthAccounts(WORKBUDDY_PROVIDER);
   if (accounts.length !== 1) throw identityError(`expected one stored account, found ${accounts.length}`);
   const account = accounts[0]!;
   if (!account.accountId) throw identityError("stored account identity is incomplete");
-  if (credentials && (account.accountId !== credentials.accountId || account.orgId !== credentials.orgId)) {
-    throw identityError("selected credential does not match the stored account identity");
-  }
-  return account;
+  return account as typeof account & { accountId: string };
 }
 
-function validateResolvedIdentity(access: OAuthAccess, binding: RuntimeBinding): OAuthAccess {
-  const account = validateSingleStoredAccount(binding);
-  if (!access.accountId || access.credentialId === undefined) {
-    throw identityError("request credential identity is incomplete");
+function validateCredentialIdentity(binding: RuntimeBinding, credentials: OAuthCredentials): void {
+  const account = requireSingleStoredAccount(binding);
+  if (account.accountId !== credentials.accountId || account.orgId !== credentials.orgId) {
+    throw identityError("selected credential does not match the stored account identity");
   }
-  if (
-    access.credentialId !== account.credentialId
-    || access.accountId !== account.accountId
-    || access.orgId !== account.orgId
-  ) {
-    throw identityError("request credential does not match the sole stored account");
-  }
-  return access;
 }
 
 
@@ -106,14 +94,14 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
 
   function getApiKey(credentials: OAuthCredentials): string {
     validateRequestCredential(credentials);
-    validateSingleStoredAccount(requireBinding(), credentials);
+    validateCredentialIdentity(requireBinding(), credentials);
     return credentials.access;
   }
 
   function modifyModels(models: Model[], credentials: OAuthCredentials): Model[] {
     try {
       validateStoredCredential(credentials);
-      if (binding) validateSingleStoredAccount(binding, credentials);
+      if (binding) validateCredentialIdentity(binding, credentials);
     } catch {
       return models.filter((model) => model.provider !== WORKBUDDY_PROVIDER);
     }
@@ -125,26 +113,19 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
         ...model,
         resolveHeaders: async (signal?: AbortSignal) => {
           const accessRevision = requireModelAccess(model.id);
-          const preserved = await previous?.(signal);
-          requireModelAccess(model.id, accessRevision);
-          const currentBinding = requireBinding();
           const requestSignal = combinedSignal(signal);
-          const resolved = await currentBinding.authStorage.getOAuthAccess(
-            WORKBUDDY_PROVIDER,
-            currentBinding.sessionId,
-            { signal: requestSignal },
-          );
+          const currentBinding = requireBinding();
+          const preserved = await previous?.(requestSignal);
           requestSignal.throwIfAborted();
           requireModelAccess(model.id, accessRevision);
-          const latestBinding = requireBinding();
-          if (latestBinding !== currentBinding) throw identityError("session changed during credential resolution");
-          if (!resolved) throw identityError("no usable OAuth credential");
-          const access = validateResolvedIdentity(resolved, latestBinding);
-          requireModelAccess(model.id, accessRevision);
+          if (requireBinding() !== currentBinding) {
+            throw identityError("session changed during header resolution");
+          }
+          const account = requireSingleStoredAccount(currentBinding);
           return {
             ...preserved,
-            "X-User-Id": access.accountId!,
-            ...(access.orgId ? { "X-Enterprise-Id": access.orgId } : { "X-No-Enterprise-Id": "1" }),
+            "X-User-Id": account.accountId,
+            ...(account.orgId ? { "X-Enterprise-Id": account.orgId } : { "X-No-Enterprise-Id": "1" }),
           };
         },
       };
@@ -153,7 +134,7 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
 
   function validateBillingCredential(credential: UsageCredential): void {
     const currentBinding = requireBinding();
-    const account = validateSingleStoredAccount(currentBinding);
+    const account = requireSingleStoredAccount(currentBinding);
     if (
       credential.type !== "oauth"
       || !credential.accessToken
@@ -171,7 +152,6 @@ export function createWorkBuddyProvider(fetcher: Fetch = globalThis.fetch): Work
     bindContext(context) {
       binding = {
         authStorage: context.modelRegistry.authStorage,
-        sessionId: context.sessionManager.getSessionId(),
       };
     },
     setModelAccess(activeIds, transitioning) {

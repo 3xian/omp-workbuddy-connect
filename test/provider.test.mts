@@ -29,29 +29,14 @@ let accounts: Array<{
   orgId: "org-a",
   active: false,
 }];
-let resolvedIdentity: {
-  accessToken: string;
-  credentialId: number;
-  accountId: string;
-  orgId?: string;
-} = {
-  accessToken: credentials.access,
-  credentialId: 11,
-  accountId: "account-a",
-  orgId: "org-a",
-};
-let resolvedSession: string | undefined;
-let accessGate: Promise<void> | undefined;
-let markAccessStarted: (() => void) | undefined;
+let getOAuthAccessCalls = 0;
 const authStorage = {
   listOAuthAccounts() {
     return accounts;
   },
-  async getOAuthAccess(_provider: string, sessionId?: string) {
-    resolvedSession = sessionId;
-    markAccessStarted?.();
-    await accessGate;
-    return resolvedIdentity;
+  async getOAuthAccess() {
+    getOAuthAccessCalls += 1;
+    return undefined;
   },
 };
 const controller = createWorkBuddyProvider();
@@ -71,11 +56,15 @@ assert(oauth?.getApiKey && oauth.modifyModels, "provider OAuth boundaries are in
 const foreignOpenAI = { provider: "openai", id: "gpt", marker: {} } as unknown as Model;
 const foreignAnthropic = { provider: "anthropic", id: "claude", marker: {} } as unknown as Model;
 let previousResolverCalls = 0;
+let headerGate: Promise<void> | undefined;
+let markHeaderStarted: (() => void) | undefined;
 const workbuddy = {
   provider: "workbuddy",
   id: "hy3",
   resolveHeaders: async () => {
     previousResolverCalls += 1;
+    markHeaderStarted?.();
+    await headerGate;
     return { "X-Existing": "preserved", "X-User-Id": "stale" };
   },
 } as unknown as Model;
@@ -94,6 +83,30 @@ const headers = await projectedWorkBuddy.resolveHeaders();
 assert(previousResolverCalls === 1, "existing resolver was not composed exactly once");
 assert(headers?.["X-Existing"] === "preserved", "existing resolver headers were lost");
 assert(headers?.["X-User-Id"] === "account-a" && headers["X-Enterprise-Id"] === "org-a", "request identity headers mismatch");
+assert(getOAuthAccessCalls === 0, "resolveHeaders performed a redundant OAuth access resolution");
+let releaseSessionHeaders!: () => void;
+headerGate = new Promise<void>((resolve) => { releaseSessionHeaders = resolve; });
+const sessionHeadersStarted = new Promise<void>((resolve) => { markHeaderStarted = resolve; });
+const inFlightSessionResolution = projectedWorkBuddy.resolveHeaders();
+await sessionHeadersStarted;
+controller.bindContext({
+  modelRegistry: { authStorage },
+  sessionManager: { getSessionId: () => "session-raced" },
+} as unknown as ExtensionContext);
+releaseSessionHeaders();
+let sessionRaceRejected = false;
+try {
+  await inFlightSessionResolution;
+} catch (error) {
+  sessionRaceRejected = error instanceof Error && error.message.includes("session changed during header resolution");
+}
+assert(sessionRaceRejected, "session switch during header resolution did not fail closed");
+headerGate = undefined;
+markHeaderStarted = undefined;
+controller.bindContext({
+  modelRegistry: { authStorage },
+  sessionManager: { getSessionId: () => "session-a" },
+} as unknown as ExtensionContext);
 const resolverCallsBeforeScopeChecks = previousResolverCalls;
 controller.setModelAccess(new Set(["hy3"]), true);
 let transitionRejected = false;
@@ -115,32 +128,26 @@ try {
 assert(removedModelRejected, "removed model did not fail closed at the resolver");
 assert(previousResolverCalls === resolverCallsBeforeScopeChecks, "removed model reached the previous resolver");
 controller.setModelAccess(new Set(["hy3"]), false);
-let releaseAccess!: () => void;
-accessGate = new Promise<void>((resolve) => { releaseAccess = resolve; });
-const accessStarted = new Promise<void>((resolve) => { markAccessStarted = resolve; });
+let releaseHeaders!: () => void;
+headerGate = new Promise<void>((resolve) => { releaseHeaders = resolve; });
+const headersStarted = new Promise<void>((resolve) => { markHeaderStarted = resolve; });
 const inFlightResolution = projectedWorkBuddy.resolveHeaders();
-await accessStarted;
+await headersStarted;
 controller.setModelAccess(new Set(["hy3"]), true);
-releaseAccess();
+releaseHeaders();
 let midFlightTransitionRejected = false;
 try {
   await inFlightResolution;
 } catch (error) {
   midFlightTransitionRejected = error instanceof Error && error.message.includes("scope is changing");
 }
-assert(midFlightTransitionRejected, "scope transition during credential resolution did not fail closed");
-accessGate = undefined;
-markAccessStarted = undefined;
+assert(midFlightTransitionRejected, "scope transition during header resolution did not fail closed");
+headerGate = undefined;
+markHeaderStarted = undefined;
 controller.setModelAccess(new Set(["hy3"]), false);
 
 
 accounts = [{ position: 0, credentialId: 21, accountId: "account-b", orgId: "org-b", active: true }];
-resolvedIdentity = {
-  accessToken: "access-b",
-  credentialId: 21,
-  accountId: "account-b",
-  orgId: "org-b",
-};
 controller.bindContext({
   modelRegistry: { authStorage },
   sessionManager: { getSessionId: () => "session-b" },
@@ -150,7 +157,6 @@ assert(
   switchedHeaders?.["X-User-Id"] === "account-b" && switchedHeaders["X-Enterprise-Id"] === "org-b",
   "retained resolver captured the projection-time binding",
 );
-assert(resolvedSession === "session-b", `resolver used stale session ${resolvedSession}`);
 
 const childController = createWorkBuddyProvider();
 childController.setModelAccess(new Set(["hy3"]), false);
@@ -173,15 +179,8 @@ assert(
   childHeaders?.["X-User-Id"] === "account-b" && childHeaders["X-Enterprise-Id"] === "org-b",
   "fresh subagent controller did not resolve account B",
 );
-assert(resolvedSession === "subagent-b", `fresh subagent used stale session ${resolvedSession}`);
 
 accounts = [{ position: 0, credentialId: 11, accountId: "account-a", orgId: "org-a", active: true }];
-resolvedIdentity = {
-  accessToken: credentials.access,
-  credentialId: 11,
-  accountId: "account-a",
-  orgId: "org-a",
-};
 controller.bindContext({
   modelRegistry: { authStorage },
   sessionManager: { getSessionId: () => "session-a" },
@@ -200,6 +199,22 @@ try {
   ambiguousKeyRejected = error instanceof Error && error.message.includes("found 2");
 }
 assert(ambiguousKeyRejected, "getApiKey accepted multiple stored accounts");
+let ambiguousHeadersRejected = false;
+try {
+  await projectedWorkBuddy.resolveHeaders();
+} catch (error) {
+  ambiguousHeadersRejected = error instanceof Error && error.message.includes("found 2");
+}
+assert(ambiguousHeadersRejected, "resolveHeaders accepted multiple stored accounts");
+
+accounts = [{ position: 0, credentialId: 21, accountId: "account-b", orgId: "org-b", active: true }];
+let mismatchedKeyRejected = false;
+try {
+  oauth.getApiKey(credentials);
+} catch (error) {
+  mismatchedKeyRejected = error instanceof Error && error.message.includes("does not match");
+}
+assert(mismatchedKeyRejected, "getApiKey accepted a credential for a different stored account");
 
 accounts = [{ position: 0, credentialId: 11, accountId: "account-a", orgId: "org-a", active: true }];
 const activeStillOne = oauth.modifyModels([workbuddy], credentials);
@@ -207,11 +222,6 @@ assert(activeStillOne.length === 1, "active sticky marker was incorrectly counte
 
 const noOrgCredentials = { ...credentials, orgId: undefined };
 accounts = [{ position: 0, credentialId: 11, accountId: "account-a", active: true }];
-resolvedIdentity = {
-  accessToken: credentials.access,
-  credentialId: 11,
-  accountId: "account-a",
-};
 assert(oauth.modifyModels([foreignOpenAI, workbuddy], noOrgCredentials).length === 2, "optional enterprise identity hid WorkBuddy model");
 assert(oauth.getApiKey(noOrgCredentials) === "access-a", "getApiKey rejected optional enterprise identity");
 const noOrgModel = oauth.modifyModels([workbuddy], noOrgCredentials)[0];
@@ -227,6 +237,7 @@ try {
   requestBoundaryRejected = error instanceof Error && error.message.includes("found 0");
 }
 assert(requestBoundaryRejected, "retained WorkBuddy model bypassed request-boundary account guard");
+assert(getOAuthAccessCalls === 0, "provider header resolution called AuthStorage.getOAuthAccess");
 
 
 let shutdownFetchStarted = false;

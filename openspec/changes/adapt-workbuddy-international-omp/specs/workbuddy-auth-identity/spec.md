@@ -48,7 +48,7 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 - **THEN** 输出保留传入宿主 credential 的 refresh、accountId 和已有可选 orgId；不是从旧文件或其他账号补值
 
 ### Requirement: AUTH-04 Durable credential identity binding
-每次 WorkBuddy Chat 的 Authorization、X-User-Id SHALL 属于同一个 durable OAuth credential row 与 WorkBuddy account identity。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送官方 `X-No-Enterprise-Id: 1`，不得伪造组织。401 retry 可刷新该行的 Bearer，但 accountId 与已有可选 orgId MUST 继续绑定同一 durable row；Authorization 由宿主原生认证提供，账号 Headers SHALL 在请求边界从对应宿主 credential 解析，不得依赖长期静态账号 Header 快照。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
+每次 WorkBuddy Chat 的 Authorization、X-User-Id SHALL 属于同一个唯一 stored OAuth account identity。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送官方 `X-No-Enterprise-Id: 1`，不得伪造组织。Authorization SHALL 仅由宿主原生 AuthStorage resolver 解析；WorkBuddy `getApiKey(credentials)` SHALL 在返回 access 前验证宿主选择的 accountId/可选 orgId 等于唯一 stored account。账号 Headers SHALL 在请求边界通过 `listOAuthAccounts()` 重新读取并验证该唯一 account，不得再次调用 `getOAuthAccess()`，也不得依赖长期静态账号 Header 快照。401 retry 可刷新该唯一 account 的 Bearer，但 accountId 与已有可选 orgId MUST 保持一致。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户首次登录后发出模型请求
