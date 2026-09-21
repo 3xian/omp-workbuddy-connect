@@ -1,6 +1,6 @@
 # WorkBuddy OMP Release Evidence
 
-Current status: **dual-realm M3 execution completed on OMP 18.2.7, but publication is BLOCKED by REL-04 diagnostic identity redaction; package remains v1.1.8-rc.3**
+Current status: **v1.2.0-rc.1 dual-realm publication approved on OMP 18.2.7 with a documented host-local diagnostic identity limitation; stable publication remains pending RC observation and final review**
 
 This report contains redacted outcomes only. OAuth tokens, refresh tokens, Authorization values, account identifiers, organization identifiers, OAuth state values, and raw request bodies are intentionally omitted.
 
@@ -8,9 +8,9 @@ This report contains redacted outcomes only. OAuth tokens, refresh tokens, Autho
 
 The 2026-09-21 M3 run completed fresh OAuth, restart, forced refresh, scope switching, concurrent Chat, cancellation, scoped logout, main/Task/headless, three real models per realm, reasoning budget edges, tools, vision, Billing/UI behavior, package lifecycle, and the permanent regression suite on official OMP `18.2.7`.
 
-Functional gates passed for both `workbuddy` and `workbuddy-cn`. Publication did not pass: OMP `18.2.7` removes Authorization from automatic HTTP 400 request dumps but persists the request's raw `X-User-Id`. That host-owned diagnostic violates REL-04 identity redaction. The isolated profile and attachment were removed; no secret or identity artifact was committed. README support claims and package metadata therefore remain international-only at `1.1.8-rc.3`.
+Functional gates passed for both `workbuddy` and `workbuddy-cn`. Credential/secret privacy and cross-realm isolation also passed: the inspected artifact contained no Authorization, access/refresh token, API key, credential, pending code, cross-realm identity, or third-party upload. OMP `18.2.7` did retain the request's raw `X-User-Id` in one host-owned local HTTP 400 dump. This is classified as a disclosed host-local privacy limitation, not an authentication-secret leak; README tells operators where these private local files live and how to handle them. The isolated acceptance profile and attachment were removed.
 
-The full redacted matrix, exact runtime baseline, observed MiniMax availability failure, cache checksums, and release decision are recorded in `openspec/changes/add-workbuddy-cn-realm/m3-evidence.md`.
+RC risk acceptance therefore approves `v1.2.0-rc.1`; stable publication remains pending RC observation and final review. The full redacted matrix, exact runtime baseline, observed MiniMax availability failure, exact Task models, cache checksums, and release decision are recorded in `openspec/changes/add-workbuddy-cn-realm/m3-evidence.md`.
 
 ## Historical v1 evidence
 

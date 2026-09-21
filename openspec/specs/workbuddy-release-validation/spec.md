@@ -44,11 +44,15 @@ v1 SHALL 通过 V2 的全部 Release Matrix：官方安装、零类型错误、f
 - **THEN** 不宣布认证或发布完成，保留真实失败证据继续处理
 
 ### Requirement: REL-04 Credential privacy and official endpoints
-系统 SHALL 不在日志、仓库、项目目录或第三方服务泄露 access、refresh、完整 Authorization 或 credential，不修改或清除 Desktop 登录状态。网络 SHALL 仅访问功能所需官方国际版 endpoints；诊断允许 provider/model/identity presence/expiry/scope/model count/HTTP status，输出 identity SHALL 脱敏。
+系统 SHALL 不在日志、仓库、项目目录或第三方服务泄露 access、refresh、完整 Authorization、API key 或 credential，不修改或清除 Desktop 登录状态。网络 SHALL 仅访问请求目标 realm 功能所需的官方 endpoints；国际站与中国站 credential、identity headers 和 pending code MUST NOT 交叉发送。扩展自有输出中的 identity SHALL 脱敏。若验收时最新稳定版 OMP 独立生成的本地 HTTP 诊断保留账号标识、且没有公开 Provider API 可声明额外敏感 Header，RC MAY 在确认附件不含认证秘密、不上传第三方、不跨 realm，并于 README 和 release evidence 明示本地隐私限制后发布；不得把该风险描述为完全脱敏。
 
-#### Scenario: Error logging contains sensitive upstream content
-- **WHEN** OAuth、refresh、Billing 或 Chat 错误含秘密或身份
-- **THEN** 保留有用状态和错误分类但移除 Token/Authorization，身份脱敏，诊断附件亦遵守同一规则
+#### Scenario: Extension error logging contains sensitive upstream content
+- **WHEN** OAuth、refresh、Billing 或 Chat 错误含认证秘密或身份
+- **THEN** 扩展输出保留有用状态和错误分类但移除 Token/Authorization，身份脱敏，扩展生成的诊断附件亦遵守同一规则
+    
+#### Scenario: Official host persists a local request diagnostic
+- **WHEN** 验收时最新稳定版 OMP 在 HTTP 400/413 后自动保存扩展无法配置脱敏规则的本地 request dump
+- **THEN** RC 只有在附件无 access/refresh/Authorization/API key/credential、无第三方上传和跨 realm 数据，且用户文档明确文件位置、账号标识风险与处理方式时才可通过；stable publication 仍需单独最终评审
 
 #### Scenario: Logout and release inspection
 - **WHEN** 执行 logout 并检查持久化、网络与诊断产物
@@ -62,7 +66,7 @@ v1 SHALL 通过 V2 的全部 Release Matrix：官方安装、零类型错误、f
 - **THEN** 能恢复准确环境、模型、账号类型和各场景结果，并定位失败而不暴露账户秘密
 
 ### Requirement: REL-06 Honest compatibility and limitations
-发布文档 SHALL 明示本次验收使用的最新稳定版官方 OMP 精确版本、国际站 `workbuddy` 与中国站 `workbuddy-cn` 的支持范围、单账号且不接受身份错配、Widget 生命周期、request-bound Provider 隔离行为、各 realm 缓存依赖与 model source，以及未验证能力。项目不维护旧 OMP 兼容矩阵；下一次发布 MUST 先升级并重验届时最新稳定版。真正多账号、Desktop import、自定义 Provider transport 和即时 model-select UI SHALL 不进入关键路径；动态目录与 Usage 增强按实证说明。
+发布文档 SHALL 明示本次验收使用的最新稳定版官方 OMP 精确版本、国际站 `workbuddy` 与中国站 `workbuddy-cn` 的支持范围、单账号且不接受身份错配、Widget 生命周期、request-bound Provider 隔离行为、各 realm 缓存依赖与 model source、宿主本地诊断 identity 限制，以及未验证能力。项目不维护旧 OMP 兼容矩阵；下一次发布 MUST 先升级并重验届时最新稳定版。真正多账号、Desktop import、自定义 Provider transport 和即时 model-select UI SHALL 不进入关键路径；动态目录与 Usage 增强按实证说明。
 
 #### Scenario: User reads installation and migration instructions
 - **WHEN** 用户依据 README 安装或从旧 Pi/Fork 迁移

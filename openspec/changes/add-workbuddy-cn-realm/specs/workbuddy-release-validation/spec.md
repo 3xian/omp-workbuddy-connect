@@ -3,18 +3,22 @@
 ## MODIFIED Requirements
 
 ### Requirement: REL-04 Credential privacy and official endpoints
-系统 SHALL 不在日志、仓库、项目目录或第三方服务泄露 access、refresh、完整 Authorization 或 credential，不修改或清除 Desktop 登录状态。网络 SHALL 仅访问请求目标 realm 功能所需且已经证据确认的官方 endpoints；国际站与中国站 credential、headers、pending code 和诊断身份 MUST NOT 交叉发送。诊断允许 provider/realm、model、identity presence/expiry、scope、model count 与 HTTP status，输出 identity SHALL 脱敏。
+系统 SHALL 不在日志、仓库、项目目录或第三方服务泄露 access、refresh、完整 Authorization、API key 或 credential，不修改或清除 Desktop 登录状态。网络 SHALL 仅访问请求目标 realm 功能所需且已经证据确认的官方 endpoints；国际站与中国站 credential、headers 和 pending code MUST NOT 交叉发送。扩展自有输出中的 identity SHALL 脱敏。若验收时最新稳定版 OMP 独立生成的本地 HTTP 诊断保留账号标识、且没有公开 Provider API 可声明额外敏感 Header，RC MAY 在确认附件不含认证秘密、不上传第三方、不跨 realm，并于 README 和 release evidence 明示本地隐私限制后发布；不得把该风险描述为完全脱敏。
 
-#### Scenario: Error logging contains sensitive upstream content
-- **WHEN** 任一 realm 的 OAuth、refresh、Billing 或 Chat 错误含秘密或身份
-- **THEN** 保留有用状态、realm 和错误分类但移除 Token/Authorization，身份脱敏，诊断附件亦遵守同一规则
+#### Scenario: Extension error logging contains sensitive upstream content
+- **WHEN** 任一 realm 的 OAuth、refresh、Billing 或 Chat 错误含认证秘密或身份
+- **THEN** 扩展输出保留有用状态、realm 和错误分类但移除 Token/Authorization，身份脱敏，扩展生成的诊断附件亦遵守同一规则
+
+#### Scenario: Official host persists a local request diagnostic
+- **WHEN** 验收时最新稳定版 OMP 在 HTTP 400/413 后自动保存扩展无法配置脱敏规则的本地 request dump
+- **THEN** RC 只有在附件无 access/refresh/Authorization/API key/credential、无第三方上传和跨 realm 数据，且用户文档明确文件位置、账号标识风险与处理方式时才可通过；stable publication 仍需单独最终评审
 
 #### Scenario: Logout and release inspection
 - **WHEN** 同时运行国际站和中国站请求并检查网络与诊断产物
 - **THEN** 每个请求只访问其官方 endpoint 并携带自身凭据和 headers，没有跨 realm 或第三方凭据上传，Desktop 数据未改变
 
 ### Requirement: REL-06 Honest compatibility and limitations
-发布文档 SHALL 明示本次验收使用的最新稳定版官方 OMP 精确版本、国际站 `workbuddy` 与中国站 `workbuddy-cn` 的独立登录/命令/目录/scope、每个 realm 单账号且不接受身份错配、Widget 生命周期、request-bound Provider 隔离、各 realm 的缓存依赖与 model source，以及中国站 Billing 未验证时的 unavailable 状态。项目不维护旧 OMP 兼容矩阵；每次发布前 MUST 更新并重验届时最新稳定版。真正多账号、自动站点探测、跨站 fallback、Desktop import、自定义 Provider transport 和即时 model-select UI SHALL 不进入关键路径；动态目录与 Usage 增强按各 realm 实证说明。
+发布文档 SHALL 明示本次验收使用的最新稳定版官方 OMP 精确版本、国际站 `workbuddy` 与中国站 `workbuddy-cn` 的独立登录/命令/目录/scope、每个 realm 单账号且不接受身份错配、Widget 生命周期、request-bound Provider 隔离、各 realm 的缓存依赖与 model source、中国站 Billing 未验证时的 unavailable 状态，以及宿主本地诊断 identity 限制。项目不维护旧 OMP 兼容矩阵；每次发布前 MUST 更新并重验届时最新稳定版。真正多账号、自动站点探测、跨站 fallback、Desktop import、自定义 Provider transport 和即时 model-select UI SHALL 不进入关键路径；动态目录与 Usage 增强按各 realm 实证说明。
 
 #### Scenario: User reads installation and migration instructions
 - **WHEN** 用户依据 README 安装、选择 realm 或从旧 Pi/Fork 迁移

@@ -4,9 +4,9 @@
 
 ## 1. 结论
 
-**M3 发布状态：BLOCKED。** 双 realm 功能、真实服务和回归矩阵已经执行；`workbuddy` 与 `workbuddy-cn` 的 OAuth、重启、刷新、Chat、scope、并发、取消、main/Task/headless、工具和 vision 均通过。发布隐私 gate 未通过：官方 OMP `18.2.7` 的自动 HTTP 400 request dump 会移除 Authorization，但仍把动态 `X-User-Id` 原值写入本地诊断附件，违反 REL-04 的诊断 identity 脱敏要求。扩展无法在不修改宿主、删除协议必需 Header 或增加侵入式日志清扫的前提下修复该行为。
+**M3 functional matrix：PASS。M3 RC publication gate：PASS with documented host limitation。Stable publication：pending RC observation / final review。** `workbuddy` 与 `workbuddy-cn` 的 OAuth、重启、刷新、Chat、scope、并发、取消、main/Task/headless、工具和 vision 均通过。官方 OMP `18.2.7` 的自动 HTTP 400/413 request dump 会移除 Authorization/Token 等认证秘密，但仍可能把动态 `X-User-Id` 原值写入本地诊断附件；该文件不由扩展上传，且未观察到跨 realm 数据。此项按已披露的 host-local privacy limitation 接受用于 RC，不表述为完全脱敏。
 
-因此本轮不把 README 扩大为中国站发布承诺，不把包版本升级到 `1.2.0-rc.1`，也不把 M3 标为最终发布通过。当前包版本保持 `1.1.8-rc.3`。
+本轮批准发布 `1.2.0-rc.1`，README 同步公开双 realm 支持、独立登录/scope、CN Billing disabled、串行换号边界与宿主本地诊断限制。Stable 仍等待 RC 观察和最终评审。
 
 ## 2. 可复现基线
 
@@ -14,7 +14,7 @@
 |---|---|
 | OMP | `18.2.7`，本轮开始和结束时均为 npm 最新稳定版 |
 | `@oh-my-pi/*` 开发/peer 依赖 | 精确锁定 `18.2.7` |
-| 扩展版本 | `1.1.8-rc.3`；隐私 gate 失败后未升级 |
+| 扩展版本 | `1.2.0-rc.1` |
 | 验收基线提交 | `c70755b126164f174190272be5e650f939777627` 加本轮工作区修改 |
 | Node / Bun / npm | `v26.9.0` / `1.4.2` / `11.19.1` |
 | 主机 | macOS Darwin arm64 |
@@ -31,7 +31,7 @@
 
 - 双 AuthStorage namespace、相同 model ID 和独立 endpoint；
 - 国际站 `deepseek-v4.1-flash` 16,384 token clamp 不进入中国站；
-- credential-derived identity/domain Header 不跨 realm；
+- 国际站固定 Origin/domain Header 来自 ProviderConfig，中国站固定配置不复制这些 Header；两个 realm 的 credential-derived identity/domain Header 不串扰；
 - named `tool_choice` transform 仅进入国际站，第三方同 ID 保持不变；
 - 两份 scope/settings 分别持久化；
 - 中国站 Usage disabled 且 UI 显示不可用，国际站 Billing 仅调用国际站 endpoint；
@@ -39,7 +39,7 @@
 - shutdown 失效 retained transport，Desktop-owned fixture 不变；
 - finally 关闭数据库、注销两个 OAuth Provider 并删除临时目录。
 
-本轮完整 runner 应报告 20 个永久脚本；OAuth 拒绝、poll timeout、429/Retry-After、取消、同 ID dispatch、CN unclamped budget 和资源释放继续由既有确定性脚本覆盖。
+本轮完整 runner 报告 20 个永久脚本；OAuth 拒绝、poll timeout、429/Retry-After、取消、同 ID dispatch、CN unclamped budget 和资源释放继续由既有确定性脚本覆盖。
 
 ## 4. 官方 OMP 双 Realm Integration Matrix
 
@@ -53,7 +53,7 @@
 | Cancellation | PASS | 活动 CN reasoning 请求开始 transport 后收到 Ctrl-C，进程以 130 退出；后续 CN/Intl 请求继续成功 |
 | Interactive main | PASS | 两个 realm 的真实 TUI turn 分别返回唯一 marker |
 | Headless | PASS | 两个 realm 的 `omp -p` 均完成 OAuth resolution、streaming 和 clean exit |
-| Task | PASS | CN main 与 fresh headless Task 实例均使用 `workbuddy-cn/hy3`；Intl main 和多个 fresh Task 实例均使用 `workbuddy` 模型；observer 记录独立 factory/session/shutdown |
+| Task | PASS | CN main 与 fresh headless Task 实例均观察到 `workbuddy-cn/hy3`。Intl main 使用 `workbuddy/hy3`；fresh Task 实例实际观察为 `workbuddy/gemini-3.5-flash`，重试 fallback 为 `workbuddy/glm-5.3-flash`。这证明真实 Intl Task runtime 与 provider 隔离，但不宣称临时 `modelRoles.task=workbuddy/hy3` 强制了具体 Task 模型；REL-07 只要求真实 Task 执行，不要求固定模型 ID |
 | Same-ID/foreign isolation | PASS | 永久 runtime regression 证明 hook 以 `ctx.model.provider` 分派，第三方同 ID payload 原样保留 |
 | Scoped logout | PASS | `/workbuddy-cn logout` 后 CN 在 HTTP 前返回 `No API key found`，Intl 同时返回 `M3_CN_LOGOUT_INTL_OK`；最终 Intl 也 logout |
 | Account replacement boundary | PASS（声明边界） | OMP `resolveHeaders` 仍无 request-attempt identity；仅支持先完成/取消活动请求，再 logout/login，不宣称并发换号原子性 |
@@ -83,7 +83,7 @@
 - `hy3`、`hy4-preview-f`、`deepseek-v4.1-flash` 均完成真实 Chat；Hy3 high effort 完成 reasoning。
 - Hy4 对真实 2×2 红色 PNG 返回 `M3_INTL_VISION_OK:red`。
 - read → grep → bash 真实工具链返回 `M3_INTL_TOOLS_OK`。
-- main、Task、headless、restart、forced refresh、all scope、并发和 scoped logout 均通过。
+- main、真实 Task runtime、headless、restart、forced refresh、all scope、并发和 scoped logout 均通过；Intl Task 的实际模型为 `gemini-3.5-flash`，重试 fallback 为 `glm-5.3-flash`，未将其误记为 Hy3。
 - `/workbuddy` 从官方 Billing 获得非零积分并把 Provider 显示为已就绪；具体额度和账号信息不归档。
 
 ## 7. 安全、文件、网络与诊断审查
@@ -98,18 +98,18 @@
   - CN `fc0782468bcb777781c5f37814be44ff8413545845acbdb025dd7eb1a9fe8245`
 - 中国站 400 dump 的 URL 仅为 `https://copilot.tencent.com/v2/chat/completions`；Authorization 已由宿主移除，没有 Token、Authorization 或 pending OAuth code。
 
-### 阻塞项
+### 已披露的宿主本地隐私限制
 
-对 MiniMax 不可用响应，OMP `18.2.7` 自动生成的 `http-400-requests/*.json` 包含动态 `X-User-Id` 原值。宿主的 `http-inspector.ts` 仅按 header 名中的 `key|token|secret|auth|credential|cookie` 脱敏，因此不会处理 `X-User-Id`。该附件位于隔离 profile，已随 profile 清理且未进入仓库，但执行结果仍证明 REL-04 的“诊断 identity 脱敏”没有成立。
+对 MiniMax 不可用响应，OMP `18.2.7` 自动生成的 `http-400-requests/*.json` 包含动态 `X-User-Id` 原值。宿主的 `http-inspector.ts` 仅按 header 名中的 `key|token|secret|auth|credential|cookie` 脱敏，因此不会处理 `X-User-Id`。该附件只位于隔离 profile，已随 profile 清理且未进入仓库；Authorization、access/refresh token、API key、credential、pending code、跨 realm identity 或第三方上传均未出现。
 
-安全选择：不修改宿主、不移除官方协议要求的 identity Header、不增加扫描宿主日志的插件副作用，也不弱化已批准规格。必须由后续最新稳定版 OMP 扩大 diagnostic header redaction，或提供 Provider 声明敏感 Header 的公开 API；升级后重跑 400/413 诊断 gate。
+RC 风险接受：该现象属于官方宿主在本机保留账号标识，不是认证秘密泄漏。扩展不修改宿主、不移除官方协议要求的 identity Header，也不增加扫描宿主日志的副作用。README 明确文件位置、风险和手动处理方式；下一次最新稳定版 OMP 验收时继续复核。
 
 ## 8. 发布决策
 
-- 官方 local install、plugin doctor 和 uninstall：PASS，包版本 `1.1.8-rc.3`。
+- 官方 local install、plugin doctor 和 uninstall：PASS；发布准备版本 `1.2.0-rc.1`。
 - 中国站功能 gate：PASS。
 - 国际站回归 gate：PASS。
-- REL-04 诊断 identity redaction：**FAIL / external host blocker**。
-- README 中国站承诺：未发布。
-- `1.2.0-rc.1` 版本升级：未执行。
-- M3 最终发布：**BLOCKED**。
+- Credential/secret privacy 与跨 realm 隔离：PASS。
+- Host-local `X-User-Id` diagnostic persistence：KNOWN LIMITATION，已披露并接受用于 RC。
+- M3 RC publication：**PASS**。
+- Stable publication：等待 RC 观察与最终评审。

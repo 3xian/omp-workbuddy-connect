@@ -1,13 +1,13 @@
 # OMP WorkBuddy Connect
 
-> **v1.1.8-rc.3 release candidate，按当前最新稳定版 OMP 验收（本次为 18.2.7）**
+> **v1.2.0-rc.1 dual-realm release candidate，按当前最新稳定版 OMP 验收（本次为 18.2.7）**
 >
-> 正常单账号、串行换号与完整功能回归已通过；并发 credential replacement 的
-> Bearer/Header 原子关联是 RC 已知限制。正式证据见 `docs/omp-port/release-evidence.md`。
+> 国际站与中国站的单账号、串行换号和完整功能矩阵均已通过。并发 credential replacement
+> 的 Bearer/Header 原子关联及 OMP 本地诊断 identity 保留是 RC 已知限制。正式证据见 `docs/omp-port/release-evidence.md`。
 
 ## 当前版本
 
-WorkBuddy AI 国际版 provider for OMP。当前 RC 保留 v1.1.7 的功能边界，并验证认证、模型目录、scope、Gateway、工具、Credits、main、Task 与 headless 路径。
+同时提供 WorkBuddy AI 国际站 `workbuddy` 与中国站 `workbuddy-cn` Provider。两个 realm 独立登录、独立持久化 credential、独立 scope/settings，不自动判断地区、不复用账号，也不跨 realm fallback。
 
 移植自 [iceloon/dsh-workbuddyai-connect](https://github.com/iceloon/dsh-workbuddyai-connect)（DSH 插件）；当前实现直接注册 OMP provider，不使用 shim 或 loopback 代理。
 
@@ -20,10 +20,10 @@ brew install oven-sh/bun/bun
 bun --version
 ```
 
-其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。稳定版仍可固定安装 `v1.1.7`；测试当前 RC 使用：
+其他系统按 [Bun 官方安装说明](https://bun.sh/docs/installation) 安装，并确认 `bun --version` 可运行。稳定版仍可固定安装 `v1.1.7`；测试当前双 realm RC 使用：
 
 ```bash
-omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.1.8-rc.3
+omp plugin install github:ha5h6r000wn/omp-workbuddy-connect#v1.2.0-rc.1
 omp
 ```
 
@@ -33,7 +33,7 @@ omp
 export PATH="$HOME/.bun/bin:$PATH"
 ```
 
-进入 OMP 后先执行 `/login workbuddy`；如果默认 `free` 范围为空，执行 `/workbuddy all`，再用 `/model` 选择 WorkBuddy 模型。插件默认安装到 user scope，可供不同项目中的默认 OMP 环境使用。named profile 是独立环境，不会自动继承默认环境的插件或凭据；`--profile workbuddy` 仅适合隔离测试，不是普通用户的正式安装步骤。
+进入 OMP 后按需执行 `/login workbuddy`（国际站）或 `/login workbuddy-cn`（中国站）。如果目标 realm 的默认 `free` 范围为空，执行 `/workbuddy all` 或 `/workbuddy-cn all`，再用 `/model` 选择对应 Provider 模型。两个 realm 必须分别登录；一个站点的凭据不会自动授权另一个站点。插件默认安装到 user scope，可供不同项目中的默认 OMP 环境使用。named profile 是独立环境，不会自动继承默认环境的插件或凭据；`--profile workbuddy` 仅适合隔离测试，不是普通用户的正式安装步骤。
 
 当前不通过 npm registry 或 OMP Marketplace 分发，也不要从未固定的 `main` 分支安装。开发者从本地 checkout 调试时使用：
 
@@ -49,19 +49,20 @@ omp plugin uninstall omp-workbuddy-connect
 
 ## 登录
 
-设置 → 模型 → WorkBuddy AI → **Connect**（弹出浏览器登录页），或：
+设置 → 模型 → 选择目标 WorkBuddy Provider → **Connect**（弹出对应官方浏览器登录页），或：
 
-```
+```text
 /login workbuddy
+/login workbuddy-cn
 ```
 
-正式凭据仅由 OMP AuthStorage 持久化和刷新。`.workbuddy-auth.json`、Desktop credential 与 `WORKBUDDY_AUTH_FILE` 不参与登录或请求回退；使用 `/login workbuddy` 登录。
+`workbuddy` 使用国际站 `https://www.workbuddy.ai`；`workbuddy-cn` 使用中国站 `https://copilot.tencent.com`。正式凭据仅由各自的 OMP AuthStorage namespace 持久化和刷新。两个 realm 每个仅支持一个账号；`.workbuddy-auth.json`、Desktop credential 与 `WORKBUDDY_AUTH_FILE` 不参与登录或请求回退。
 
 ## 模型与推理档
 
-默认 scope 为 `free`。只有有效 Desktop 产品目录中带明确零 multiplier credits 证据的模型会显示；`0`、`0.0`、`x0`、`x0.00` 等规范零值会归一为免费证据，非零、缺失或格式错误均不是免费。有效缓存（包括 `models: []`）是权威结果，不会被内置列表扩宽。内置清单仅作为整个目录不可用或无任何有效行时的 fallback，不构成免费证据，因此 fallback 来源的 `free` 可以为空。
+每个 realm 默认 scope 均为 `free`。只有对应 Desktop 产品目录中带明确零 multiplier credits 证据的模型会显示；`0`、`0.0`、`x0`、`x0.00` 等规范零值会归一为免费证据，非零、缺失或格式错误均不是免费。有效缓存（包括 `models: []`）是权威结果，不会被另一 realm 扩宽。
 
-每个模型的 reasoning、图片能力和推理档来自产品配置 `~/.workbuddy-ai/cache/acc-product-config-v3.json`。`/workbuddy` 详情显示精确来源 `desktop-cache` 或 `builtin-fallback`；fallback 同时显示缺失、不可读、JSON 无效、结构无效或无有效模型的原因。缓存不可用时，`all` scope 可使用当前内置目录：
+国际站读取 `~/.workbuddy-ai/cache/acc-product-config-v3.json`；缓存整体不可用时，`all` 可使用维护的国际站内置目录，但 fallback 不构成免费证据。中国站仅读取 `~/.workbuddy/cache/acc-product-config-v3.json`，没有跨站或内置 fallback；缓存缺失、损坏或没有有效模型时明确显示 unavailable/empty。reasoning、图片能力和推理档均来自目标 realm 的目录。
 
 | 模型 | 上下文 / 有效输出上限 | OMP canonical effort |
 | --- | --- | --- |
@@ -80,8 +81,10 @@ omp plugin uninstall omp-workbuddy-connect
 - **`/workbuddy free`** — 切到有明确免费证据的模型范围，以一次性通知报告结果；不查询 Billing，也不挂载常驻详情。
 - **`/workbuddy all`** — 切到当前插件可识别的全部模型，以一次性通知报告结果；不查询 Billing，也不挂载常驻详情。
 - **`/workbuddy logout`** — 失效异步 UI、删除 OMP WorkBuddy credential，并清除 Widget/status。
+- **`/workbuddy-cn`** — 显示中国站脱敏账号、scope/模型数、目录来源和 Provider 状态。中国站 Usage/Billing 尚未批准，因此“积分 不可用 / 套餐 不可用”是设计行为，不是登录或 Chat 故障。
+- **`/workbuddy-cn free|all|logout`** — 仅切换或删除中国站状态，不修改国际站 credential、scope 或 UI。
 
-积分明确区分查询中、可用（含真实 0）和不可用；失败后不沿用 last-good 值。scope 存于 OMP agent 目录的 `.workbuddy-settings.json`；默认目录与 profile 均由 OMP 决定，`PI_CODING_AGENT_DIR` 可覆盖。Headless 模式不会调用 select/notify/widget/status。
+积分明确区分查询中、可用（含真实 0）和不可用；失败后不沿用 last-good 值。scope 分别存于 OMP agent 目录的 `.workbuddy-settings.json` 与 `.workbuddy-cn-settings.json`；默认目录与 profile 均由 OMP 决定，`PI_CODING_AGENT_DIR` 可覆盖。Headless 模式不会调用 select/notify/widget/status。
 
 非空范围切换直接重注册 Provider，让 OMP 原位替换 runtime overlay；只有权威空目录才先注销旧 Provider，以清除当前 OMP 不会被 `models: []` 覆盖的陈旧行。随后保存非敏感 scope，最后提交内存状态。注册或设置写入失败会恢复旧目录且不报告成功；当前模型被移出范围时插件提示重选，并在选择范围内模型前阻断 retained Model 请求，不自动选择付费模型或 fallback。
 
@@ -90,6 +93,7 @@ omp plugin uninstall omp-workbuddy-connect
 | 变量 | 作用 |
 | --- | --- |
 | `WORKBUDDYAI_PRODUCT_CONFIG` | 指定产品配置 JSON 路径 |
+| `WORKBUDDY_CN_PRODUCT_CONFIG` | 指定中国站产品配置 JSON 路径 |
 | `PI_CODING_AGENT_DIR` | 覆盖 OMP agent 目录；非敏感 scope 设置文件随宿主目录规则存放 |
 
 ## 验证
@@ -99,7 +103,7 @@ npm test
 npm run typecheck
 ```
 
-`npm test` 顺序执行 19 个永久回归脚本，避免全局 fetch、AuthStorage 与 runtime fixture 并发互扰。真实 OAuth、Chat、Refresh、Vision、Tools、Credits、main、Task role 与 headless 的发布证据不由 Mock 替代，记录于 `docs/omp-port/release-evidence.md`。
+`npm test` 顺序执行 20 个永久回归脚本，避免全局 fetch、AuthStorage 与 runtime fixture 并发互扰。真实双 realm OAuth、Chat、Refresh、Vision、Tools、国际站 Billing、main、Task runtime 与 headless 的发布证据不由 Mock 替代，记录于 `docs/omp-port/release-evidence.md`。
 
 ## 与上游的差异
 
@@ -114,21 +118,22 @@ npm run typecheck
 
 ## 迁移
 
-- 不复用旧 Pi/Fork、DSH 或 Desktop credential；安装后必须执行 `/login workbuddy`。
-- `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源。
-- 旧 scope 设置不会导入；用 `/workbuddy free` 或 `/workbuddy all` 明确选择。
-- 当前 RC 包版本为 `1.1.8-rc.3`；稳定版仍为 `v1.1.7`。
+- 不复用旧 Pi/Fork、DSH 或 Desktop credential；按目标 realm 分别执行 `/login workbuddy` 或 `/login workbuddy-cn`。
+- `.workbuddy-auth.json`、`WORKBUDDY_AUTH_FILE` 与 Desktop credential 没有优先级，也不是回退源；既有国际站 credential 仍只属于 `workbuddy`。
+- 旧 scope 设置不会跨 realm 导入；分别用 `/workbuddy free|all` 与 `/workbuddy-cn free|all` 明确选择。
+- 当前双 realm RC 包版本为 `1.2.0-rc.1`；稳定版仍为 `v1.1.7`。
 
 ## v1 限制
 
-- 每次发布只验收当时最新稳定版官方 OMP；当前已验证 `18.2.7` 与 WorkBuddy 国际版 `https://www.workbuddy.ai`。
-- 仅支持一个已存储 WorkBuddy Account；零个或多个账号、缺失身份或身份错配均拒绝。
-- RC 支持稳定单账号和串行换号。换号前必须完成或取消在途 WorkBuddy 请求，再依次执行 `/workbuddy logout` 与 `/login workbuddy`。
+- 每次发布只验收当时最新稳定版官方 OMP；当前双 realm RC 已验证 OMP `18.2.7`、国际站 `https://www.workbuddy.ai` 与中国站 `https://copilot.tencent.com`。
+- 每个 realm 仅支持一个已存储账号；零个或多个账号、缺失身份或身份错配均拒绝。中国站 live matrix 使用 personal/no-enterprise 账号，不扩大为企业账号完整验证。
+- RC 支持稳定单账号和串行换号。换号前必须完成或 Ctrl-C 取消目标 realm 的在途请求，再执行 `/workbuddy logout` + `/login workbuddy`，或 `/workbuddy-cn logout` + `/login workbuddy-cn`。
 - 当前验证的 OMP 不向 `Model.resolveHeaders()` 暴露当前 request-attempt 已选中的 OAuth identity；其他 session/process 在 Bearer 与 Header 构造窗口内并发替换 credential 时，插件不能原子证明两者属于同一 durable row。
-- WorkBuddy 不提供常驻 Widget/status；运行 `/workbuddy` 可临时查看详情，下一次 `turn_start` 自动收起。
-- 模型目录只读 `~/.workbuddy-ai/cache/acc-product-config-v3.json` 的产品元数据；不读取 Desktop credential。缓存失效时 `all` 使用内置 fallback，`free` 不把 fallback 或缺少 multiplier 的模型猜成免费。
-- 同 ID 的其他 Provider 不经过 WorkBuddy payload 或身份逻辑。v1 不包含多账号轮换、Desktop credential import、自定义 Chat transport、在线动态目录端点或即时 model-select UI。
-- 当前 OMP Usage API 是跨 Provider 聚合刷新；`/workbuddy` 只展示 WorkBuddy 报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
+- 两个 realm 均不提供常驻 Widget/status；运行对应管理命令可临时查看详情，下一次 `turn_start` 自动收起。
+- 中国站 Usage/Billing 未批准并保持 disabled；Chat、reasoning、tools、vision 不依赖 Billing。目录可见只表示结构合格，不保证测试账号实时获准调用；M3 中 MiniMax-M2.5 即由官方 Gateway 返回不可用。
+- 同 ID 的其他 Provider 不经过 WorkBuddy payload 或身份逻辑。本 RC 不包含多账号轮换、自动地区探测、跨站 fallback、Desktop credential import、自定义 Chat transport、在线动态目录端点或即时 model-select UI。
+- **OMP 本地诊断限制：** OMP `18.2.7` 在部分 HTTP 400/413 后会写入 `~/.omp/logs/http-400-requests/`（named profile 位于对应 profile 日志目录）。宿主会移除 Authorization、Token 等 credential，但动态 `X-User-Id` 账号标识可能保留原值；本扩展不上传该文件，也不会擅自删除宿主日志。请将其作为私有账号数据保管或手动删除。
+- 当前 OMP Usage API 是跨 Provider 聚合刷新；`/workbuddy` 只展示国际站报告，但刷新缓存时宿主可能同时查询其他已配置 Provider。
 
 ## License
 

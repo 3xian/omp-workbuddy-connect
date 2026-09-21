@@ -126,6 +126,20 @@ try {
   await extension.default(pi);
   assert(commands.has("workbuddy") && commands.has("workbuddy-cn"), "realm commands were not registered independently");
   assert(configs.has("workbuddy") && configs.has("workbuddy-cn"), "realm providers were not registered independently");
+  const intlConfig = configs.get("workbuddy");
+  const cnConfig = configs.get("workbuddy-cn");
+  assert(
+    intlConfig.headers?.Origin === "https://www.workbuddy.ai"
+      && intlConfig.headers?.Referer === "https://www.workbuddy.ai/"
+      && intlConfig.headers?.["X-Domain"] === "www.workbuddy.ai",
+    "international static protocol headers changed",
+  );
+  assert(
+    cnConfig.headers?.Origin === undefined
+      && cnConfig.headers?.Referer === undefined
+      && cnConfig.headers?.["X-Domain"] === undefined,
+    "CN static provider config copied international protocol headers",
+  );
   for (const start of handlers.session_start ?? []) await start({}, ctx);
 
   await commands.get("workbuddy")!("all", ctx);
@@ -147,18 +161,14 @@ try {
   const cnHeaders = await cn.resolveHeaders?.();
   assert(
     intlHeaders?.["X-User-Id"] === "intl-account"
-      && intlHeaders["X-Enterprise-Id"] === "intl-org"
-      && intlHeaders["X-Domain"] === "www.workbuddy.ai"
-      && intlHeaders.Origin === "https://www.workbuddy.ai",
-    "international identity or protocol headers crossed realms",
+      && intlHeaders["X-Enterprise-Id"] === "intl-org",
+    "international dynamic identity headers crossed realms",
   );
   assert(
     cnHeaders?.["X-User-Id"] === "cn-account"
       && cnHeaders["X-No-Enterprise-Id"] === "1"
-      && cnHeaders["X-Domain"] === "copilot.tencent.com"
-      && cnHeaders.Origin === undefined
-      && cnHeaders.Referer === undefined,
-    "CN identity or protocol headers crossed realms",
+      && cnHeaders["X-Domain"] === "copilot.tencent.com",
+    "CN dynamic identity or credential-derived domain headers crossed realms",
   );
 
   const hook = handlers.before_provider_request?.[0];
