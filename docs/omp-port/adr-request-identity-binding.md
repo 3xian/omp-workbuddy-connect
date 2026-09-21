@@ -76,6 +76,8 @@ Every retained model resolver reads the current sole row and rechecks the same s
 
 The intended boundary remains one durable OAuth credential row: Bearer, `accountId`, and optional `orgId` must come from that row; refresh may rotate only the access token. `getApiKey(credentials)` validates the selected credential against the sole stored row. Header resolution independently captures and rechecks that row.
 
+The normative invariant is per transport attempt, not a lifetime lock for the whole logical Chat. After an explicit account replacement, a later 401 retry MAY bind to the newly selected durable row only if that retry's Bearer and identity Headers are atomically from the new row; mixing rows within one attempt is prohibited. OMP 18.2.6's missing request identity prevents proving that atomicity, so this semantic clarification does not unblock publication.
+
 The real transport contract covers first request, same-row forced refresh, 401 retry with per-attempt Headers, optional enterprise, ambiguity rejection, and retained-model A→B where B uses a second request session while the provider remains bound to the original lifecycle session. The provider regression covers two sessions sharing one `AuthStorage` without binding clobber and a stored-row change during a paused Header resolver.
 
 These tests do not make the independent Bearer and Header lookups atomic. The remaining gap requires OMP to pass the current request session/attempt to `resolveHeaders`, expose the selected credential to Header resolution, or atomically return Bearer plus Headers.

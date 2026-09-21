@@ -48,7 +48,7 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 - **THEN** 输出保留传入宿主 credential 的 refresh、accountId 和已有可选 orgId；不是从旧文件或其他账号补值
 
 ### Requirement: AUTH-04 Durable credential identity binding
-每次 WorkBuddy Chat 的 Authorization、X-User-Id SHALL 属于同一个唯一 stored OAuth durable credential row。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送官方 `X-No-Enterprise-Id: 1`，不得伪造组织。Authorization SHALL 仅由宿主原生 AuthStorage resolver 解析。Header 与 Bearer 的解析 MUST 共享宿主提供的 request-attempt identity 或由同一个原子 credential resolution 产生；分别读取“当前唯一账号”不构成同源证明。WorkBuddy `getApiKey(credentials)` SHALL 在返回 access 前验证宿主选择的 accountId/可选 orgId。401 retry 可刷新同一 durable row 的 Bearer，但 accountId 与已有可选 orgId MUST 保持一致。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
+每个 WorkBuddy Chat transport attempt 的 Authorization、X-User-Id SHALL 属于同一个唯一 stored OAuth durable credential row。credential 有 orgId 时 SHALL 同源发送 X-Enterprise-Id；无 orgId 时 SHALL 发送官方 `X-No-Enterprise-Id: 1`，不得伪造组织。Authorization SHALL 仅由宿主原生 AuthStorage resolver 解析。Header 与 Bearer 的解析 MUST 共享宿主提供的 request-attempt identity 或由同一个原子 credential resolution 产生；分别读取“当前唯一账号”不构成同源证明。WorkBuddy `getApiKey(credentials)` SHALL 在返回 access 前验证宿主选择的 accountId/可选 orgId。401 retry 是新的 transport attempt：同账号 refresh 时 durable identity MUST 保持一致；用户明确换号后 MAY 使用新 row，但该 retry 内 Bearer 与 Headers 仍 MUST 原子同源。固定 Headers SHALL 使用国际版 Origin/Referer/X-Domain、SaaS X-Product 及已验证协议值，不使用 credential domain 改写路由。
 
 #### Scenario: First authenticated request
 - **WHEN** 用户首次登录后发出模型请求
@@ -68,7 +68,7 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 
 #### Scenario: Persisted credential before session binding
 - **WHEN** OMP 重启时 AuthStorage 已持久化一个完整 WorkBuddy credential，Provider 在 `session_start` 绑定前注册并投影模型
-- **THEN** WorkBuddy 模型保留 request-boundary resolver；`session_start` 或 `session_switch` 绑定当前 runtime 后首个请求动态解析当前 session identity，注册期未绑定不得被误判为非法 credential
+- **THEN** WorkBuddy 模型保留 request-boundary resolver；任一 lifecycle session 绑定共享 AuthStorage authority 后首个请求动态读取当前唯一 stored identity，注册期未绑定不得被误判为非法 credential
 
 ### Requirement: AUTH-05 Three-layer fail closed
 系统 SHALL 在登录返回前、刷新返回前、提供请求 API key 前分别校验必要身份。只在模型投影抛异常不构成拒绝保证；accountId 缺失时 MUST 不提供可用认证且不发送 Chat Completion 请求。enterpriseId/orgId 是服务端实证可缺省的可选组织属性，不属于账号主体；缺省时必须显式发送 no-enterprise marker。

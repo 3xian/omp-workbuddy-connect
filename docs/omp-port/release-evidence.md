@@ -91,6 +91,8 @@ The rejected active-row implementation was additionally backed by a fake that ig
 
 These checks are not an atomic Bearer/Header proof. No new release tag may rely on this matrix until OMP provides request-scoped identity to Header resolution or an atomic Bearer-plus-Headers contract.
 
+AUTH-04 is intentionally specified per transport attempt. A later retry may use a newly selected account after explicit replacement, but only if that retry's Bearer and Headers are atomically same-row; the current host gap prevents proving this condition.
+
 ## Release Matrix
 
 | Domain / case | Result | Execution evidence | Implementation / durable evidence |
