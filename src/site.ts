@@ -2,7 +2,7 @@ import type { ProductModel } from "./models.ts";
 
 export type DomainPolicy =
   | { readonly kind: "fixed"; readonly value: string }
-  | { readonly kind: "credential" };
+  | { readonly kind: "jwt-issuer"; readonly responseField: "domain" };
 
 export interface ModelOverride {
   readonly maxTokens?: number;
@@ -29,6 +29,7 @@ export interface SiteDescriptor {
     readonly refreshSource: string;
     readonly allowedLoginOrigins: readonly string[];
     readonly headers: Readonly<Record<string, string>>;
+    readonly finalizeIdentity: "token-response" | "account-endpoint";
   };
   readonly protocolHeaders: Readonly<Record<string, string>>;
   readonly domainPolicy: DomainPolicy;
@@ -95,6 +96,7 @@ export const WORKBUDDY_INTL: SiteDescriptor = deepFreeze({
       "X-No-Enterprise-Id": "1",
       "X-No-Department-Info": "1",
     },
+    finalizeIdentity: "token-response",
   },
   protocolHeaders,
   domainPolicy: { kind: "fixed", value: "www.workbuddy.ai" },
@@ -105,6 +107,7 @@ export const WORKBUDDY_INTL: SiteDescriptor = deepFreeze({
       {
         id: "deepseek-v4.1-flash",
         name: "Deepseek-V4.1-Flash",
+        freeEvidence: "unknown",
         contextWindow: 1_000_000,
         maxTokens: 128_000,
         supportsImages: true,
@@ -116,6 +119,7 @@ export const WORKBUDDY_INTL: SiteDescriptor = deepFreeze({
         id: "hy4-preview-f",
         name: "Hy4 preview",
         contextWindow: 1_000_000,
+        freeEvidence: "unknown",
         maxTokens: 64_000,
         supportsImages: true,
         supportsReasoning: true,
@@ -127,6 +131,7 @@ export const WORKBUDDY_INTL: SiteDescriptor = deepFreeze({
         name: "Hy3",
         contextWindow: 192_000,
         maxTokens: 64_000,
+        freeEvidence: "unknown",
         supportsImages: true,
         supportsReasoning: true,
         supportedEfforts: ["low", "high"],
@@ -150,6 +155,67 @@ export const WORKBUDDY_INTL: SiteDescriptor = deepFreeze({
   },
 });
 
+const cnOrigin = "https://copilot.tencent.com";
+const cnProtocolHeaders = {
+  Accept: "application/json, text/plain, */*",
+  "Content-Type": "application/json",
+  "X-Requested-With": "XMLHttpRequest",
+  "X-Product": "SaaS",
+};
+/**
+ * CN protocol descriptor approved for production assembly by the redacted M2
+ * account-finalize, issuer-domain restart, and official OMP outbound evidence.
+ */
+export const WORKBUDDY_CN: SiteDescriptor = deepFreeze({
+  providerId: "workbuddy-cn",
+  displayName: "WorkBuddy 中国站",
+  label: "WorkBuddy 中国站",
+  commandName: "workbuddy-cn",
+  apiOrigin: cnOrigin,
+  chatPath: "/v2/chat/completions",
+  auth: {
+    platform: "workbuddy",
+    startPath: "/v2/plugin/auth/state",
+    tokenPath: "/v2/plugin/auth/token",
+    accountPath: "/v2/plugin/account",
+    refreshPath: "/v2/plugin/auth/token/refresh",
+    refreshBody: "empty-json",
+    nonceMode: "none",
+    pollIntervalMs: 1_000,
+    pollDeadlineMs: 5 * 60 * 1000,
+    pendingCode: 11217,
+    refreshSource: "plugin",
+    allowedLoginOrigins: [cnOrigin, "https://www.workbuddy.cn"],
+    headers: {
+      ...cnProtocolHeaders,
+      "X-No-Authorization": "true",
+      "X-No-User-Id": "true",
+      "X-No-Enterprise-Id": "true",
+      "X-No-Department-Info": "true",
+    },
+    finalizeIdentity: "account-endpoint",
+  },
+  protocolHeaders: cnProtocolHeaders,
+  domainPolicy: { kind: "jwt-issuer", responseField: "domain" },
+  catalog: {
+    env: "WORKBUDDY_CN_PRODUCT_CONFIG",
+    pathSegments: [".workbuddy", "cache", "acc-product-config-v3.json"],
+    builtin: [],
+  },
+  modelOverrides: {},
+  payload: {
+    normalizeNamedToolChoice: false,
+  },
+  settingsFile: ".workbuddy-cn-settings.json",
+  widgetKey: "workbuddy-cn",
+  uiTitle: "WorkBuddy · 中国站",
+  usage: {
+    enabled: false,
+    billingPath: "",
+    source: "unavailable",
+  },
+});
+
 export function siteUrl(site: SiteDescriptor, path: string): string {
   return new URL(path, site.apiOrigin).toString();
 }
@@ -160,17 +226,12 @@ export function chatBaseUrl(site: SiteDescriptor): string {
   return siteUrl(site, site.chatPath.slice(0, -suffix.length));
 }
 
-export function fixedChatHeaders(site: SiteDescriptor): Readonly<Record<string, string>> {
-  if (site.domainPolicy.kind !== "fixed") {
-    throw new Error(`${site.providerId} requires credential-derived domain headers`);
+export function chatHeaders(site: SiteDescriptor): Readonly<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  for (const name of ["Accept", "Origin", "Referer", "User-Agent", "X-Requested-With", "X-Product"]) {
+    const value = site.protocolHeaders[name];
+    if (value) headers[name] = value;
   }
-  return {
-    Accept: site.protocolHeaders.Accept!,
-    "X-Requested-With": site.protocolHeaders["X-Requested-With"]!,
-    Origin: site.protocolHeaders.Origin!,
-    Referer: site.protocolHeaders.Referer!,
-    "User-Agent": site.protocolHeaders["User-Agent"]!,
-    "X-Product": site.protocolHeaders["X-Product"]!,
-    "X-Domain": site.domainPolicy.value,
-  };
+  if (site.domainPolicy.kind === "fixed") headers["X-Domain"] = site.domainPolicy.value;
+  return headers;
 }

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AuthStorage } from "@oh-my-pi/pi-ai";
 import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
-import { WORKBUDDY_INTL } from "../src/site.ts";
+import { WORKBUDDY_CN, WORKBUDDY_INTL } from "../src/site.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -154,15 +154,7 @@ try {
   resolveSnapshotReports(undefined);
   await snapshotRefresh;
   assert(snapshotAccountReads === 2, `one refresh should read OAuth accounts twice; observed ${snapshotAccountReads}`);
-  const disabledSite = {
-    ...WORKBUDDY_INTL,
-    providerId: "workbuddy-cn",
-    label: "WorkBuddy CN",
-    commandName: "workbuddy-cn",
-    widgetKey: "workbuddy-cn",
-    uiTitle: "WorkBuddy CN",
-    usage: { ...WORKBUDDY_INTL.usage, enabled: false },
-  };
+  const disabledSite = WORKBUDDY_CN;
   let disabledUsageCalls = 0;
   const disabledCtx = {
     ...ctx,
