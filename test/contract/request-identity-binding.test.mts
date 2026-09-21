@@ -14,6 +14,7 @@ import { ModelRegistry } from "@oh-my-pi/pi-coding-agent/config/model-registry";
 import { createWorkBuddyProvider, WORKBUDDY_PROVIDER } from "../../src/provider.ts";
 
 const SESSION = "request-identity-contract";
+const SECOND_SESSION = "request-identity-contract-b";
 const temp = await mkdtemp(join(tmpdir(), "workbuddy-identity-contract-"));
 const authStorage = await AuthStorage.create(join(temp, "auth.db"));
 let refreshNumber = 1;
@@ -134,10 +135,10 @@ function currentModel(): Model {
   return model;
 }
 
-async function request(model: Model): Promise<void> {
+async function request(model: Model, sessionId = SESSION): Promise<void> {
   const stream = streamSimple(model, context, {
     apiKey: authStorage.resolver(WORKBUDDY_PROVIDER, {
-      sessionId: SESSION,
+      sessionId,
       baseUrl: model.baseUrl,
       modelId: model.id,
     }),
@@ -195,10 +196,18 @@ try {
 
   await authStorage.remove(WORKBUDDY_PROVIDER);
   await authStorage.set(WORKBUDDY_PROVIDER, oauth("access-b1", "account-b", "org-b", Date.now() + 60 * 60 * 1000));
-  await request(retainedModel);
+  await request(retainedModel, SECOND_SESSION);
   const switched = attempts.at(-1)!;
   assert(switched.authorization === "Bearer access-b1", "retained model did not resolve B bearer");
   assert(switched.userId === "account-b" && switched.orgId === "org-b", "retained model kept A identity");
+  assert(
+    authStorage.listOAuthAccounts(WORKBUDDY_PROVIDER, SECOND_SESSION).some((account) => account.active),
+    "second request session did not select B",
+  );
+  assert(
+    !authStorage.listOAuthAccounts(WORKBUDDY_PROVIDER, SESSION).some((account) => account.active),
+    "deleted A remained active in the original session",
+  );
 
   await authStorage.set(WORKBUDDY_PROVIDER, [
     oauth("access-b1", "account-b", "org-b", Date.now() + 60 * 60 * 1000),
@@ -221,7 +230,7 @@ try {
   assert(withoutEnterprise.orgId === null, "optional enterprise path fabricated an organization");
   assert(withoutEnterprise.noEnterprise === "1", "optional enterprise path omitted X-No-Enterprise-Id");
 
-  console.log("OK: host Bearer-before-Header order, per-retry Headers, refresh identity, A→B, and fail-closed boundaries");
+  console.log("OK: host ordering, per-retry Headers, refresh identity, and retained-model cross-session A→B");
 } finally {
   unregisterOAuthProvider(WORKBUDDY_PROVIDER);
   authStorage.close();

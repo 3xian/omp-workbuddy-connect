@@ -1,6 +1,6 @@
 # WorkBuddy OMP v1 Release Evidence
 
-Status: **PASS for v1.1.5–v1.1.7; post-merge AUTH-04 hardening candidate verified locally, publication tag pending**
+Status: **HISTORICAL PASS for v1.1.5–v1.1.7; post-merge publication BLOCKED by AUTH-04 multi-session API gap**
 
 This report contains redacted outcomes only. OAuth tokens, refresh tokens, Authorization values, account identifiers, organization identifiers, OAuth state values, and raw request bodies are intentionally omitted.
 
@@ -83,11 +83,13 @@ The M0–M5 Auth, Model, Gateway, Billing, Agent, and live-service evidence belo
 
 Verification repeated on OMP `18.2.6`: `npm test` passed all 19 permanent scripts, `npm run typecheck` passed, and an isolated real TUI rendered the seven-line Widget with no WorkBuddy status line. The synthetic six-model UI regression rendered four names plus `… +2`. Auth, Provider, Gateway, and Chat production paths are unchanged and inherit the live evidence below.
 
-### Post-merge AUTH-04 hardening
+### Post-merge AUTH-04 reassessment
 
-The merged sole-account optimization remains and Header resolution still performs zero duplicate OAuth access calls. Follow-up inspection of the complete OMP 18.2.6 `streamSimple()` call chain confirmed the production order: the host resolves and records the session Bearer row before each attempt's `resolveHeaders()`, and a 401 retry reruns Headers.
+The sole-account optimization and zero duplicate OAuth resolution remain. Full transport inspection confirms Bearer-before-Header order and per-retry Header resolution, but a follow-up review found that `Model.resolveHeaders(signal)` receives no request session. The extension lifecycle's last `session_start`/`session_switch` session is not necessarily the main/Task/child session whose `AuthStorage.resolver()` selected the Bearer.
 
-The provider now binds runtime `sessionId`, requires the sole stored row to be active, captures its durable ID/account/org before prior Header work, and rechecks those fields afterward. A permanent race regression pauses A, selects B through a concurrent request, proves B succeeds, and proves A fails before transport. The real-AuthStorage contract proves first-attempt ordering, same-row refresh, and two Header resolutions for a 401 plus retry.
+The rejected active-row implementation was additionally backed by a fake that ignored `sessionId`. It has been removed. Current code retains valid sole-row capture/recheck behavior and makes same-AuthStorage binding idempotent across sessions. A real AuthStorage regression now binds lifecycle session A, replaces A with B, resolves B for request session B, and confirms the retained model uses B without consulting session A's stale pin.
+
+These checks are not an atomic Bearer/Header proof. No new release tag may rely on this matrix until OMP provides request-scoped identity to Header resolution or an atomic Bearer-plus-Headers contract.
 
 ## Release Matrix
 
@@ -96,13 +98,13 @@ The provider now binds runtime `sessionId`, requires the sole stored row to be a
 | Install / OMP 18.2.6 load | PASS | Official `omp install . --json` enabled `./extensions` in an isolated profile; interactive and print sessions loaded it | `package.json`; `extensions/workbuddy.ts` |
 | Type / zero errors | PASS | `npx tsc --noEmit`, exit 0 | `tsconfig.json`; all production and test modules |
 | Login / fresh OAuth | PASS | Official international login page opened; one host OAuth row was persisted; no token was printed or copied | `src/auth.ts`; `src/workbuddy-api.ts`; OAuth protocol regression |
-| Auth / first request identity | PASS | Host Bearer row is selected before identity Headers; the first real-AuthStorage request asserts the row is active | Session-aware active-row binding plus durable identity recheck |
+| Auth / first request identity | PASS (serial only) | First request confirms Bearer-before-Header order and matching observed identity | Does not prove mutation between the two callbacks |
 | Restart / credential recovery | PASS | Interactive OMP process stopped, restarted on the same isolated profile, and returned `RESTART_AUTH_OK` without login | persisted-credential restart regression |
 | Refresh / expired access | PASS | Expiry was forced through public `AuthStorage`; the next real Hy3 request returned `REFRESH_LIVE_OK`; the persisted expiry became future-dated | `refreshWorkBuddyOAuth`; request-identity regression |
 | Failure / invalid refresh | PASS | An isolated real host row was expired with an invalid refresh value; actual headless invocation failed before Chat and stored no successful replacement | OAuth protocol regression; fail-closed provider checks |
 | Identity / missing accountId | PASS | accountId was removed from an isolated host row; actual headless model resolution returned no WorkBuddy model and made no Chat request | `validateStoredCredential`; provider regression |
 | Identity / optional org / no-enterprise | PASS | The live international account has no enterprise identity; login, refresh, and streamed Chat passed on the no-enterprise path | `X-No-Enterprise-Id` request-bound resolver; M1 redacted live evidence |
-| Switch / A → B | PASS (prior live + hardened contracts) | Prior live sequential A→B passed; permanent concurrent race pauses A, selects B, then rejects A before transport while B succeeds | `sessionId` binding; active durable `credentialId`/account/org capture and recheck |
+| Switch / A → B | PASS serial / BLOCKED atomic | Retained model resolves B through a second request session while lifecycle binding remains A; shared AuthStorage rebinding is stable | No request session reaches `resolveHeaders`, so concurrent Bearer/Header atomicity is unproven |
 | Logout / credential invalid | PASS | `/workbuddy logout` left zero WorkBuddy OAuth rows; subsequent real headless invocation failed before transport | provider logout regression |
 | Chat / three real models | PASS | Hy3, Hy4 preview, and Deepseek-V4.1-Flash each returned their unique live marker | model catalog and native transport regressions |
 | Thinking / supported effort | PASS | Hy3 headless high effort emitted a streamed thinking block and result; Hy4 high and Deepseek high completed real requests | canonical `thinking` metadata; model-transport regression |

@@ -79,15 +79,6 @@ controller.bindContext({
   sessionManager: { getSessionId: () => "session-a" },
 } as unknown as ExtensionContext);
 assert(oauth.getApiKey(credentials) === "access-a", "getApiKey did not return validated host access");
-let unselectedRejected = false;
-try {
-  await projectedWorkBuddy.resolveHeaders();
-} catch (error) {
-  unselectedRejected = error instanceof Error && error.message.includes("not selected");
-}
-assert(unselectedRejected, "resolveHeaders accepted an account the host had not selected for the session");
-assert(previousResolverCalls === 0, "unselected account reached the previous resolver");
-accounts[0]!.active = true;
 const headers = await projectedWorkBuddy.resolveHeaders();
 assert(previousResolverCalls === 1, "existing resolver was not composed exactly once");
 assert(headers?.["X-Existing"] === "preserved", "existing resolver headers were lost");
@@ -100,21 +91,15 @@ const inFlightSessionResolution = projectedWorkBuddy.resolveHeaders();
 await sessionHeadersStarted;
 controller.bindContext({
   modelRegistry: { authStorage },
-  sessionManager: { getSessionId: () => "session-raced" },
+  sessionManager: { getSessionId: () => "session-b" },
 } as unknown as ExtensionContext);
 releaseSessionHeaders();
-let sessionRaceRejected = false;
-try {
-  await inFlightSessionResolution;
-} catch (error) {
-  sessionRaceRejected = error instanceof Error && error.message.includes("session changed during header resolution");
-}
-assert(sessionRaceRejected, "session switch during header resolution did not fail closed");
+const crossSessionHeaders = await inFlightSessionResolution;
+assert(
+  crossSessionHeaders?.["X-User-Id"] === "account-a",
+  "a second session sharing AuthStorage clobbered the in-flight binding",
+);
 headerGate = undefined;
-controller.bindContext({
-  modelRegistry: { authStorage },
-  sessionManager: { getSessionId: () => "session-a" },
-} as unknown as ExtensionContext);
 
 let releaseAccountRace!: () => void;
 headerGate = new Promise<void>((resolve) => { releaseAccountRace = resolve; });
@@ -133,9 +118,9 @@ let accountRaceRejected = false;
 try {
   await inFlightAccountA;
 } catch (error) {
-  accountRaceRejected = error instanceof Error && error.message.includes("selected account changed");
+  accountRaceRejected = error instanceof Error && error.message.includes("stored account changed");
 }
-assert(accountRaceRejected, "A request survived a concurrent switch to selected account B");
+assert(accountRaceRejected, "A Header resolution survived a concurrent stored-account switch");
 accounts = [{ position: 0, credentialId: 11, accountId: "account-a", orgId: "org-a", active: true }];
 headerGate = undefined;
 markHeaderStarted = undefined;

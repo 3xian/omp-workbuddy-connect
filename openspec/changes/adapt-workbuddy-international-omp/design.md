@@ -51,8 +51,8 @@ API Compatibility Matrix 至少包括：
 | `refreshModels`、`before_provider_headers`、`model_select`、Marker | 删除旧契约 | 编译和事件加载 |
 | `before_provider_request` | 保留；验证返回 payload 语义及 subagent 加载 | 真实请求和隔离测试 |
 | `getApiKey`、`refreshToken` | Bearer 与 refresh 的宿主入口 | 缺身份零请求、刷新持久化 |
-| `Model.resolveHeaders`、`AuthStorage.listOAuthAccounts` | host Bearer 后的 per-attempt identity 路径 | session active row、durable identity 前后复核、normal/refresh/retry/并发换号 |
-| `ExtensionAPI.setModel` | resolver preservation 失效时的未来 rebind 候选 | 当前 atomic attempt path 不需要 |
+| `Model.resolveHeaders`、`AuthStorage.listOAuthAccounts` | per-attempt Header 路径，但无 request session | sole-row 前后复核、真实多 session 行为；AUTH-04 原子绑定阻塞 |
+| `ExtensionAPI.setModel` | 只能影响后续 Model | 不能补足在途 request identity |
 | `modifyModels` | WorkBuddy-only catalog 投影及 resolver 安装点 | 完整目录、重建、异常 fallback、旧 model reference、resolver preservation |
 | AuthStorage public access/delete | Bearer 仅走宿主 resolver；Header 使用 `listOAuthAccounts`；logout 使用 provider-scoped 删除 | stored credential 歧义、删除后不可用、重启、无重复 OAuth resolution |
 | `fetchDynamicModels` | 走 D6 ADR | 官方在线端点及缓存/范围证据 |
@@ -69,20 +69,20 @@ M0 交付拟存于 `docs/omp-port/`：`baseline-manifest.md`、`api-compatibilit
 
 登录拒绝缺失或无效 access/refresh/expiry/durable uid；durable uid 可来自 data.uid 或同一官方 access token 的 JWT uid/sub。enterpriseId 是可选组织属性：冻结 upstream `cb2398e3374144db0c088d7a4887dc0913342858` 的 `Cred.enterpriseId?`、`chatHeaders` 无企业时发送 `X-No-Enterprise-Id: 1`、`refreshAccess` 无企业时省略 X-Enterprise-Id，与本次 Live 字段形状一致。刷新以传入宿主 credential 为唯一输入，保留既有账号身份、可选 orgId 和明确 email；新的 access/expiry 必须合法。响应明确提供新 refresh 时替换，省略时仅保留本次宿主输入 credential 的 refresh；不得读取旧文件，也不得保留旧 access 或旧 expiry 伪造成功。服务端可省略重复身份，输出继续保留宿主 durable identity；响应若明确返回与已有身份矛盾的值则失败。
 
-`getApiKey()` 在返回 access 前重验必要 accountId，并确认宿主选择的 credential identity 等于唯一 stored account；宿主随后为 session 记录该 durable row。request identity resolver 以 runtime `sessionId` 要求唯一 row 为 active，在调用既有 resolver 前捕获 credentialId/accountId/orgId，异步返回后重新读取并逐项比对，再生成 Header。Header 路径不得再次调用 `getOAuthAccess()`。modifier 内校验用于隐藏非法/歧义 rows，但不是唯一阻断点。
+`getApiKey()` 在返回 access 前重验必要 accountId，并确认宿主选择的 credential identity 等于调用时唯一 stored account。request identity resolver 在既有 resolver 前后捕获并复核 credentialId/accountId/orgId，再生成 Header；Header 路径不得再次调用 `getOAuthAccess()`。但 resolver 不接收实际 request session，不能使用最后一次 lifecycle context 的 `active` row 冒充当前请求证明。modifier 内校验用于隐藏非法/歧义 rows，但不是唯一阻断点。
 
 ### D3 — Durable credential identity 与单账号安全边界
 
 安全边界是宿主 durable credential row、credentialId 和 accountId；orgId 是同一 row 上的可选组织属性，不是账号主体。单账号 refresh 或 401 retry 可更换 Bearer，但必须保留同一 durable row 的 accountId 和已有 orgId；账号替换必须使后续 request-boundary Bearer 与身份解析共同切换到新 row。该术语与仅用于异步 UI 的 `stateGeneration` 无关。
 
-`modifyModels(models, credentials)` 只处理 `model.provider === 'workbuddy'`，保留其他行，并为 WorkBuddy 组合既有 `resolveHeaders`。OMP 18.2.6 production `streamSimple()` 在每个 attempt 先通过 AuthStorage 选择 Bearer 并记录 session active row，再调用 resolver；401 retry 也重跑 resolver。resolver 捕获并复核 active row 的 credentialId/accountId/orgId，因此并发 B 选择会使暂停中的 A 在 HTTP 前失败，同 row token refresh 则继续。不得用长期静态 Header、重复 `getOAuthAccess()` 或全局 pending cache。
-ExtensionAPI 注册入口本身不暴露 ModelRegistry；只有 ExtensionContext 提供公开 `modelRegistry`。`session_start` 捕获初始 runtime，`session_switch` 更新 runtime；resolver 不捕获投影时 identity，而是在每次请求调用 `requireBinding()`，读取唯一 stored account 后再次确认 binding 未切换。未绑定、scope revision 变化、session 切换、logout、shutdown 或 abort 的请求必须在 transport 前 fail closed；注册期未绑定不得永久删除合法的持久化 WorkBuddy 模型。actual Task executor 的独立扩展绑定由 1.6b 单独验收。
+`modifyModels(models, credentials)` 只处理 `model.provider === 'workbuddy'`，保留其他行，并为 WorkBuddy 组合既有 `resolveHeaders`。OMP 18.2.6 production `streamSimple()` 每个 attempt 先选择 Bearer，401 retry 也重跑 resolver；但 `resolveHeaders(signal)` 无 session/request ID。实现仅保留可证明的 sole-row credentialId/accountId/orgId 前后复核，并使同一 AuthStorage 的多 session bind 幂等。不得用长期静态 Header、重复 `getOAuthAccess()`、last lifecycle session active 或全局 pending cache 伪装修复。
+ExtensionAPI 注册入口本身不暴露 ModelRegistry；只有 ExtensionContext 提供公开 `modelRegistry`。`session_start` / `session_switch` 只提供 lifecycle context，不能代表随后每个 request 的 session。runtime binding 仅保留共享 AuthStorage；同一 store 的重复 bind 幂等，不得 clobber 在途请求。未绑定、AuthStorage 替换、scope revision 变化、logout、shutdown 或 abort 仍在 transport 前 fail closed；注册期未绑定不得永久删除合法持久化模型。
 
 `listOAuthAccounts('workbuddy')` 返回的 stored OAuth rows 是 v1 单账号判定与 Header identity 来源：0 行未登录，1 行可继续，超过 1 行明确拒绝模型调用；唯一行仍必须具有 accountId。`active` 仅表示指定 session 的 sticky row，不代表 stored credential 数量。不得自动选择、轮换或删除其他凭据。
 
-M0 1.5 与 2026-09-21 优化后的回归验证了 normal、same-row refresh、401/retry、sequential A→B、abort、sole-account guard 和 Header 路径零 `getOAuthAccess()`。新增 real-AuthStorage 契约确认 Bearer-before-Header 及 401 两次 Header 解析；provider 竞态回归确认暂停 A、并发选中 B 后，B 成功而 A 在 transport 前拒绝。
+M0 1.5 与后续回归验证了 serial normal、same-row refresh、401/retry、retained A→B、abort、sole-account guard 和 Header 路径零 `getOAuthAccess()`。新增 real-AuthStorage 契约保持 lifecycle session A，使用 request session B 选择 B 并成功请求；provider 回归确认同一 AuthStorage 的第二 session 不会 clobber 在途 binding，Header 期间 row 变化仍拒绝。
 
-`ExtensionAPI.setModel` 不参与当前路径；不 patch OMP、不恢复全局 fetch hook、不自建 transport。若未来宿主改变 attempt 顺序或不再维护 session active durable row，AUTH-04 必须重新 gate。
+这些证据不证明 Bearer 选择与 Header lookup 原子同源。AUTH-04 和新发布在 OMP 18.2.6 上 BLOCKED；不 patch OMP、不恢复全局 fetch hook、不自建 transport、不放宽规格。
 
 ### D4 — Logout 和 Billing 共享宿主生命周期
 

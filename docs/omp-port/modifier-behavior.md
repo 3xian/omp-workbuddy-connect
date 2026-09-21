@@ -23,7 +23,7 @@ Production consequence: invalid or ambiguous identity should make the modifier r
 
 ## Request-boundary atomicity follow-up
 
-The original isolated probe installed a WorkBuddy-only `resolveHeaders` backed by `AuthStorage.getOAuthAccess()`. The 2026-09-21 cutover replaced that duplicate selection with a sole-account lookup. Post-merge hardening uses the runtime `sessionId` to require the host-selected active row and rechecks its durable ID/account/org after composed Header work.
+The original probe used `AuthStorage.getOAuthAccess()` inside `resolveHeaders`; the 2026-09-21 cutover replaced that duplicate selection with a sole-account lookup. A proposed session-active follow-up was rejected because the resolver sees only the last lifecycle binding, not the current main/Task/child request session.
 
 Captured outbound attempts kept Bearer and identity on one durable row:
 
@@ -33,18 +33,17 @@ Captured outbound attempts kept Bearer and identity on one durable row:
 - logout A → login B through a retained old model object: `access-b1`, B identity, row 2;
 - abort during header resolution: B was selected, but zero requests reached transport.
 
-This verifies resolver preservation, fixed-header composition, host Bearer-before-Header order, per-attempt 401 Headers, dynamic account switching, and abort-before-transport under the v1 single-account invariant.
+This verifies resolver preservation, fixed-header composition, Bearer-before-Header order, per-attempt 401 Headers, serial/cross-session account switching, and abort-before-transport. It does not prove atomic Bearer/Header correlation under interleaving.
 
 ## Selected public path
 
-- Host Bearer selection and refresh: `AuthStorage.resolver(provider, context)`.
-- Attempt-bound Header materialization: `Model.resolveHeaders(signal)`.
+- Host Bearer selection and refresh: `AuthStorage.resolver(provider, requestSessionId)`.
+- Header materialization: `Model.resolveHeaders(signal)`, with no request session argument.
 - Selected credential guard: WorkBuddy `getApiKey(credentials)` compares account/org with the sole stored row.
-- Header identity: `AuthStorage.listOAuthAccounts(provider, sessionId)` must return exactly one active row with `accountId`.
-- Race guard: capture and recheck `credentialId`, `accountId`, and optional `orgId` around prior resolver awaits.
+- Header identity: capture and recheck sole stored `credentialId`, `accountId`, and optional `orgId`.
+- Runtime binding: retain only shared `AuthStorage`; repeated session bindings to the same store are idempotent.
 - Catalog installation point: WorkBuddy-only `oauth.modifyModels()`.
-- Static catalog refresh and lookup remain useful evidence paths, but old `Model` objects are not mutated.
 
-## M0 result
+## M0 reassessment
 
-**Request-attempt credential identity is preserved under the v1 single-account invariant without duplicate OAuth selection.** The host selects and pins the Bearer row before each attempt's Header resolver. A concurrent row switch during asynchronous Header composition rejects the stale attempt before HTTP; same-row access-token refresh preserves the durable identity.
+The captured requests kept Bearer and identity on one row in serial execution. The stronger AUTH-04 atomicity claim remains unproven because Header resolution cannot identify the request session that selected Bearer. OMP must expose that identity or an atomic Bearer-plus-Headers result before a new publication tag.

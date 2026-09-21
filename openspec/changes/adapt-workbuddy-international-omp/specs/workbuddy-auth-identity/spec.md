@@ -58,9 +58,13 @@ Access Token 过期后系统 SHALL 由 OMP OAuth 刷新生命周期调用官方�
 - **WHEN** 单账号发生 forced refresh 或 401 retry，或 A logout 后 B 在已有会话登录
 - **THEN** forced refresh/401 retry 可更换 Bearer，但每次出站的 Bearer 与用户/可选企业身份仍属于同一 durable credential row；切换到 B 后不再使用 A row，迟到 A 结果不会恢复旧身份
 
-#### Scenario: Account changes between Header and Bearer resolution
-- **WHEN** A 的身份 Headers 已解析，但在宿主选择 Bearer 前 storage 切换到 B，或并发 B 请求改变 session selection
-- **THEN** A 请求必须在任何 Chat HTTP 前失败；不得发送 A Headers 与 B Bearer，也不得用全局 pending cache 猜测请求归属
+#### Scenario: Account changes between Bearer and Header resolution
+- **WHEN** 宿主已为请求选择 A Bearer，但在 identity Headers 解析前 storage 切换到 B，或并发 B 请求改变选择
+- **THEN** A 请求必须在任何 Chat HTTP 前失败；不得发送 B Headers 与 A Bearer，也不得用全局 pending cache 猜测请求归属
+
+#### Scenario: Request session differs from lifecycle binding
+- **WHEN** 同一 Provider 服务 main、Task 或 child 等多个 session，实际请求由 session B 的 AuthStorage resolver 选择 Bearer，而最后一次 lifecycle binding 属于 session A
+- **THEN** Header identity MUST 与请求 session B 的 Bearer 同源；不得读取全局 last-bound session A 的 `active` row 冒充当前请求证明
 
 #### Scenario: Persisted credential before session binding
 - **WHEN** OMP 重启时 AuthStorage 已持久化一个完整 WorkBuddy credential，Provider 在 `session_start` 绑定前注册并投影模型
