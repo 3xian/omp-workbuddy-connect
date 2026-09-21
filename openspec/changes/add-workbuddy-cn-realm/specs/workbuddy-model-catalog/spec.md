@@ -51,3 +51,14 @@
 #### Scenario: Both realms publish the same model ID
 - **WHEN** 国际站和中国站目录包含相同 model ID
 - **THEN** 选择器保留两个不同 Provider 的模型，其 endpoint、能力、价格证据、scope 和请求约束分别来自各自 realm
+
+### Requirement: MODEL-09 Model pricing evidence is realm-bound
+模型价格或 credit 倍率 SHALL 由 Provider ID 与 model ID 的组合标识，并保留来源版本与原始单位。即使两个 realm 使用相同 model ID，系统也 MUST NOT 复制、合并或比较未经单位语义验证的价格字段；空值或未知单位不得解释为免费。free scope 只有在目标 realm 的独立证据明确表示零成本时才可包含该模型。
+
+#### Scenario: Same model ID has different realm prices
+- **WHEN** 国际站和中国站目录包含相同 model ID，但 credit 倍率、单位文本或计费语义不同
+- **THEN** 两个 Provider 分别展示并使用各自证据，不以 model ID 复用价格或免费判定
+
+#### Scenario: Price value has unknown semantics
+- **WHEN** 目录只提供类似 `credits` 的展示值，但缺少币种、结算单位或 Billing 契约证据
+- **THEN** 系统保留该值为来源元数据并标记计费语义未确认，不据此承诺实际费用

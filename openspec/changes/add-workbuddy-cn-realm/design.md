@@ -68,6 +68,7 @@ payload policy 先按 provider 选择，再按该 realm 的证据处理 reasonin
 
 - 国际站保持当前 Desktop cache → builtin fallback 和 free/all 语义。
 - 中国站只读取经证据确认的位置和 schema；缺失/损坏且无已验证 builtin 时返回带原因的 `unavailable` 或 `empty` catalog，不读取国际站缓存。
+- 两站模型目录与 `credits`/价格元数据按 `(providerId, modelId)` 隔离；同 ID 不复用价格或免费结论，未确认单位语义时只保留原始展示值并标记未知。
 - settings 保持在 OMP agent 目录，但文件名或顶层 key 按 provider 分离；旧国际站文件继续原样读取。
 - 中国站在 Billing 契约验证前不注册 UsageProvider。`/workbuddy-cn` 仍显示账号、scope、目录和 provider state，credits/plan 显示 unavailable，且不发 Billing 请求。
 - Widget key、Usage report filter、summary 和 generation 均使用 provider-specific identity。

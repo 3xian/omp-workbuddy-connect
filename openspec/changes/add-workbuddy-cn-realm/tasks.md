@@ -2,12 +2,14 @@
 
 ## 1. M0 — 冻结基线与中国站协议证据
 
-- [ ] 1.1 记录当前分支、工作区差异、OMP/扩展精确版本和国际站回归基线，验证现有类型检查、永久测试及真实国际站冒烟结果均可复现。
-- [ ] 1.2 建立中国站证据矩阵，逐项记录 Chat/OAuth/Billing endpoint、Origin/Referer/product/domain、Plugin Auth headers、refresh source、pending/status 语义和响应字段的“已观察/推断/未知”状态，并由脱敏抓包或官方客户端证据核对。
-- [ ] 1.3 在隔离 OMP 配置与授权中国站账号上验证 login-start、poll、拒绝、超时、429、取消、refresh、restart 和 logout 协议，保存无秘密的请求/响应形状并证明没有国际站 fallback。
-- [ ] 1.4 验证中国站目录来源、缓存位置/schema、至少三个候选模型的 thinking/vision/context/maxTokens/价格证据及同 ID 差异；无法确认的能力明确标为不可注册，并用证据矩阵复核。
-- [ ] 1.5 评估中国站 Billing 与 builtin catalog：只有真实 endpoint、headers、响应语义和模型来源完整时才批准启用，否则形成“不注册 UsageProvider/无 builtin”的明确决定并验证不会发起相应网络请求。
-- [ ] 1.6 完成中国站准入评审；只有关键协议值全部冻结才允许后续生产 Provider 装配，否则保留 `workbuddy` 单站可发布状态并验证仓库没有猜测的 CN endpoint 或 credential 值。
+- [x] 1.1 记录当前分支、工作区差异、OMP/扩展精确版本和国际站回归基线，验证现有类型检查、永久测试及真实国际站冒烟结果均可复现。
+- [x] 1.2 建立中国站证据矩阵，逐项记录 Chat/OAuth/Billing endpoint、Origin/Referer/product/domain、Plugin Auth headers、refresh source、pending/status 语义和响应字段的“已观察/推断/未知”状态，并由脱敏抓包或官方客户端证据核对。
+- [x] 1.3 在不落盘 credential 的隔离探针与授权中国站账号上验证 login-start、pending poll、授权成功、current account、refresh 和 Chat streaming，保存无秘密的请求/响应形状并证明探针没有国际站 fallback；拒绝、超时、429、取消、restart 和 logout 作为 Provider 客户端行为在 3.2/4.2 验收。
+- [x] 1.4 验证中国站目录来源、缓存位置/schema、至少三个候选模型的 thinking/vision/context/maxTokens/价格证据及同 ID 差异；无法确认的能力明确标为不可注册，并用证据矩阵复核。
+- [x] 1.5 评估中国站 Billing 与 builtin catalog：只有真实 endpoint、headers、响应语义和模型来源完整时才批准启用，否则形成“不注册 UsageProvider/无 builtin”的明确决定并验证不会发起相应网络请求。
+- [x] 1.6 完成中国站准入评审；只有关键协议值全部冻结才允许后续生产 Provider 装配，否则保留 `workbuddy` 单站可发布状态并验证仓库没有猜测的 CN endpoint 或 credential 值。
+
+> 1.3 于 2026-09-21 拆分：M0 只冻结真实服务协议，避免在 Provider 尚未实现前要求 OMP 生命周期形成循环依赖；原有失败分支、持久化、restart/logout 要求全部迁入 3.2/4.2，发布 gate 不降低。
 
 ## 2. M1 — 用最小 realm 描述符迁移国际站
 
@@ -21,8 +23,8 @@
 ## 3. M2 — 接入证据支持的中国站 realm
 
 - [ ] 3.1 仅使用 M0 已冻结值创建 `workbuddy-cn` descriptor；对 descriptor 做快照/契约检查，证明 endpoint、headers、pending/status 和兼容 flags 均可追溯到证据且未复制未验证国际站值。
-- [ ] 3.2 接入中国站 OAuth、refresh、request-bound identity 和单账号限制，使用独立 AuthStorage namespace；验证双站并发登录/刷新/取消、缺身份 fail-closed、A→B 和任一站 logout 均不读写另一站 credential。
-- [ ] 3.3 接入中国站模型目录、能力、free/all 和 provider+model 预算覆盖；验证缓存缺失/损坏且无 builtin 时返回 unavailable/empty，同 ID 模型仍保持各自 endpoint、metadata、scope 和 retained-model 阻断。
+- [ ] 3.2 接入中国站 OAuth、refresh、request-bound identity 和单账号限制，使用独立 AuthStorage namespace；以受控故障覆盖拒绝、超时、429/Retry-After 和取消，以隔离 OMP 覆盖 credential 持久化、restart、logout、双站并发登录/刷新、缺身份 fail-closed 与 A→B，且任一站均不读写另一站 credential。
+- [ ] 3.3 接入中国站模型目录、能力、free/all 和 provider+model 预算覆盖；验证缓存缺失/损坏且无 builtin 时返回 unavailable/empty，同 ID 模型仍保持各自 endpoint、metadata、价格证据、scope 和 retained-model 阻断。
 - [ ] 3.4 注册 `/workbuddy-cn` 的 status/free/all/logout 与 Provider 专属 settings、Widget key、标签和 generation；验证双站命令、turn/session lifecycle 和迟到异步结果不会互相清理或恢复状态。
 - [ ] 3.5 按 M0 决定处理中国站 Usage：未获批准时不注册 UsageProvider，并验证 `/workbuddy-cn` 显示 credits/plan unavailable 且 Billing 请求数为零；获批准时用中国站真实协议完成独立成功/失败/慢响应回归。
 - [ ] 3.6 在生产入口装配 `workbuddy-cn`，保持单一 request hook 按 `ctx.model.provider` 精确分派；用官方 OMP 加载、混合目录和相同 model ID 场景验证两个 realm 与第三方 Provider 无串扰。
@@ -30,7 +32,7 @@
 ## 4. M3 — 双 realm 验收与发布
 
 - [ ] 4.1 补充最小永久回归：双 AuthStorage、endpoint/header、相同 ID payload/token clamp、cache/settings/scope、Usage/UI generation、logout/cancel 和 retained model 隔离；运行串行测试脚本并确认资源完整释放。
-- [ ] 4.2 执行官方 OMP integration matrix，覆盖两个 realm 同时登录、重启、强制刷新、scope 切换、并发请求、logout、main/Task/headless 与第三方同 ID Provider，验证每次 transport 前身份和 realm 绑定正确。
+- [ ] 4.2 执行官方 OMP integration matrix，覆盖两个 realm 同时登录、重启、强制刷新、scope 切换、并发请求、取消、logout、main/Task/headless 与第三方同 ID Provider；复核中国站拒绝/超时/429 分类与 Retry-After 边界，验证每次 transport 前身份和 realm 绑定正确。
 - [ ] 4.3 执行中国站真实 OAuth、Chat streaming、reasoning、单/连续/多工具、声明的 vision、至少三个已确认模型和 main/Task/headless 矩阵，记录精确客户端/Gateway/account/model 版本及脱敏证据；mock 不计为通过。
 - [ ] 4.4 审查源码、网络、日志、设置和诊断附件，验证 Token/Authorization/pending code 不泄露、只访问目标 realm 官方 endpoint、两个 realm 与 Desktop 数据互不修改。
 - [ ] 4.5 完整重跑国际站 release matrix；中国站与国际站 gate 均通过后再更新 README、安装/迁移/限制说明和包版本，否则文档与发布元数据保持仅国际站承诺。
