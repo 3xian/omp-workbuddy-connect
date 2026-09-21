@@ -38,11 +38,17 @@ const CN_SITE = {
   providerId: "workbuddy-cn",
   label: "WorkBuddy CN",
   commandName: "workbuddy-cn",
+  auth: { ...WORKBUDDY_INTL.auth, refreshBody: "empty-json" as const },
 };
+let cnRefreshInit: RequestInit | undefined;
 const realmError = await expectKind(
-  refreshPluginToken(CN_SITE, "refresh", undefined, async () => new Response(null, { status: 401 })),
+  refreshPluginToken(CN_SITE, "refresh", undefined, async (_input, init) => {
+    cnRefreshInit = init;
+    return new Response(null, { status: 401 });
+  }),
   "token_refresh",
 );
+assert(cnRefreshInit?.body === "{}", "empty-json refresh policy did not send an empty JSON object");
 assert(
   realmError.message.startsWith("WorkBuddy CN token refresh")
     && realmError.message.includes("/login workbuddy-cn"),

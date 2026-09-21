@@ -149,6 +149,7 @@ assert(refreshed.email === previous.email, "refresh lost verified email");
 const refreshHeaders = new Headers(refreshRequest?.headers);
 assert(refreshHeaders.get("x-refresh-token") === "refresh-a", "refresh did not use host credential input");
 assert(refreshHeaders.get("x-enterprise-id") === "org-a", "refresh did not use host enterprise identity");
+assert(refreshRequest?.body === undefined, "international refresh unexpectedly gained a request body");
 
 const omittedRefreshFields: typeof fetch = async () => Response.json({
   code: 0,
@@ -193,11 +194,13 @@ const noEnterpriseRefresh: typeof fetch = async (_input, init) => {
   noEnterpriseRequest = init;
   return Response.json({ code: 0, data: { accessToken: "access-a4", expiresIn: 1800 } });
 };
-const noEnterprise = await refreshWorkBuddyOAuth(WORKBUDDY_INTL, { ...previous, orgId: undefined }, noEnterpriseRefresh, 10_000);
-assert(noEnterprise.orgId === undefined, "refresh fabricated an enterprise identity");
-const noEnterpriseHeaders = new Headers(noEnterpriseRequest?.headers);
-assert(noEnterpriseHeaders.get("x-enterprise-id") === null, "refresh sent a fabricated enterprise header");
-assert(noEnterpriseHeaders.get("x-no-enterprise-id") === null, "refresh sent a Chat-only no-enterprise marker");
+for (const orgId of [undefined, "", "   "]) {
+  const noEnterprise = await refreshWorkBuddyOAuth(WORKBUDDY_INTL, { ...previous, orgId }, noEnterpriseRefresh, 10_000);
+  assert(noEnterprise.orgId === undefined, `refresh preserved empty enterprise identity ${JSON.stringify(orgId)}`);
+  const noEnterpriseHeaders = new Headers(noEnterpriseRequest?.headers);
+  assert(noEnterpriseHeaders.get("x-enterprise-id") === null, `refresh sent empty enterprise header ${JSON.stringify(orgId)}`);
+  assert(noEnterpriseHeaders.get("x-no-enterprise-id") === null, "refresh sent a Chat-only no-enterprise marker");
+}
 
 const refreshAbort = new AbortController();
 const hangingRefresh: typeof fetch = async (_input, init) => new Promise<Response>((_resolve, reject) => {

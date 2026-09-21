@@ -23,6 +23,7 @@ assert(
     && WORKBUDDY_INTL.auth.pollIntervalMs === 2_000
     && WORKBUDDY_INTL.auth.pollDeadlineMs === 15 * 60 * 1000
     && WORKBUDDY_INTL.auth.refreshSource === "workbuddy"
+    && WORKBUDDY_INTL.auth.refreshBody === "none"
     && WORKBUDDY_INTL.domainPolicy.kind === "fixed",
   "international descriptor changed its frozen protocol contract",
 );
@@ -259,13 +260,15 @@ const activeStillOne = oauth.modifyModels([workbuddy], credentials);
 assert(activeStillOne.length === 1, "active sticky marker was incorrectly counted as another account");
 
 const noOrgCredentials = { ...credentials, orgId: undefined };
-accounts = [{ position: 0, credentialId: 11, accountId: "account-a", orgId: "", active: true }];
-assert(oauth.modifyModels([foreignOpenAI, workbuddy], noOrgCredentials).length === 2, "optional enterprise identity hid WorkBuddy model");
-assert(oauth.getApiKey(noOrgCredentials) === "access-a", "getApiKey rejected optional enterprise identity");
-const noOrgModel = oauth.modifyModels([workbuddy], noOrgCredentials)[0];
-const noOrgHeaders = await noOrgModel?.resolveHeaders?.();
-assert(noOrgHeaders?.["X-Enterprise-Id"] === undefined, "request fabricated enterprise identity");
-assert(noOrgHeaders?.["X-No-Enterprise-Id"] === "1", "request omitted no-enterprise marker");
+for (const storedOrgId of [undefined, "", "   "]) {
+  accounts = [{ position: 0, credentialId: 11, accountId: "account-a", orgId: storedOrgId, active: true }];
+  assert(oauth.modifyModels([foreignOpenAI, workbuddy], noOrgCredentials).length === 2, "optional enterprise identity hid WorkBuddy model");
+  assert(oauth.getApiKey(noOrgCredentials) === "access-a", "getApiKey rejected optional enterprise identity");
+  const noOrgModel = oauth.modifyModels([workbuddy], noOrgCredentials)[0];
+  const noOrgHeaders = await noOrgModel?.resolveHeaders?.();
+  assert(noOrgHeaders?.["X-Enterprise-Id"] === undefined, `request sent empty enterprise identity for ${JSON.stringify(storedOrgId)}`);
+  assert(noOrgHeaders?.["X-No-Enterprise-Id"] === "1", `request omitted no-enterprise marker for ${JSON.stringify(storedOrgId)}`);
+}
 
 accounts = [];
 let requestBoundaryRejected = false;

@@ -128,11 +128,12 @@ export function createWorkBuddyProvider(site: SiteDescriptor, fetcher: Fetch = g
           ) {
             throw identityError(site, "stored account changed during header resolution");
           }
+          const orgId = optionalIdentity(selectedAccount.orgId);
           return {
             ...preserved,
             "X-User-Id": selectedAccount.accountId,
-            ...(selectedAccount.orgId
-              ? { "X-Enterprise-Id": selectedAccount.orgId }
+            ...(orgId
+              ? { "X-Enterprise-Id": orgId }
               : { "X-No-Enterprise-Id": "1" }),
           };
         },

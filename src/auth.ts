@@ -165,13 +165,14 @@ export async function refreshWorkBuddyOAuth(
 ): Promise<OAuthCredentials> {
   throwIfCancelled(site, signal);
   validateStoredCredential(site, credentials);
-  const data = await refreshPluginToken(site, credentials.refresh, credentials.orgId, fetcher, { signal });
+  const orgId = optionalString(credentials.orgId);
+  const data = await refreshPluginToken(site, credentials.refresh, orgId, fetcher, { signal });
   throwIfCancelled(site, signal);
   const returnedIdentity = responseIdentity(data);
   if (returnedIdentity.uid && returnedIdentity.uid !== credentials.accountId) {
     throw new Error(`${site.providerId} refresh returned a different account identity; run /login ${site.commandName} again`);
   }
-  if (returnedIdentity.enterpriseId && credentials.orgId && returnedIdentity.enterpriseId !== credentials.orgId) {
+  if (returnedIdentity.enterpriseId && orgId && returnedIdentity.enterpriseId !== orgId) {
     throw new Error(`${site.providerId} refresh returned a different enterprise identity; run /login ${site.commandName} again`);
   }
   const refreshed: OAuthCredentials = {
@@ -179,7 +180,7 @@ export async function refreshWorkBuddyOAuth(
     refresh: optionalString(data.refreshToken) ?? credentials.refresh,
     expires: expiryFromResponse(site, data.expiresIn, now),
     accountId: credentials.accountId,
-    ...(credentials.orgId ? { orgId: credentials.orgId } : {}),
+    ...(orgId ? { orgId } : {}),
     ...(credentials.email ? { email: credentials.email } : {}),
   };
   return validateRequestCredential(site, refreshed, now);

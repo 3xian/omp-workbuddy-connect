@@ -21,6 +21,7 @@ export interface SiteDescriptor {
     readonly tokenPath: string;
     readonly accountPath?: string;
     readonly refreshPath: string;
+    readonly refreshBody: "none" | "empty-json";
     readonly nonceMode: "none" | "query-and-body";
     readonly pollIntervalMs: number;
     readonly pollDeadlineMs: number;
@@ -45,7 +46,6 @@ export interface SiteDescriptor {
   readonly uiTitle: string;
   readonly usage: {
     readonly enabled: boolean;
-    readonly providerId: string;
     readonly billingPath: string;
     readonly source: string;
   };
@@ -81,6 +81,7 @@ export const WORKBUDDY_INTL: SiteDescriptor = deepFreeze({
     startPath: "/v2/plugin/auth/state",
     tokenPath: "/v2/plugin/auth/token",
     refreshPath: "/v2/plugin/auth/token/refresh",
+    refreshBody: "none",
     nonceMode: "query-and-body",
     pollIntervalMs: 2_000,
     pollDeadlineMs: 15 * 60 * 1000,
@@ -144,7 +145,6 @@ export const WORKBUDDY_INTL: SiteDescriptor = deepFreeze({
   uiTitle: "WorkBuddy AI · 国际版",
   usage: {
     enabled: true,
-    providerId: "workbuddy",
     billingPath: "/v2/billing/meter/get-user-resource",
     source: "workbuddy-billing",
   },

@@ -30,6 +30,7 @@ refreshDirsFromEnv();
 
 try {
   const ext: any = await import("../extensions/workbuddy.ts");
+  const { WORKBUDDY_INTL } = await import("../src/site.ts");
   const handlers: Record<string, Function[]> = {};
   const pi: any = {
     on: (name: string, fn: Function) => { (handlers[name] ??= []).push(fn); },
@@ -83,6 +84,18 @@ try {
 
   const activeAuto = { ...foreign, model: "contract-active", tool_choice: "auto" };
   assert(hook({ type: "before_provider_request", payload: activeAuto }, workBuddyCtx) === activeAuto, "compatible active payload identity changed");
+  const disabledRuntime = ext.installRealm(pi, {
+    ...WORKBUDDY_INTL,
+    providerId: "workbuddy-cn",
+    label: "WorkBuddy CN",
+    commandName: "workbuddy-cn",
+    settingsFile: ".workbuddy-cn-settings.json",
+    widgetKey: "workbuddy-cn",
+    payload: { normalizeNamedToolChoice: false },
+    usage: { ...WORKBUDDY_INTL.usage, enabled: false },
+  });
+  const serialized = JSON.stringify(active);
+  assert(disabledRuntime.transformPayload(serialized) === undefined, "disabled payload policy parsed or replaced the host payload");
 
   console.log("OK: request-bound provider identity isolates same-ID foreign payloads and applies only the WorkBuddy named-choice delta");
 } finally {

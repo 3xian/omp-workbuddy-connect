@@ -20,7 +20,7 @@ interface RealmRuntime {
   transformPayload(payload: unknown): ProviderPayload | undefined;
 }
 
-function installRealm(pi: ExtensionAPI, site: SiteDescriptor): RealmRuntime {
+export function installRealm(pi: ExtensionAPI, site: SiteDescriptor): RealmRuntime {
   const provider = createWorkBuddyProvider(site);
   let scope = loadSettings(site).scope;
   let catalog = loadProductConfig(site);
@@ -187,9 +187,9 @@ function installRealm(pi: ExtensionAPI, site: SiteDescriptor): RealmRuntime {
   return {
     site,
     transformPayload(payload) {
+      if (!site.payload.normalizeNamedToolChoice) return undefined;
       const parsed = asProviderPayload(payload);
-      if (!parsed) return undefined;
-      return site.payload.normalizeNamedToolChoice ? normalizeNamedToolChoice(parsed) : parsed;
+      return parsed ? normalizeNamedToolChoice(parsed) : undefined;
     },
   };
 }

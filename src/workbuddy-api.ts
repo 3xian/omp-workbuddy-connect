@@ -276,6 +276,7 @@ export async function refreshPluginToken(
       "X-Auth-Refresh-Source": site.auth.refreshSource,
       ...(enterpriseId ? { "X-Enterprise-Id": enterpriseId } : {}),
     },
+    body: site.auth.refreshBody === "empty-json" ? "{}" : undefined,
   }, options);
   if (!response.ok) throw responseError(site, response, "token_refresh");
   const envelope = await readEnvelope(site, response);
